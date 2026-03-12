@@ -1,0 +1,233 @@
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-head h1 {
+  font-size: 30px;
+}
+
+.admin-head p {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--ink-500);
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-stats article {
+  border-radius: 14px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 12px;
+}
+
+.admin-stats p {
+  color: var(--ink-500);
+  font-size: 12px;
+}
+
+.admin-stats h3 {
+  margin-top: 4px;
+  font-size: 30px;
+}
+
+.admin-tab-row {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-tab-row button {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.admin-tab-row button.is-active {
+  border-color: var(--accent-blue);
+  background: rgba(47, 93, 255, 0.1);
+  color: var(--accent-blue-deep);
+}
+
+.admin-card {
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 14px;
+}
+
+.admin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.admin-card-head h2 {
+  font-size: 22px;
+}
+
+.admin-card-head form {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-card-head input,
+.admin-card-head select,
+.admin-table select {
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--ink-800);
+  min-width: 170px;
+}
+
+.admin-card-head button {
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.admin-table-wrap {
+  overflow: auto;
+}
+
+.admin-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.admin-table th {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-500);
+  font-size: 12px;
+  text-align: left;
+}
+
+.admin-table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf1fb;
+  color: var(--ink-800);
+  font-size: 13px;
+}
+
+.admin-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-name-cell span {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  background: linear-gradient(130deg, var(--accent-blue), #0ea5e9);
+}
+
+.admin-name-cell strong {
+  font-size: 13px;
+}
+
+.admin-code-btn {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.admin-code-btn code {
+  color: #9a3412;
+  font-weight: 800;
+  font-size: 12px;
+  background: #fff7ed;
+  border-radius: 7px;
+  padding: 3px 8px;
+}
+
+.admin-code-btn small {
+  font-size: 10px;
+  color: var(--ink-500);
+  font-weight: 700;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.admin-actions button,
+.admin-table .danger {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.admin-actions button.danger,
+.admin-table .danger {
+  border-color: #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.admin-empty {
+  text-align: center;
+  color: var(--ink-500);
+  padding: 24px;
+}
+
+@media (max-width: 1180px) {
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-card-head form {
+    width: 100%;
+    flex-direction: column;
+  }
+}

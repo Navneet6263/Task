@@ -1,0 +1,1 @@
+id,name,email,password,mobile,employee_id,role,avatar,last_active,is_deleted,deleted_at,created_at

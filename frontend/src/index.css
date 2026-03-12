@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap');
+
+:root {
+  --font-sans: 'Manrope', 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
+
+  --ink-900: #0f172a;
+  --ink-800: #1e293b;
+  --ink-700: #334155;
+  --ink-600: #475569;
+  --ink-500: #64748b;
+
+  --accent-blue: #2f5dff;
+  --accent-blue-deep: #1e40af;
+  --accent-coral: #f97316;
+  --accent-amber: #f59e0b;
+  --accent-green: #10b981;
+
+  --line-soft: #e8edf8;
+  --line-strong: #d8e0f2;
+
+  --shadow-soft: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--ink-900);
+  background:
+    radial-gradient(circle at 8% 10%, rgba(47, 93, 255, 0.13), transparent 32%),
+    radial-gradient(circle at 92% 0%, rgba(249, 115, 22, 0.11), transparent 34%),
+    linear-gradient(165deg, #f7f9ff 0%, #f4f8ff 45%, #fffdf7 100%);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid transparent;
+  border-color: rgba(47, 93, 255, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(47, 93, 255, 0.15);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe;
+  border-radius: 999px;
+  border: 2px solid #eef2ff;
+}
+
+::-webkit-scrollbar-track {
+  background: #eef2ff;
+}

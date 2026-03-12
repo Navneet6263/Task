@@ -1,0 +1,249 @@
+.mytasks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mytasks-head h1 {
+  font-size: 30px;
+}
+
+.mytasks-head p {
+  margin-top: 4px;
+  color: var(--ink-500);
+  font-size: 14px;
+}
+
+.mytasks-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mytasks-stats article {
+  border-radius: 14px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px;
+}
+
+.mytasks-stats p {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.mytasks-stats h3 {
+  font-size: 30px;
+  margin-top: 3px;
+}
+
+.mytasks-card {
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 14px;
+}
+
+.mytasks-table-wrap {
+  overflow: auto;
+}
+
+.mytasks-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.mytasks-table th {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-500);
+  font-size: 12px;
+  text-align: left;
+}
+
+.mytasks-table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf1fb;
+  color: var(--ink-800);
+  font-size: 13px;
+}
+
+.mytasks-team-pill {
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mytasks-priority {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mytasks-priority.high {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.mytasks-priority.medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.mytasks-priority.low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.mytasks-table select {
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  padding: 0 8px;
+  font-size: 12px;
+  min-width: 120px;
+}
+
+.mytasks-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mytasks-actions button {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.mytasks-empty {
+  text-align: center;
+  color: var(--ink-500);
+  padding: 20px;
+}
+
+.mytasks-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+  padding: 16px;
+}
+
+.mytasks-modal {
+  width: min(480px, 96vw);
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  padding: 14px;
+}
+
+.mytasks-modal h3 {
+  font-size: 24px;
+}
+
+.mytasks-modal p {
+  margin-top: 4px;
+  color: var(--ink-500);
+  font-size: 13px;
+}
+
+.mytasks-member-list {
+  margin-top: 10px;
+  max-height: 290px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.mytasks-member {
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: #fff;
+  padding: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mytasks-member.is-selected {
+  border-color: rgba(47, 93, 255, 0.35);
+  background: rgba(47, 93, 255, 0.08);
+}
+
+.mytasks-member span {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  background: linear-gradient(130deg, var(--accent-blue), #0ea5e9);
+}
+
+.mytasks-member strong {
+  font-size: 13px;
+  display: block;
+}
+
+.mytasks-member small {
+  font-size: 11px;
+  color: var(--ink-500);
+}
+
+.mytasks-modal-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mytasks-modal-actions button {
+  height: 35px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.mytasks-modal-actions button.primary {
+  border-color: var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+}
+
+@media (max-width: 1160px) {
+  .mytasks-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .mytasks-stats {
+    grid-template-columns: 1fr;
+  }
+}

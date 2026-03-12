@@ -1,0 +1,238 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-head h1 {
+  font-size: 30px;
+}
+
+.settings-head p {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--ink-500);
+}
+
+.settings-toast {
+  border-radius: 11px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-toast.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.settings-toast.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-card {
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+  padding: 14px;
+}
+
+.settings-card h2,
+.settings-card h3 {
+  font-size: 22px;
+}
+
+.settings-card p {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.settings-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 12px;
+}
+
+.settings-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  background: linear-gradient(130deg, var(--accent-blue), #0ea5e9);
+}
+
+.settings-role-pill {
+  display: inline-flex;
+  margin-top: 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: rgba(47, 93, 255, 0.1);
+  color: var(--accent-blue-deep);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings-form span {
+  font-size: 12px;
+  color: var(--ink-600);
+  font-weight: 700;
+}
+
+.settings-form input {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--ink-800);
+  background: #fff;
+}
+
+.settings-form input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.settings-primary-btn {
+  margin-top: 2px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.settings-team-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-team-row {
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-team-row strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.settings-team-row span {
+  font-size: 11px;
+  color: var(--ink-500);
+}
+
+.settings-team-row code {
+  border-radius: 10px;
+  padding: 6px 9px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.settings-info-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-info-list div {
+  border-radius: 11px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-info-list span {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.settings-info-list b {
+  font-size: 12px;
+  color: var(--ink-800);
+}
+
+.settings-chip-wrap {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-chip {
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-600);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-empty {
+  color: var(--ink-500);
+  font-size: 12px;
+  text-align: center;
+  padding: 10px 4px;
+}
+
+@media (max-width: 1120px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

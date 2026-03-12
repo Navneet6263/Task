@@ -1,0 +1,318 @@
+.team-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.team-head h1 {
+  font-size: 30px;
+}
+
+.team-head p {
+  margin-top: 4px;
+  color: var(--ink-500);
+  font-size: 14px;
+}
+
+.team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.team-chip-wrap {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.team-chip {
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.team-chip.is-active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+}
+
+.team-create-btn {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.team-card {
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-soft);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 14px;
+}
+
+.team-card h3 {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.team-code-box {
+  border: 1px solid #fde68a;
+  background: #fefce8;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-code-box p {
+  font-size: 12px;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.team-code-box code {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fffbeb;
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.team-add-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+}
+
+.team-add-form input,
+.team-add-form select,
+.team-modal input,
+.team-modal select {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--ink-800);
+}
+
+.team-add-form button {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.team-table-wrap {
+  overflow: auto;
+}
+
+.team-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.team-table th {
+  padding: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-500);
+  font-size: 12px;
+  text-align: left;
+}
+
+.team-table td {
+  padding: 10px;
+  border-bottom: 1px solid #edf1fb;
+  color: var(--ink-800);
+  font-size: 13px;
+}
+
+.team-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-member-cell span {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  background: linear-gradient(130deg, var(--accent-blue), #0ea5e9);
+}
+
+.team-member-cell strong {
+  display: block;
+  font-size: 13px;
+}
+
+.team-member-cell small {
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+.team-role-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-role-cell span {
+  font-size: 12px;
+}
+
+.team-role-cell em {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.team-workload {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.team-workload > div {
+  width: 86px;
+  height: 7px;
+  border-radius: 999px;
+  background: #e8edf8;
+  overflow: hidden;
+}
+
+.team-workload > div span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-blue), #60a5fa);
+}
+
+.team-workload small {
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+.team-remove-btn {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.team-empty {
+  border-radius: 16px;
+  border: 1px dashed var(--line-strong);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 30px 12px;
+}
+
+.team-empty h2 {
+  font-size: 24px;
+}
+
+.team-empty p {
+  margin-top: 5px;
+  color: var(--ink-500);
+  font-size: 13px;
+}
+
+.team-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+  padding: 16px;
+}
+
+.team-modal {
+  width: min(460px, 96vw);
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  padding: 14px;
+}
+
+.team-modal h3 {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.team-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-modal-actions {
+  margin-top: 2px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.team-modal-actions button {
+  height: 35px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.team-modal-actions button.primary {
+  border-color: var(--accent-blue);
+  background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
+  color: #fff;
+}
+
+@media (max-width: 1080px) {
+  .team-add-form {
+    grid-template-columns: 1fr;
+  }
+}
