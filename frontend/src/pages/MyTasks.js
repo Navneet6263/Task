@@ -42,7 +42,7 @@ const MyTasks = () => {
 
     try {
       const response = await teams.getMembers(task.team_id);
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
       const members = Array.isArray(response.data) ? response.data : [];
       setTeamMembers(members.filter((member) => member.email !== currentUser.email));
     } catch (error) {}

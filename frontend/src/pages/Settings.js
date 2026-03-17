@@ -6,12 +6,12 @@ import './Settings.css';
 const api = () =>
   axios.create({
     baseURL: 'http://localhost:5000/api',
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+    headers: { Authorization: `Bearer ${localStorage.getItem('token') || localStorage.getItem('company_token')}` },
   });
 
 const Settings = () => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isAdminUser = ['admin', 'manager', 'company_admin'].includes(user.role);
 
   const [profile, setProfile] = useState({
@@ -53,14 +53,26 @@ const Settings = () => {
 
     try {
       await api().put('/users/me', { name: profile.name, mobile: profile.mobile });
+      const nextRole = user.role === 'company_admin' ? 'company_admin' : (profile.role || user.role);
       localStorage.setItem(
         'user',
         JSON.stringify({
           name: profile.name,
           email: profile.email,
-          role: profile.role,
+          role: nextRole,
         })
       );
+      if (nextRole === 'company_admin') {
+        localStorage.setItem(
+          'company_user',
+          JSON.stringify({
+            ...(JSON.parse(localStorage.getItem('company_user') || '{}')),
+            name: profile.name,
+            email: profile.email,
+            role: 'company_admin',
+          })
+        );
+      }
       setMsg('Profile updated successfully.');
     } catch (error) {
       setErr(error.response?.data?.error || 'Failed to update profile');
@@ -87,7 +99,7 @@ const Settings = () => {
   };
 
   const roleLabel = useMemo(() => {
-    const raw = profile.role || user.role || 'member';
+    const raw = user.role === 'company_admin' ? 'company_admin' : (profile.role || user.role || 'member');
     return raw.charAt(0).toUpperCase() + raw.slice(1);
   }, [profile.role, user.role]);
 

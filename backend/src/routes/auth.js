@@ -2,6 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { getAccessibleOrgIds } = require('../utils/orgAccess');
+const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
@@ -70,8 +72,19 @@ router.post('/register', async (req, res) => {
       orgInfo = orgs[0] || null;
     }
 
-    const token = jwt.sign({ id: userId, role: userRole, org_id: resolvedOrgId }, process.env.JWT_SECRET);
-    res.json({ token, name, email, role: userRole, org_id: resolvedOrgId, org_name: orgInfo?.name, company_code: orgInfo?.company_code });
+    const orgIds = await getAccessibleOrgIds(db, userId, resolvedOrgId);
+    const token = jwt.sign({ id: userId, role: userRole, org_id: resolvedOrgId, org_ids: orgIds }, process.env.JWT_SECRET);
+    res.json({
+      token,
+      id: userId,
+      name,
+      email,
+      role: userRole,
+      org_id: resolvedOrgId,
+      org_ids: orgIds,
+      org_name: orgInfo?.name,
+      company_code: orgInfo?.company_code,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -80,13 +93,78 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    const normalizedEmail = String(email || '').trim();
+
+    const [companyAdmins] = await db.execute(
+      'SELECT * FROM company_admins WHERE email = ? LIMIT 1',
+      [normalizedEmail]
+    );
+    const companyAdmin = companyAdmins[0] || null;
+
+    const respondAsCompanyAdmin = async (ca) => {
+      const bootstrap = await ensureCompanyAdminBootstrap(db, ca.id);
+      const token = jwt.sign(
+        {
+          id: bootstrap.linkedUserId,
+          role: 'company_admin',
+          company_admin_id: ca.id,
+          org_id: bootstrap.primaryOrgId,
+          org_ids: bootstrap.orgIds,
+        },
+        process.env.JWT_SECRET
+      );
+      return res.json({
+        token,
+        id: bootstrap.linkedUserId,
+        name: ca.name,
+        email: ca.email,
+        role: 'company_admin',
+        org_id: bootstrap.primaryOrgId,
+        org_ids: bootstrap.orgIds,
+        limits: {
+          max_companies: ca.max_companies,
+          max_managers: ca.max_managers_per_company,
+          max_staff: ca.max_staff_per_company,
+        },
+      });
+    };
+
+    if (companyAdmin) {
+      const companyPasswordValid = await bcrypt.compare(password, companyAdmin.password);
+      if (companyPasswordValid) {
+        if (companyAdmin.status === 'pending') {
+          return res.status(403).json({ error: 'Account pending approval', code: 'PENDING' });
+        }
+        if (companyAdmin.status === 'rejected') {
+          return res.status(403).json({ error: `Account rejected: ${companyAdmin.rejected_reason || ''}`, code: 'REJECTED' });
+        }
+        if (companyAdmin.status === 'approved') {
+          return respondAsCompanyAdmin(companyAdmin);
+        }
+      }
+    }
+
+    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     if (users.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const user = users[0];
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, role: user.role, org_id: user.org_id }, process.env.JWT_SECRET);
-    res.json({ token, name: user.name, email: user.email, role: user.role, org_id: user.org_id });
+
+    if (companyAdmin && companyAdmin.status === 'approved') {
+      return respondAsCompanyAdmin(companyAdmin);
+    }
+
+    const orgIds = await getAccessibleOrgIds(db, user.id, user.org_id);
+    const token = jwt.sign({ id: user.id, role: user.role, org_id: user.org_id, org_ids: orgIds }, process.env.JWT_SECRET);
+    res.json({
+      token,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      org_id: user.org_id,
+      org_ids: orgIds,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

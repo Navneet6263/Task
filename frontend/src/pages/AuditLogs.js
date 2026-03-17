@@ -12,7 +12,7 @@ const activityTone = {
 };
 
 const AuditLogs = () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isAdmin = user.role === 'admin' || user.role === 'manager' || user.role === 'company_admin';
 
   const [teamList, setTeamList] = useState([]);

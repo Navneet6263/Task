@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'superadmin@navtask.com';
@@ -111,14 +112,26 @@ router.get('/company-admins/:id', verifySA, async (req, res) => {
 router.patch('/company-admins/:id/approve', verifySA, async (req, res) => {
   try {
     const { max_companies = 3, max_managers_per_company = 10, max_staff_per_company = 50 } = req.body;
-    const [[ca]] = await db.execute('SELECT name, email FROM company_admins WHERE id = ?', [req.params.id]);
+    const companyAdminId = Number(req.params.id);
+    const [[ca]] = await db.execute('SELECT id, name, email FROM company_admins WHERE id = ?', [companyAdminId]);
+    if (!ca) return res.status(404).json({ error: 'Company admin not found' });
+
     await db.execute(
       `UPDATE company_admins SET status='approved', approved_at=NOW(), max_companies=?, max_managers_per_company=?, max_staff_per_company=? WHERE id=?`,
-      [max_companies, max_managers_per_company, max_staff_per_company, req.params.id]
+      [max_companies, max_managers_per_company, max_staff_per_company, companyAdminId]
     );
+
+    const bootstrap = await ensureCompanyAdminBootstrap(db, companyAdminId);
+
     await saLog(req.saEmail, req.saName, 'APPROVE_COMPANY', 'company_admin', req.params.id,
-      `Approved company admin: ${ca?.name} (${ca?.email}) | Limits: companies=${max_companies}, managers=${max_managers_per_company}, staff=${max_staff_per_company}`, req.ip);
-    res.json({ message: 'Approved' });
+      `Approved company admin: ${ca?.name} (${ca?.email}) | Limits: companies=${max_companies}, managers=${max_managers_per_company}, staff=${max_staff_per_company} | Bootstrap user=${bootstrap.linkedUserId}, primary_org=${bootstrap.primaryOrgId}`, req.ip);
+    res.json({
+      message: 'Approved',
+      bootstrap: {
+        user_id: bootstrap.linkedUserId,
+        primary_org_id: bootstrap.primaryOrgId,
+      },
+    });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

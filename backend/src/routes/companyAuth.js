@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
 // Register company (goes to pending approval)
@@ -36,18 +37,23 @@ router.post('/login', async (req, res) => {
     if (ca.status === 'pending') return res.status(403).json({ error: 'Account pending approval', code: 'PENDING' });
     if (ca.status === 'rejected') return res.status(403).json({ error: 'Account rejected: ' + (ca.rejected_reason || ''), code: 'REJECTED' });
 
-    // Get all org IDs belonging to this company admin
-    const [orgs] = await db.execute(
-      'SELECT id FROM organizations WHERE company_admin_id = ?', [ca.id]
-    );
-    const orgIds = orgs.map(o => o.id);
+    const bootstrap = await ensureCompanyAdminBootstrap(db, ca.id);
+    const orgIds = bootstrap.orgIds;
 
     const token = jwt.sign(
-      { id: ca.id, role: 'company_admin', company_admin_id: ca.id, org_ids: orgIds },
+      {
+        id: bootstrap.linkedUserId,
+        role: 'company_admin',
+        company_admin_id: ca.id,
+        org_id: bootstrap.primaryOrgId,
+        org_ids: orgIds,
+      },
       process.env.JWT_SECRET
     );
     res.json({
       token, name: ca.name, email: ca.email, role: 'company_admin',
+      user_id: bootstrap.linkedUserId,
+      org_id: bootstrap.primaryOrgId,
       org_ids: orgIds,
       limits: { max_companies: ca.max_companies, max_managers: ca.max_managers_per_company, max_staff: ca.max_staff_per_company }
     });

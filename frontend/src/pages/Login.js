@@ -40,16 +40,27 @@ const Login = () => {
           password: form.password,
         });
 
+        localStorage.removeItem('token');
         localStorage.setItem('company_token', response.data.token);
+        const companyUserPayload = {
+          id: response.data.user_id,
+          org_id: response.data.org_id,
+          org_ids: response.data.org_ids || [],
+          name: response.data.name,
+          email: response.data.email,
+          role: 'company_admin',
+          limits: response.data.limits,
+        };
+        localStorage.setItem('user', JSON.stringify(companyUserPayload));
         localStorage.setItem(
           'company_user',
-          JSON.stringify({
-            name: response.data.name,
-            email: response.data.email,
-            role: 'company_admin',
-            limits: response.data.limits,
-          })
+          JSON.stringify(companyUserPayload)
         );
+        if (response.data.org_id) {
+          localStorage.setItem('active_org_id', String(response.data.org_id));
+        } else {
+          localStorage.removeItem('active_org_id');
+        }
         navigate('/dashboard');
         return;
       }
@@ -69,15 +80,31 @@ const Login = () => {
           };
 
       const response = isLogin ? await auth.login(payload) : await auth.register(payload);
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem(
-        'user',
-        JSON.stringify({
-          name: response.data.name,
-          email: response.data.email,
-          role: response.data.role,
-        })
-      );
+      const isCompanyAdminResponse = response.data?.role === 'company_admin';
+      const userPayload = {
+        id: response.data.id,
+        org_id: response.data.org_id,
+        org_ids: response.data.org_ids || [],
+        name: response.data.name,
+        email: response.data.email,
+        role: response.data.role,
+        limits: response.data.limits,
+      };
+
+      if (isCompanyAdminResponse) {
+        localStorage.removeItem('token');
+        localStorage.setItem('company_token', response.data.token);
+        localStorage.setItem('company_user', JSON.stringify(userPayload));
+      } else {
+        localStorage.removeItem('company_token');
+        localStorage.removeItem('company_user');
+        localStorage.setItem('token', response.data.token);
+      }
+
+      if (response.data.org_id) localStorage.setItem('active_org_id', String(response.data.org_id));
+      else localStorage.removeItem('active_org_id');
+
+      localStorage.setItem('user', JSON.stringify(userPayload));
       navigate('/dashboard');
     } catch (err) {
       const code = err.response?.data?.code;

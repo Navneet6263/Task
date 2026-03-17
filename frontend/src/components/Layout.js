@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { notifications } from '../services/api';
+import { notifications, users } from '../services/api';
 import './Layout.css';
 
 const Layout = () => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const hasCompanyToken = Boolean(localStorage.getItem('company_token'));
+  const authToken = localStorage.getItem('company_token') || localStorage.getItem('token');
+  const tokenRole = getTokenRole(authToken);
+  const user = hasCompanyToken
+    ? parseStoredUser(localStorage.getItem('company_user')) || parseStoredUser(localStorage.getItem('user')) || {}
+    : parseStoredUser(localStorage.getItem('user')) || parseStoredUser(localStorage.getItem('company_user')) || {};
+  const resolvedRole = tokenRole || user.role;
   const wsRef = useRef(null);
 
   const [notifList, setNotifList] = useState([]);
@@ -13,6 +19,8 @@ const Layout = () => {
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [accessibleOrgs, setAccessibleOrgs] = useState([]);
+  const [activeOrgId, setActiveOrgId] = useState(localStorage.getItem('active_org_id') || '');
 
   const unreadCount = notifList.filter((n) => !n.is_read).length;
 
@@ -24,7 +32,7 @@ const Layout = () => {
   }, []);
 
   const connectWS = useCallback(() => {
-    const token = localStorage.getItem('token') || localStorage.getItem('company_token');
+    const token = localStorage.getItem('company_token') || localStorage.getItem('token');
     if (!token) return;
 
     const ws = new WebSocket(`ws://localhost:5000?token=${token}`);
@@ -40,7 +48,7 @@ const Layout = () => {
     };
 
     ws.onclose = () => {
-      const activeToken = localStorage.getItem('token') || localStorage.getItem('company_token');
+      const activeToken = localStorage.getItem('company_token') || localStorage.getItem('token');
       if (activeToken) setTimeout(connectWS, 5000);
     };
   }, [fetchNotifications]);
@@ -50,6 +58,23 @@ const Layout = () => {
     connectWS();
     return () => wsRef.current?.close();
   }, [fetchNotifications, connectWS]);
+
+  useEffect(() => {
+    const loadOrgAccess = async () => {
+      try {
+        const response = await users.orgAccess();
+        const orgs = Array.isArray(response.data?.organizations) ? response.data.organizations : [];
+        const resolvedActive = String(response.data?.active_org_id || localStorage.getItem('active_org_id') || '');
+        setAccessibleOrgs(orgs);
+        if (resolvedActive) {
+          setActiveOrgId(resolvedActive);
+          localStorage.setItem('active_org_id', resolvedActive);
+        }
+      } catch (error) {}
+    };
+
+    loadOrgAccess();
+  }, []);
 
   const handleMarkAllRead = async () => {
     try {
@@ -61,6 +86,12 @@ const Layout = () => {
   const handleLogout = () => {
     localStorage.clear();
     navigate('/login');
+  };
+
+  const handleOrgSwitch = (nextOrgId) => {
+    setActiveOrgId(nextOrgId);
+    localStorage.setItem('active_org_id', nextOrgId);
+    window.location.reload();
   };
 
   const visibleNotifications = useMemo(
@@ -78,7 +109,7 @@ const Layout = () => {
       .join('');
   }, [user?.name]);
 
-  const isAdmin = user.role === 'admin';
+  const isAdmin = resolvedRole === 'admin' || resolvedRole === 'company_admin';
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: <GridIcon /> },
     { path: '/my-tasks', label: 'My Tasks', icon: <ListIcon /> },
@@ -171,6 +202,21 @@ const Layout = () => {
           <div className="shell-header-right">
             <span className="shell-date-chip">{formattedDate}</span>
 
+            {accessibleOrgs.length > 1 && (
+              <select
+                className="shell-org-switch"
+                value={activeOrgId}
+                onChange={(event) => handleOrgSwitch(event.target.value)}
+                aria-label="Switch organization"
+              >
+                {accessibleOrgs.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <div className="shell-notif-wrap">
               <button
                 type="button"
@@ -232,7 +278,7 @@ const Layout = () => {
               <div className="shell-avatar">{initials}</div>
               <div className="shell-profile-meta">
                 <p>{user.name || 'User'}</p>
-                <span>{user.role || 'member'}</span>
+                <span>{resolvedRole || 'member'}</span>
               </div>
             </div>
 
@@ -259,6 +305,25 @@ const formatNotificationTime = (value) => {
     hour: 'numeric',
     minute: '2-digit',
   });
+};
+
+const parseStoredUser = (raw) => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return null;
+  }
+};
+
+const getTokenRole = (token) => {
+  if (!token) return '';
+  try {
+    const payload = JSON.parse(atob(String(token).split('.')[1] || ''));
+    return payload?.role || '';
+  } catch (error) {
+    return '';
+  }
 };
 
 const GridIcon = () => (

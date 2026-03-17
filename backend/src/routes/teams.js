@@ -3,6 +3,33 @@ const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
+const canAccessTeam = async (req, teamId) => {
+  if (req.userRole === 'company_admin') {
+    const [[team]] = await db.execute(
+      `SELECT t.id
+       FROM teams t
+       JOIN organizations o ON o.id = t.org_id
+       WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
+      [teamId, req.companyAdminId]
+    );
+    return Boolean(team);
+  }
+
+  if (req.userRole === 'admin') {
+    const [[team]] = await db.execute(
+      'SELECT id FROM teams WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
+      [teamId, req.orgId]
+    );
+    return Boolean(team);
+  }
+
+  const [membership] = await db.execute(
+    'SELECT id FROM team_members WHERE team_id = ? AND user_id = ?',
+    [teamId, req.userId]
+  );
+  return membership.length > 0;
+};
+
 router.get('/', authenticate, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -13,7 +40,11 @@ router.get('/', authenticate, async (req, res) => {
 
     if (req.userRole === 'company_admin') {
       // Company admin sees all teams across their organizations
-      const orgIds = req.orgIds;
+      const [orgRows] = await db.execute(
+        'SELECT id FROM organizations WHERE company_admin_id = ?',
+        [req.companyAdminId]
+      );
+      const orgIds = orgRows.map((org) => org.id);
       if (!orgIds || orgIds.length === 0) return res.json([]);
       const placeholders = orgIds.map(() => '?').join(',');
       query = `SELECT t.*, u.name as creator_name,
@@ -46,11 +77,29 @@ router.get('/', authenticate, async (req, res) => {
 
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { name, type } = req.body;
+    const { name, type, org_id } = req.body;
+    if (!name) return res.status(422).json({ error: 'Team name required' });
+
+    let resolvedOrgId = req.orgId;
+
+    if (req.userRole === 'company_admin') {
+      const targetOrgId = Number(org_id || req.orgIds?.[0] || 0);
+      if (!targetOrgId) return res.status(422).json({ error: 'org_id required for company admin' });
+
+      const [[org]] = await db.execute(
+        'SELECT id FROM organizations WHERE id = ? AND company_admin_id = ?',
+        [targetOrgId, req.companyAdminId]
+      );
+      if (!org) return res.status(403).json({ error: 'Organization access denied' });
+      resolvedOrgId = targetOrgId;
+    }
+
+    if (!resolvedOrgId) return res.status(422).json({ error: 'Organization context missing' });
+
     const code = 'TM' + Math.random().toString(36).substring(2, 8).toUpperCase();
     const [result] = await db.execute(
       'INSERT INTO teams (name, type, team_code, created_by, org_id) VALUES (?, ?, ?, ?, ?)',
-      [name, type, code, req.userId, req.orgId]
+      [name, type, code, req.userId, resolvedOrgId]
     );
     await db.execute(
       'INSERT INTO team_members (team_id, user_id, role, is_reporting_manager) VALUES (?, ?, ?, ?)',
@@ -64,6 +113,9 @@ router.post('/', authenticate, async (req, res) => {
 
 router.get('/:teamId/members', authenticate, async (req, res) => {
   try {
+    const allowed = await canAccessTeam(req, req.params.teamId);
+    if (!allowed) return res.status(403).json({ error: 'Team access denied' });
+
     const [members] = await db.execute(
       `SELECT u.id, u.name, u.email, u.mobile, u.employee_id, u.role, u.avatar,
         tm.role as team_role, tm.is_reporting_manager,
@@ -81,8 +133,20 @@ router.get('/:teamId/members', authenticate, async (req, res) => {
 
 router.post('/:teamId/members', authenticate, async (req, res) => {
   try {
+    if (!['admin', 'manager', 'company_admin'].includes(req.userRole)) {
+      return res.status(403).json({ error: 'Only admin, manager, or company admin can add members' });
+    }
+    const allowed = await canAccessTeam(req, req.params.teamId);
+    if (!allowed) return res.status(403).json({ error: 'Team access denied' });
+
     const { email, role } = req.body;
-    const [users] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+    const [users] = await db.execute(
+      `SELECT u.id
+       FROM users u
+       JOIN teams t ON t.id = ?
+       WHERE u.email = ? AND u.org_id = t.org_id AND u.is_deleted = FALSE`,
+      [req.params.teamId, email]
+    );
     if (users.length === 0) return res.status(404).json({ error: 'User not found' });
     await db.execute(
       'INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)',
@@ -96,6 +160,12 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
 
 router.delete('/:teamId/members/:userId', authenticate, async (req, res) => {
   try {
+    if (!['admin', 'manager', 'company_admin'].includes(req.userRole)) {
+      return res.status(403).json({ error: 'Only admin, manager, or company admin can remove members' });
+    }
+    const allowed = await canAccessTeam(req, req.params.teamId);
+    if (!allowed) return res.status(403).json({ error: 'Team access denied' });
+
     await db.execute('DELETE FROM team_members WHERE team_id = ? AND user_id = ?', [req.params.teamId, req.params.userId]);
     res.json({ message: 'Member removed' });
   } catch (error) {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
 
   const handleLogout = () => {
     localStorage.removeItem('token');

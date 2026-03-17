@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
 // Super admin only middleware
@@ -46,13 +47,18 @@ router.get('/company-admins/:id', async (req, res) => {
 router.patch('/company-admins/:id/approve', async (req, res) => {
   try {
     const { max_companies = 3, max_managers_per_company = 10, max_staff_per_company = 50 } = req.body;
+    const companyAdminId = Number(req.params.id);
+    const [[exists]] = await db.execute('SELECT id FROM company_admins WHERE id = ?', [companyAdminId]);
+    if (!exists) return res.status(404).json({ error: 'Company admin not found' });
+
     await db.execute(
       `UPDATE company_admins SET status = 'approved', approved_at = NOW(),
        max_companies = ?, max_managers_per_company = ?, max_staff_per_company = ?
        WHERE id = ?`,
-      [max_companies, max_managers_per_company, max_staff_per_company, req.params.id]
+      [max_companies, max_managers_per_company, max_staff_per_company, companyAdminId]
     );
-    res.json({ message: 'Approved' });
+    const bootstrap = await ensureCompanyAdminBootstrap(db, companyAdminId);
+    res.json({ message: 'Approved', bootstrap });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

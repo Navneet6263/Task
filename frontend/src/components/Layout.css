@@ -229,6 +229,18 @@
   font-weight: 700;
 }
 
+.shell-org-switch {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 10px;
+  max-width: 220px;
+}
+
 .shell-notif-wrap {
   position: relative;
 }
@@ -497,6 +509,7 @@
 
 @media (max-width: 860px) {
   .shell-date-chip,
+  .shell-org-switch,
   .shell-profile-meta,
   .shell-logout-btn {
     display: none;

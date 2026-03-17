@@ -3,8 +3,10 @@ import axios from 'axios';
 const api = axios.create({ baseURL: 'http://localhost:5000/api' });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token') || localStorage.getItem('company_token');
+  const token = localStorage.getItem('company_token') || localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const activeOrgId = localStorage.getItem('active_org_id');
+  if (activeOrgId) config.headers['x-org-id'] = activeOrgId;
   return config;
 });
 
@@ -45,6 +47,21 @@ export const logs = {
 export const users = {
   search: (email) => api.get(`/users/search?email=${email}`),
   me: () => api.get('/users/me'),
+  orgAccess: () => api.get('/users/org-access'),
+};
+
+export const companyAdmin = {
+  overview: () => api.get('/company-admin/overview'),
+  organizations: () => api.get('/company-admin/organizations'),
+  createOrganization: (data) => api.post('/company-admin/organizations', data),
+  users: (orgId = '') => api.get(orgId ? `/company-admin/users?org_id=${orgId}` : '/company-admin/users'),
+  createAdmin: (data) => api.post('/company-admin/admins', data),
+  updateUserRole: (id, role) => api.put(`/company-admin/users/${id}/role`, { role }),
+  deleteUser: (id) => api.delete(`/company-admin/users/${id}`),
+  searchUsers: (query) => api.get(`/company-admin/users/search?q=${encodeURIComponent(query)}`),
+  userOrgAccess: (userId) => api.get(`/company-admin/users/${userId}/org-access`),
+  assignOrgAccess: (userId, orgId) => api.post('/company-admin/org-access', { user_id: userId, org_id: orgId }),
+  removeOrgAccess: (userId, orgId) => api.delete(`/company-admin/org-access/${userId}/${orgId}`),
 };
 
 export const analytics = {

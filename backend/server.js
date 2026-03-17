@@ -37,6 +37,7 @@ app.use('/api/tasks', require('./src/routes/tasks'));
 app.use('/api/logs', require('./src/routes/logs'));
 app.use('/api/users', require('./src/routes/users'));
 app.use('/api/admin', require('./src/routes/admin'));
+app.use('/api/company-admin', require('./src/routes/companyAdmin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/notifications', require('./src/routes/notifications'));
 

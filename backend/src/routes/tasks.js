@@ -7,11 +7,32 @@ const router = express.Router();
 // Get tasks for a team with pagination
 router.get('/team/:teamId', authenticate, async (req, res) => {
   try {
-    const [membership] = await db.execute(
-      'SELECT id FROM team_members WHERE team_id = ? AND user_id = ?',
-      [req.params.teamId, req.userId]
-    );
-    if (membership.length === 0 && req.userRole !== 'admin') {
+    let canAccess = false;
+
+    if (req.userRole === 'admin') {
+      const [[team]] = await db.execute(
+        'SELECT id FROM teams WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
+        [req.params.teamId, req.orgId]
+      );
+      canAccess = Boolean(team);
+    } else if (req.userRole === 'company_admin') {
+      const [[team]] = await db.execute(
+        `SELECT t.id
+         FROM teams t
+         JOIN organizations o ON o.id = t.org_id
+         WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
+        [req.params.teamId, req.companyAdminId]
+      );
+      canAccess = Boolean(team);
+    } else {
+      const [membership] = await db.execute(
+        'SELECT id FROM team_members WHERE team_id = ? AND user_id = ?',
+        [req.params.teamId, req.userId]
+      );
+      canAccess = membership.length > 0;
+    }
+
+    if (!canAccess) {
       return res.status(403).json({ error: 'Not a team member', code: 'FORBIDDEN' });
     }
 
@@ -92,6 +113,63 @@ router.post('/', authenticate, async (req, res) => {
     const { title, description, priority, assigned_to, team_id, due_date, issue_type } = req.body;
     if (!title || !team_id) return res.status(422).json({ error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
 
+    let resolvedOrgId = req.orgId;
+    let hasCreatorTeamAccess = false;
+
+    if (req.userRole === 'company_admin') {
+      const [[teamOrg]] = await db.execute(
+        `SELECT t.org_id
+         FROM teams t
+         JOIN organizations o ON o.id = t.org_id
+         WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
+        [team_id, req.companyAdminId]
+      );
+      if (!teamOrg) return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
+      resolvedOrgId = teamOrg.org_id;
+      hasCreatorTeamAccess = true;
+    } else {
+      const [[teamOrg]] = await db.execute(
+        'SELECT org_id FROM teams WHERE id = ? AND is_deleted = FALSE',
+        [team_id]
+      );
+      if (!teamOrg) return res.status(404).json({ error: 'Team not found', code: 'NOT_FOUND' });
+      if (req.orgId && Number(teamOrg.org_id) !== Number(req.orgId)) {
+        return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
+      }
+      resolvedOrgId = teamOrg.org_id;
+
+      if (req.userRole === 'admin') {
+        hasCreatorTeamAccess = true;
+      } else {
+        const [membership] = await db.execute(
+          'SELECT id FROM team_members WHERE team_id = ? AND user_id = ? LIMIT 1',
+          [team_id, req.userId]
+        );
+        hasCreatorTeamAccess = membership.length > 0;
+      }
+    }
+
+    if (!resolvedOrgId) {
+      return res.status(422).json({ error: 'Organization context missing', code: 'VALIDATION_ERROR' });
+    }
+    if (!hasCreatorTeamAccess) {
+      return res.status(403).json({ error: 'You can assign tasks only in your own team', code: 'FORBIDDEN' });
+    }
+
+    if (assigned_to) {
+      const [assigneeMembership] = await db.execute(
+        `SELECT tm.id
+         FROM team_members tm
+         JOIN users u ON u.id = tm.user_id
+         WHERE tm.team_id = ? AND tm.user_id = ? AND u.org_id = ? AND u.is_deleted = FALSE
+         LIMIT 1`,
+        [team_id, assigned_to, resolvedOrgId]
+      );
+      if (assigneeMembership.length === 0) {
+        return res.status(403).json({ error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });
+      }
+    }
+
     let taskStatus = 'TODO';
     if (assigned_to) {
       const [locked] = await db.execute(
@@ -106,7 +184,7 @@ router.post('/', authenticate, async (req, res) => {
 
     const [result] = await db.execute(
       'INSERT INTO tasks (title, description, priority, status, assigned_to, assigned_by, team_id, due_date, org_id, issue_type, reported_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [title, description, priority || 'MEDIUM', taskStatus, assigned_to || null, req.userId, team_id, due_date || null, req.orgId, type, reportedBy]
+      [title, description, priority || 'MEDIUM', taskStatus, assigned_to || null, req.userId, team_id, due_date || null, resolvedOrgId, type, reportedBy]
     );
 
     await logActivity(req.userId, team_id, result.insertId, type === 'bug' ? 'Bug Reported' : 'Task Assigned', title,
@@ -187,13 +265,51 @@ router.put('/:id', authenticate, async (req, res) => {
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Task not found', code: 'NOT_FOUND' });
     }
+    const currentTask = existing[0];
+
+    if (req.userRole === 'company_admin') {
+      const [[allowed]] = await db.execute(
+        `SELECT t.id
+         FROM tasks t
+         JOIN organizations o ON o.id = t.org_id
+         WHERE t.id = ? AND o.company_admin_id = ?`,
+        [req.params.id, req.companyAdminId]
+      );
+      if (!allowed) return res.status(403).json({ error: 'Task access denied', code: 'FORBIDDEN' });
+    } else if (req.userRole === 'admin') {
+      if (!req.orgId || Number(currentTask.org_id) !== Number(req.orgId)) {
+        return res.status(403).json({ error: 'Task access denied', code: 'FORBIDDEN' });
+      }
+    } else {
+      const [membership] = await db.execute(
+        'SELECT id FROM team_members WHERE team_id = ? AND user_id = ? LIMIT 1',
+        [currentTask.team_id, req.userId]
+      );
+      if (membership.length === 0) {
+        return res.status(403).json({ error: 'Task access denied', code: 'FORBIDDEN' });
+      }
+    }
+
+    if (assigned_to) {
+      const [assigneeMembership] = await db.execute(
+        `SELECT tm.id
+         FROM team_members tm
+         JOIN users u ON u.id = tm.user_id
+         WHERE tm.team_id = ? AND tm.user_id = ? AND u.org_id = ? AND u.is_deleted = FALSE
+         LIMIT 1`,
+        [currentTask.team_id, assigned_to, currentTask.org_id]
+      );
+      if (assigneeMembership.length === 0) {
+        return res.status(403).json({ error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });
+      }
+    }
 
     // Optimistic locking check
-    if (version !== undefined && existing[0].version !== version) {
+    if (version !== undefined && currentTask.version !== version) {
       return res.status(409).json({
         error: 'Task was modified by someone else. Please refresh.',
         code: 'CONFLICT',
-        current_version: existing[0].version
+        current_version: currentTask.version
       });
     }
 
@@ -207,15 +323,15 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const activity = status === 'DONE' ? 'Task Completed' : 'Task Updated';
-    await logActivity(req.userId, existing[0].team_id, req.params.id, activity, title, `Task ${activity.toLowerCase()}`, 'User (Local)');
-    ws.broadcast(existing[0].team_id, 'task_updated', { id: req.params.id, status, title });
-    res.json({ message: 'Task updated', version: existing[0].version + 1 });
+    await logActivity(req.userId, currentTask.team_id, req.params.id, activity, title, `Task ${activity.toLowerCase()}`, 'User (Local)');
+    ws.broadcast(currentTask.team_id, 'task_updated', { id: req.params.id, status, title });
+    res.json({ message: 'Task updated', version: currentTask.version + 1 });
   } catch (error) {
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }
 });
 
-// Manager assigns task to any user in org (cross-team)
+// Manager assigns task within the same team and organization
 router.post('/manager-assign', authenticate, async (req, res) => {
   try {
     if (req.userRole !== 'manager' && req.userRole !== 'admin')
@@ -223,13 +339,6 @@ router.post('/manager-assign', authenticate, async (req, res) => {
 
     const { title, description, priority, assigned_to, team_id, due_date } = req.body;
     if (!title || !assigned_to) return res.status(422).json({ error: 'title and assigned_to required' });
-
-    // assigned_to must be in same org
-    const [target] = await db.execute(
-      'SELECT id, name FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
-      [assigned_to, req.orgId]
-    );
-    if (target.length === 0) return res.status(403).json({ error: 'User not in your organization' });
 
     // Use manager's team if team_id not provided
     let taskTeamId = team_id;
@@ -239,10 +348,39 @@ router.post('/manager-assign', authenticate, async (req, res) => {
       );
       taskTeamId = mt[0]?.team_id || null;
     }
+    if (!taskTeamId) return res.status(422).json({ error: 'team_id required for assignment' });
+
+    const [[team]] = await db.execute(
+      'SELECT id, org_id FROM teams WHERE id = ? AND is_deleted = FALSE',
+      [taskTeamId]
+    );
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    if (req.orgId && Number(team.org_id) !== Number(req.orgId)) {
+      return res.status(403).json({ error: 'Team access denied' });
+    }
+
+    if (req.userRole === 'manager') {
+      const [managerMembership] = await db.execute(
+        'SELECT id FROM team_members WHERE team_id = ? AND user_id = ? LIMIT 1',
+        [taskTeamId, req.userId]
+      );
+      if (managerMembership.length === 0) {
+        return res.status(403).json({ error: 'Manager can assign only inside their own team' });
+      }
+    }
+
+    const [target] = await db.execute(
+      `SELECT u.id, u.name
+       FROM users u
+       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
+       WHERE u.id = ? AND u.org_id = ? AND u.is_deleted = FALSE`,
+      [taskTeamId, assigned_to, team.org_id]
+    );
+    if (target.length === 0) return res.status(403).json({ error: 'Target user must be part of the same team' });
 
     const [result] = await db.execute(
       'INSERT INTO tasks (title, description, priority, status, assigned_to, assigned_by, team_id, due_date, org_id, manager_assigned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)',
-      [title, description || null, priority || 'MEDIUM', 'TODO', assigned_to, req.userId, taskTeamId, due_date || null, req.orgId]
+      [title, description || null, priority || 'MEDIUM', 'TODO', assigned_to, req.userId, taskTeamId, due_date || null, team.org_id]
     );
 
     const [mgr] = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);

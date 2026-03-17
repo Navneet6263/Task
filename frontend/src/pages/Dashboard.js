@@ -31,7 +31,7 @@ const initialMgrForm = {
 };
 
 const Dashboard = () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
 
   const [teamList, setTeamList] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
