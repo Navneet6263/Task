@@ -28,6 +28,10 @@ export const tasks = {
   getByTeam: (teamId, page = 1, limit = 50, status = '') =>
     api.get(`/tasks/team/${teamId}?page=${page}&limit=${limit}${status ? '&status=' + status : ''}`),
   getMy: (page = 1, limit = 50) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
+  getFormOptions: () => api.get('/tasks/form-options'),
+  createFormOption: (data) => api.post('/tasks/form-options', data),
+  updateFormOption: (id, data) => api.put(`/tasks/form-options/${id}`, data),
+  deleteFormOption: (id) => api.delete(`/tasks/form-options/${id}`),
   create: (data) => api.post('/tasks', data),
   managerAssign: (data) => api.post('/tasks/manager-assign', data),
   getOrgUsers: () => api.get('/tasks/org-users'),

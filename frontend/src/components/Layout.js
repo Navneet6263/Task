@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { notifications, users } from '../services/api';
+import TeamChat from './TeamChat';
 import './Layout.css';
 
 const Layout = () => {
@@ -13,6 +14,7 @@ const Layout = () => {
     : parseStoredUser(localStorage.getItem('user')) || parseStoredUser(localStorage.getItem('company_user')) || {};
   const resolvedRole = tokenRole || user.role;
   const wsRef = useRef(null);
+  const [socketVersion, setSocketVersion] = useState(0);
 
   const [notifList, setNotifList] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
@@ -37,6 +39,7 @@ const Layout = () => {
 
     const ws = new WebSocket(`ws://localhost:5000?token=${token}`);
     wsRef.current = ws;
+    setSocketVersion((prev) => prev + 1);
 
     ws.onmessage = (event) => {
       try {
@@ -291,6 +294,9 @@ const Layout = () => {
         <main className="shell-content" onClick={closeTransientUi}>
           <Outlet />
         </main>
+      </div>
+      <div onClick={e => e.stopPropagation()}>
+        <TeamChat wsRef={wsRef} socketVersion={socketVersion} />
       </div>
     </div>
   );

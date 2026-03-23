@@ -5,6 +5,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const db = require('./src/config/database');
 const ws = require('./src/websocket');
+const { ensureCollaborationSchema } = require('./src/bootstrap/collaborationSchema');
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
 const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
 
@@ -22,6 +23,7 @@ app.use((req, res, next) => {
 
 // Init WebSocket
 ws.init(server);
+app.set('ws', ws);
 
 // Rate limiting
 app.use('/api/auth', authLimiter);
@@ -40,6 +42,7 @@ app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/company-admin', require('./src/routes/companyAdmin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/notifications', require('./src/routes/notifications'));
+app.use('/api/chat', require('./src/routes/chat'));
 
 // Cron: overdue alert every hour
 cron.schedule('0 * * * *', async () => {
@@ -73,4 +76,15 @@ app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+const startServer = async () => {
+  try {
+    await ensureCollaborationSchema();
+    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (error) {
+    console.error('Failed to bootstrap collaboration schema:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();

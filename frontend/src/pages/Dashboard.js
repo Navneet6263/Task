@@ -11,15 +11,51 @@ const STATUS_LABEL = {
   DONE: 'Done',
 };
 
-const initialTaskForm = {
-  title: '',
-  description: '',
-  priority: 'MEDIUM',
-  assigned_to: '',
-  due_date: '',
-  issue_type: 'task',
-  product: '',
-  category: '',
+const DEFAULT_TASK_FORM_OPTIONS = {
+  task_types: [
+    { label: 'Feature', parent_value: '' },
+    { label: 'Improvement', parent_value: '' },
+    { label: 'Testing', parent_value: '' },
+    { label: 'Research', parent_value: '' },
+  ],
+  products: [
+    { label: 'Dashboard', parent_value: '' },
+    { label: 'UI/UX', parent_value: '' },
+    { label: 'Backend API', parent_value: '' },
+    { label: 'Mobile App', parent_value: '' },
+    { label: 'Authentication', parent_value: '' },
+    { label: 'Reports', parent_value: '' },
+  ],
+  categories: [
+    { label: 'New Feature', parent_value: 'Feature' },
+    { label: 'Workflow', parent_value: 'Feature' },
+    { label: 'Optimization', parent_value: 'Improvement' },
+    { label: 'Refactor', parent_value: 'Improvement' },
+    { label: 'Regression', parent_value: 'Testing' },
+    { label: 'UAT', parent_value: 'Testing' },
+    { label: 'Discovery', parent_value: 'Research' },
+    { label: 'Documentation', parent_value: 'Research' },
+  ],
+};
+const MAX_REFERENCE_IMAGE_BYTES = 450 * 1024;
+
+const buildInitialTaskForm = () => {
+  const today = new Date().toISOString().split('T')[0];
+
+  return {
+    title: '',
+    description: '',
+    priority: 'MEDIUM',
+    assigned_to: '',
+    assigned_date: today,
+    start_date: today,
+    due_date: '',
+    issue_type: 'task',
+    task_type: '',
+    product: '',
+    category: '',
+    reference_image: '',
+  };
 };
 
 const initialMgrForm = {
@@ -48,7 +84,8 @@ const Dashboard = () => {
   const [showMgrModal, setShowMgrModal] = useState(false);
 
   const [orgUsers, setOrgUsers] = useState([]);
-  const [taskForm, setTaskForm] = useState(initialTaskForm);
+  const [taskForm, setTaskForm] = useState(buildInitialTaskForm());
+  const [taskFormOptions, setTaskFormOptions] = useState(DEFAULT_TASK_FORM_OPTIONS);
   const [mgrForm, setMgrForm] = useState(initialMgrForm);
 
   const selectTeam = useCallback(async (team) => {
@@ -79,6 +116,29 @@ const Dashboard = () => {
     fetchTeams();
   }, [fetchTeams]);
 
+  const fetchTaskFormOptions = useCallback(async () => {
+    try {
+      const response = await tasks.getFormOptions();
+      setTaskFormOptions({
+        task_types: Array.isArray(response.data?.task_types) && response.data.task_types.length > 0
+          ? response.data.task_types
+          : DEFAULT_TASK_FORM_OPTIONS.task_types,
+        products: Array.isArray(response.data?.products) && response.data.products.length > 0
+          ? response.data.products
+          : DEFAULT_TASK_FORM_OPTIONS.products,
+        categories: Array.isArray(response.data?.categories) && response.data.categories.length > 0
+          ? response.data.categories
+          : DEFAULT_TASK_FORM_OPTIONS.categories,
+      });
+    } catch (error) {
+      setTaskFormOptions(DEFAULT_TASK_FORM_OPTIONS);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTaskFormOptions();
+  }, [fetchTaskFormOptions]);
+
   useEffect(() => {
     setPage(1);
   }, [selectedTeam?.id, filterPriority, filterAssignee, view]);
@@ -96,11 +156,19 @@ const Dashboard = () => {
       await tasks.create({
         ...taskForm,
         title: taskForm.title.trim(),
+        description: taskForm.description.trim(),
         team_id: selectedTeam.id,
         assigned_to: taskForm.assigned_to || null,
+        task_type: taskForm.task_type || null,
+        product: taskForm.product || null,
+        category: taskForm.category || null,
+        assigned_date: taskForm.assigned_date || null,
+        start_date: taskForm.start_date || null,
+        due_date: taskForm.due_date || null,
+        reference_image: taskForm.reference_image || null,
       });
       setShowTaskModal(false);
-      setTaskForm(initialTaskForm);
+      setTaskForm(buildInitialTaskForm());
       await refresh();
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to create task');
@@ -127,6 +195,44 @@ const Dashboard = () => {
       } catch (error) {}
     }
     setShowMgrModal(true);
+  };
+
+  const openTaskComposer = async () => {
+    if (!selectedTeam) return;
+    setTaskForm(buildInitialTaskForm());
+    await fetchTaskFormOptions();
+    setShowTaskModal(true);
+  };
+
+  const updateTaskFormField = (field, value) => {
+    setTaskForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === 'task_type') next.category = '';
+      return next;
+    });
+  };
+
+  const handleReferenceImageChange = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file');
+      return;
+    }
+
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
+      alert('Please upload an image under 450KB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateTaskFormField('reference_image', typeof reader.result === 'string' ? reader.result : '');
+    };
+    reader.onerror = () => alert('Failed to read the selected image');
+    reader.readAsDataURL(file);
   };
 
   const handleStatusChange = async (task, status) => {
@@ -167,6 +273,7 @@ const Dashboard = () => {
     if (!selectedTask) return;
     const normalized = field === 'assigned_to' ? (value ? Number(value) : null) : value;
     const nextTask = { ...selectedTask, [field]: normalized };
+    if (field === 'task_type') nextTask.category = '';
 
     try {
       await tasks.update(selectedTask.id, {
@@ -177,6 +284,25 @@ const Dashboard = () => {
       await refresh();
     } catch (error) {}
   };
+
+  const availableTaskOptions = useMemo(
+    () => ({
+      task_types: taskFormOptions.task_types?.length ? taskFormOptions.task_types : DEFAULT_TASK_FORM_OPTIONS.task_types,
+      products: taskFormOptions.products?.length ? taskFormOptions.products : DEFAULT_TASK_FORM_OPTIONS.products,
+      categories: taskFormOptions.categories?.length ? taskFormOptions.categories : DEFAULT_TASK_FORM_OPTIONS.categories,
+    }),
+    [taskFormOptions]
+  );
+
+  const createTaskCategories = useMemo(
+    () => filterCategoryOptions(availableTaskOptions.categories, taskForm.task_type),
+    [availableTaskOptions.categories, taskForm.task_type]
+  );
+
+  const selectedTaskCategories = useMemo(
+    () => filterCategoryOptions(availableTaskOptions.categories, selectedTask?.task_type),
+    [availableTaskOptions.categories, selectedTask?.task_type]
+  );
 
   const filtered = useMemo(
     () =>
@@ -427,7 +553,7 @@ const Dashboard = () => {
         </div>
 
         <div className="dash-hero-actions">
-          <button type="button" className="dash-btn dash-btn-primary" onClick={() => setShowTaskModal(true)}>Create Task</button>
+          <button type="button" className="dash-btn dash-btn-primary" onClick={openTaskComposer} disabled={!selectedTeam}>Create Task</button>
           {user.role === 'manager' && (
             <button type="button" className="dash-btn dash-btn-secondary" onClick={openManagerModal}>Manager Assign</button>
           )}
@@ -589,8 +715,39 @@ const Dashboard = () => {
               <button type="button" onClick={() => setSelectedTask(null)}>Close</button>
             </div>
 
+            <div className="dash-sheet-tags">
+              <span className={`dash-issue-tag ${selectedTask.issue_type || 'task'}`}>{(selectedTask.issue_type || 'task').toUpperCase()}</span>
+              {selectedTask.manager_assigned && <span className="dash-manager-tag">MANAGER</span>}
+            </div>
+
             <h3>{selectedTask.title}</h3>
             <p className="dash-sheet-desc">{selectedTask.description || 'No description available.'}</p>
+
+            <div className="dash-sheet-grid">
+              <div className="dash-sheet-meta">
+                <span>Task Type</span>
+                <strong>{selectedTask.task_type || '-'}</strong>
+              </div>
+              <div className="dash-sheet-meta">
+                <span>Product</span>
+                <strong>{selectedTask.product || '-'}</strong>
+              </div>
+              <div className="dash-sheet-meta">
+                <span>Category</span>
+                <strong>{selectedTask.category || '-'}</strong>
+              </div>
+              <div className="dash-sheet-meta">
+                <span>End Date</span>
+                <strong>{dateLabel(selectedTask.due_date)}</strong>
+              </div>
+            </div>
+
+            {selectedTask.reference_image && (
+              <div className="dash-sheet-media">
+                <span>Reference Image</span>
+                <img src={selectedTask.reference_image} alt={`${selectedTask.title} reference`} />
+              </div>
+            )}
 
             <label>
               <span>Status</span>
@@ -601,27 +758,73 @@ const Dashboard = () => {
               </select>
             </label>
 
-            <label>
-              <span>Priority</span>
-              <select className="dash-select" value={selectedTask.priority} onChange={(event) => handlePanelUpdate('priority', event.target.value)}>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
-              </select>
-            </label>
+            <div className="dash-field-row">
+              <label>
+                <span>Priority</span>
+                <select className="dash-select" value={selectedTask.priority} onChange={(event) => handlePanelUpdate('priority', event.target.value)}>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Assignee</span>
+                <select className="dash-select" value={selectedTask.assigned_to || ''} onChange={(event) => handlePanelUpdate('assigned_to', event.target.value)}>
+                  <option value="">Unassigned</option>
+                  {members.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="dash-field-row">
+              <label>
+                <span>Task Type</span>
+                <select className="dash-select" value={selectedTask.task_type || ''} onChange={(event) => handlePanelUpdate('task_type', event.target.value)}>
+                  <option value="">Select task type</option>
+                  {availableTaskOptions.task_types.map((option) => (
+                    <option key={option.id || option.label} value={option.label}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span>Product / Module</span>
+                <select className="dash-select" value={selectedTask.product || ''} onChange={(event) => handlePanelUpdate('product', event.target.value)}>
+                  <option value="">Select product</option>
+                  {availableTaskOptions.products.map((option) => (
+                    <option key={option.id || option.label} value={option.label}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             <label>
-              <span>Assignee</span>
-              <select className="dash-select" value={selectedTask.assigned_to || ''} onChange={(event) => handlePanelUpdate('assigned_to', event.target.value)}>
-                <option value="">Unassigned</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>{member.name}</option>
+              <span>Category</span>
+              <select className="dash-select" value={selectedTask.category || ''} onChange={(event) => handlePanelUpdate('category', event.target.value)}>
+                <option value="">Select category</option>
+                {selectedTaskCategories.map((option) => (
+                  <option key={option.id || `${option.label}-${option.parent_value || 'general'}`} value={option.label}>{option.label}</option>
                 ))}
               </select>
             </label>
 
+            <div className="dash-field-row">
+              <label>
+                <span>Assigned Date</span>
+                <input className="dash-input" type="date" value={toInputDate(selectedTask.assigned_date)} onChange={(event) => handlePanelUpdate('assigned_date', event.target.value)} />
+              </label>
+
+              <label>
+                <span>Start Date</span>
+                <input className="dash-input" type="date" value={toInputDate(selectedTask.start_date)} onChange={(event) => handlePanelUpdate('start_date', event.target.value)} />
+              </label>
+            </div>
+
             <label>
-              <span>Due Date</span>
+              <span>End Date</span>
               <input className="dash-input" type="date" value={toInputDate(selectedTask.due_date)} onChange={(event) => handlePanelUpdate('due_date', event.target.value)} />
             </label>
 
@@ -665,81 +868,210 @@ const Dashboard = () => {
       )}
 
       {showTaskModal && (
-        <div className="dash-modal-overlay" onClick={() => setShowTaskModal(false)}>
-          <div className="dash-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>Create New Task</h3>
-            <p>Capture scope clearly and assign the right owner.</p>
-
-            <form onSubmit={handleCreateTask}>
-              <div className="dash-issue-switch">
-                {[
-                  ['task', 'Task'],
-                  ['bug', 'Bug'],
-                  ['story', 'Story'],
-                ].map(([type, label]) => (
-                  <button key={type} type="button" className={taskForm.issue_type === type ? 'is-active' : ''} onClick={() => setTaskForm({ ...taskForm, issue_type: type })}>
-                    {label}
-                  </button>
-                ))}
+        <div className="dash-composer-overlay" onClick={() => setShowTaskModal(false)}>
+          <div className="dash-composer" onClick={(event) => event.stopPropagation()}>
+            <div className="dash-composer-head">
+              <div>
+                <p className="dash-eyebrow">Task Composer</p>
+                <h3>Create a detailed task</h3>
+                <p className="dash-composer-sub">Open the form wide, set dates clearly, and attach one small reference image.</p>
               </div>
+              <button type="button" className="dash-btn" onClick={() => setShowTaskModal(false)}>Close</button>
+            </div>
 
-              <select className="dash-select" value={taskForm.product} onChange={(event) => setTaskForm({ ...taskForm, product: event.target.value })}>
-                <option value="">Select product/module</option>
-                <option value="Dashboard">Dashboard</option>
-                <option value="UI/UX Design">UI/UX Design</option>
-                <option value="Backend API">Backend API</option>
-                <option value="Mobile App">Mobile App</option>
-                <option value="Authentication">Authentication</option>
-                <option value="Reports">Reports</option>
-                <option value="Other">Other</option>
-              </select>
+            <form className="dash-composer-form" onSubmit={handleCreateTask}>
+              <div className="dash-composer-grid">
+                <div className="dash-composer-main">
+                  <section className="dash-composer-card">
+                    <div className="dash-section-head">
+                      <div>
+                        <h4>Workflow</h4>
+                        <p>Select how this item should move in the workspace.</p>
+                      </div>
+                    </div>
 
-              <select className="dash-select" value={taskForm.category} onChange={(event) => setTaskForm({ ...taskForm, category: event.target.value })}>
-                <option value="">Select category</option>
-                {taskForm.issue_type === 'bug' && (
-                  <>
-                    <option value="UI Bug">UI Bug</option>
-                    <option value="API Error">API Error</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Security">Security</option>
-                  </>
-                )}
-                {taskForm.issue_type === 'task' && (
-                  <>
-                    <option value="Feature">Feature</option>
-                    <option value="Improvement">Improvement</option>
-                    <option value="Testing">Testing</option>
-                    <option value="Deployment">Deployment</option>
-                  </>
-                )}
-                {taskForm.issue_type === 'story' && (
-                  <>
-                    <option value="User Story">User Story</option>
-                    <option value="Epic">Epic</option>
-                    <option value="Research">Research</option>
-                  </>
-                )}
-              </select>
+                    <div className="dash-issue-switch">
+                      {[
+                        ['task', 'Task'],
+                        ['bug', 'Bug'],
+                        ['story', 'Story'],
+                      ].map(([type, label]) => (
+                        <button key={type} type="button" className={taskForm.issue_type === type ? 'is-active' : ''} onClick={() => updateTaskFormField('issue_type', type)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
 
-              <input className="dash-input" placeholder="Task title" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} required />
-              <textarea className="dash-input" placeholder="Description" value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} />
+                    <label>
+                      <span>Task Title</span>
+                      <input className="dash-input" placeholder="Write a clear task title" value={taskForm.title} onChange={(event) => updateTaskFormField('title', event.target.value)} required />
+                    </label>
 
-              <div className="dash-field-row">
-                <select className="dash-select" value={taskForm.priority} onChange={(event) => setTaskForm({ ...taskForm, priority: event.target.value })}>
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                </select>
+                    <label>
+                      <span>Description</span>
+                      <textarea className="dash-input" placeholder="Explain expected output, dependencies, and delivery details" value={taskForm.description} onChange={(event) => updateTaskFormField('description', event.target.value)} />
+                    </label>
+                  </section>
 
-                <select className="dash-select" value={taskForm.assigned_to} onChange={(event) => setTaskForm({ ...taskForm, assigned_to: event.target.value })}>
-                  <option value="">Unassigned</option>
-                  {members.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
+                  <section className="dash-composer-card">
+                    <div className="dash-section-head">
+                      <div>
+                        <h4>Task Setup</h4>
+                        <p>These dropdowns are controlled from Settings by admin and manager.</p>
+                      </div>
+                    </div>
+
+                    <div className="dash-field-row dash-field-row-3">
+                      <label>
+                        <span>Task Type</span>
+                        <select className="dash-select" value={taskForm.task_type} onChange={(event) => updateTaskFormField('task_type', event.target.value)}>
+                          <option value="">Select task type</option>
+                          {availableTaskOptions.task_types.map((option) => (
+                            <option key={option.id || option.label} value={option.label}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        <span>Product / Module</span>
+                        <select className="dash-select" value={taskForm.product} onChange={(event) => updateTaskFormField('product', event.target.value)}>
+                          <option value="">Select product/module</option>
+                          {availableTaskOptions.products.map((option) => (
+                            <option key={option.id || option.label} value={option.label}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        <span>Category</span>
+                        <select className="dash-select" value={taskForm.category} onChange={(event) => updateTaskFormField('category', event.target.value)}>
+                          <option value="">Select category</option>
+                          {createTaskCategories.map((option) => (
+                            <option key={option.id || `${option.label}-${option.parent_value || 'general'}`} value={option.label}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="dash-composer-card">
+                    <div className="dash-section-head">
+                      <div>
+                        <h4>Ownership & Dates</h4>
+                        <p>Assigned date, start date, and end date stay visible for delivery tracking.</p>
+                      </div>
+                    </div>
+
+                    <div className="dash-field-row">
+                      <label>
+                        <span>Priority</span>
+                        <select className="dash-select" value={taskForm.priority} onChange={(event) => updateTaskFormField('priority', event.target.value)}>
+                          <option value="LOW">Low</option>
+                          <option value="MEDIUM">Medium</option>
+                          <option value="HIGH">High</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        <span>Assignee</span>
+                        <select className="dash-select" value={taskForm.assigned_to} onChange={(event) => updateTaskFormField('assigned_to', event.target.value)}>
+                          <option value="">Unassigned</option>
+                          {members.map((member) => (
+                            <option key={member.id} value={member.id}>{member.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="dash-field-row dash-field-row-3">
+                      <label>
+                        <span>Assigned Date</span>
+                        <input className="dash-input" type="date" value={taskForm.assigned_date} onChange={(event) => updateTaskFormField('assigned_date', event.target.value)} />
+                      </label>
+
+                      <label>
+                        <span>Start Date</span>
+                        <input className="dash-input" type="date" value={taskForm.start_date} onChange={(event) => updateTaskFormField('start_date', event.target.value)} />
+                      </label>
+
+                      <label>
+                        <span>End Date</span>
+                        <input className="dash-input" type="date" value={taskForm.due_date} onChange={(event) => updateTaskFormField('due_date', event.target.value)} />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="dash-composer-card">
+                    <div className="dash-section-head">
+                      <div>
+                        <h4>Reference Image</h4>
+                        <p>Add one small screenshot or mockup so the assignee understands the task quickly.</p>
+                      </div>
+                    </div>
+
+                    <label className="dash-upload-box">
+                      <span>Upload Image</span>
+                      <input className="dash-input dash-file-input" type="file" accept="image/*" onChange={handleReferenceImageChange} />
+                      <small>Use PNG, JPG, or WEBP under 450KB.</small>
+                    </label>
+
+                    {taskForm.reference_image && (
+                      <div className="dash-image-preview">
+                        <img src={taskForm.reference_image} alt="Task reference preview" />
+                        <button type="button" className="dash-btn dash-btn-secondary" onClick={() => updateTaskFormField('reference_image', '')}>
+                          Remove Image
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                </div>
+
+                <aside className="dash-composer-side">
+                  <section className="dash-composer-card dash-composer-summary">
+                    <div className="dash-section-head">
+                      <div>
+                        <h4>Live Summary</h4>
+                        <p>Everything here gets saved with the task.</p>
+                      </div>
+                    </div>
+
+                    <div className="dash-summary-list">
+                      <div>
+                        <span>Team</span>
+                        <strong>{selectedTeam?.name || 'No team selected'}</strong>
+                      </div>
+                      <div>
+                        <span>Workflow</span>
+                        <strong>{taskForm.issue_type.toUpperCase()}</strong>
+                      </div>
+                      <div>
+                        <span>Task Type</span>
+                        <strong>{taskForm.task_type || 'Not selected'}</strong>
+                      </div>
+                      <div>
+                        <span>Product</span>
+                        <strong>{taskForm.product || 'Not selected'}</strong>
+                      </div>
+                      <div>
+                        <span>Category</span>
+                        <strong>{taskForm.category || 'Not selected'}</strong>
+                      </div>
+                      <div>
+                        <span>Assignee</span>
+                        <strong>{members.find((member) => Number(member.id) === Number(taskForm.assigned_to))?.name || 'Unassigned'}</strong>
+                      </div>
+                      <div>
+                        <span>End Date</span>
+                        <strong>{dateLabel(taskForm.due_date)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="dash-composer-note">
+                      <p>Admins and managers can customize these fields from Settings.</p>
+                    </div>
+                  </section>
+                </aside>
               </div>
-
-              <input className="dash-input" type="date" value={taskForm.due_date} onChange={(event) => setTaskForm({ ...taskForm, due_date: event.target.value })} />
 
               <div className="dash-modal-actions">
                 <button type="button" className="dash-btn" onClick={() => setShowTaskModal(false)}>Cancel</button>
@@ -769,6 +1101,11 @@ const isOverdue = (task) => {
   if (!task.due_date || task.status === 'DONE') return false;
   const due = new Date(task.due_date);
   return !Number.isNaN(due.getTime()) && due < new Date();
+};
+
+const filterCategoryOptions = (options = [], taskType = '') => {
+  if (!taskType) return options;
+  return options.filter((option) => !option.parent_value || option.parent_value === taskType);
 };
 
 const firstName = (name) => {
