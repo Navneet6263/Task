@@ -77,10 +77,13 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
+const { startBot } = require('./src/telegram/bot');
+
 const startServer = async () => {
   try {
     await ensureCollaborationSchema();
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    startBot();
   } catch (error) {
     console.error('Failed to bootstrap collaboration schema:', error.message);
     process.exit(1);
