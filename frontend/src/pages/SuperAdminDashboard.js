@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { SA_BASE_URL } from '../services/runtimeConfig';
 import './SuperAdminDashboard.css';
 
 const sa = () =>
   axios.create({
-    baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/sa`,
+    baseURL: SA_BASE_URL,
     headers: { Authorization: `Bearer ${localStorage.getItem('sa_token')}` },
   });
 

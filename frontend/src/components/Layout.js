@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { notifications, users } from '../services/api';
+import { WS_BASE_URL } from '../services/runtimeConfig';
 import TeamChat from './TeamChat';
 import './Layout.css';
 
@@ -37,9 +38,7 @@ const Layout = () => {
     const token = localStorage.getItem('company_token') || localStorage.getItem('token');
     if (!token) return;
 
-    const wsUrl = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api')
-      .replace(/^http/, 'ws').replace('/api', '');
-    const ws = new WebSocket(`${wsUrl}?token=${token}`);
+    const ws = new WebSocket(`${WS_BASE_URL}?token=${token}`);
     wsRef.current = ws;
     setSocketVersion((prev) => prev + 1);
 

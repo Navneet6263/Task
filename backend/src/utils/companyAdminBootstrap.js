@@ -1,3 +1,5 @@
+const { ensureUniqueEmployeeId } = require('./employeeId');
+
 const slugify = (value) => {
   return String(value || '')
     .toLowerCase()
@@ -63,30 +65,33 @@ const ensureCompanyAdminBootstrap = async (db, companyAdminId) => {
 
   const primaryOrgId = orgs[0].id;
   const [users] = await db.execute(
-    'SELECT id, is_deleted FROM users WHERE email = ? ORDER BY id ASC',
+    'SELECT id, is_deleted, employee_id FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id ASC',
     [companyAdmin.email]
   );
 
   let linkedUserId = null;
+  const generatedEmployeeId = await ensureUniqueEmployeeId(db, users[0]?.employee_id || null, 'CA', companyAdmin.id);
 
   if (users.length > 0) {
     linkedUserId = users[0].id;
     await db.execute(
       `UPDATE users
        SET role = 'admin',
+           password = ?,
            is_deleted = FALSE,
            deleted_at = NULL,
            org_id = COALESCE(org_id, ?),
            name = COALESCE(NULLIF(name, ''), ?),
-           mobile = COALESCE(mobile, ?)
+           mobile = COALESCE(mobile, ?),
+           employee_id = COALESCE(employee_id, ?)
        WHERE id = ?`,
-      [primaryOrgId, companyAdmin.name, companyAdmin.mobile || null, linkedUserId]
+      [companyAdmin.password, primaryOrgId, companyAdmin.name, companyAdmin.mobile || null, generatedEmployeeId, linkedUserId]
     );
   } else {
     const [insertUser] = await db.execute(
       `INSERT INTO users (name, email, password, mobile, employee_id, role, org_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [companyAdmin.name, companyAdmin.email, companyAdmin.password, companyAdmin.mobile || null, null, 'admin', primaryOrgId]
+      [companyAdmin.name, companyAdmin.email, companyAdmin.password, companyAdmin.mobile || null, generatedEmployeeId, 'admin', primaryOrgId]
     );
     linkedUserId = insertUser.insertId;
   }

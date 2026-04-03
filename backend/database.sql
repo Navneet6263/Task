@@ -61,7 +61,7 @@ BEGIN
     email NVARCHAR(255) NOT NULL UNIQUE,
     password NVARCHAR(255) NOT NULL,
     mobile NVARCHAR(20) NULL,
-    employee_id NVARCHAR(50) NULL UNIQUE,
+    employee_id NVARCHAR(50) NULL,
     role NVARCHAR(30) NOT NULL CONSTRAINT DF_users_role DEFAULT 'person',
     avatar NVARCHAR(255) NULL,
     org_id INT NULL,
@@ -77,7 +77,10 @@ BEGIN
   CREATE INDEX idx_users_role ON dbo.users(role);
   CREATE INDEX idx_users_org_id ON dbo.users(org_id);
   CREATE INDEX idx_users_is_deleted ON dbo.users(is_deleted);
-END
+  CREATE UNIQUE INDEX idx_users_employee_id_not_null
+    ON dbo.users(employee_id)
+    WHERE employee_id IS NOT NULL;
+  END
 GO
 
 IF OBJECT_ID(N'dbo.teams', N'U') IS NULL

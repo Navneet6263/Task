@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { auth } from '../services/api';
+import { SA_BASE_URL } from '../services/runtimeConfig';
 import AuthShowcase from '../components/AuthShowcase';
 import './Login.css';
 
-const sa = axios.create({ baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/sa` });
+const sa = axios.create({ baseURL: SA_BASE_URL });
 
 const initialForm = {
   name: '',

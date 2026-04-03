@@ -5,17 +5,20 @@ const db = require('../config/database');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+
 // Register company (goes to pending approval)
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, mobile, company_description, expected_companies, expected_managers, expected_staff } = req.body;
     if (!name || !email || !password) return res.status(422).json({ error: 'name, email, password required' });
+    const normalizedEmail = normalizeEmail(email);
 
     const hashed = await bcrypt.hash(password, 10);
     const [result] = await db.execute(
       `INSERT INTO company_admins (name, email, password, mobile, company_description, expected_companies, expected_managers, expected_staff)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, hashed, mobile || null, company_description || null,
+      [name, normalizedEmail, hashed, mobile || null, company_description || null,
        expected_companies || 1, expected_managers || 5, expected_staff || 20]
     );
     res.status(201).json({ message: 'Registration submitted. Awaiting approval.', id: result.insertId });
@@ -31,7 +34,8 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const [rows] = await db.execute('SELECT * FROM company_admins WHERE email = ?', [email]);
+    const normalizedEmail = normalizeEmail(email);
+    const [rows] = await db.execute('SELECT * FROM company_admins WHERE LOWER(email) = ?', [normalizedEmail]);
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const ca = rows[0];
     const valid = await bcrypt.compare(password, ca.password);

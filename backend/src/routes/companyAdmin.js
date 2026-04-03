@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { generateCompanyCode } = require('../utils/companyAdminBootstrap');
+const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const { ensureUserOrgAccessTable } = require('../utils/orgAccess');
 
 const router = express.Router();
@@ -254,6 +255,7 @@ router.post('/admins', async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
+    const safeEmployeeId = await ensureUniqueEmployeeId(db, employee_id, 'ADM');
     const [result] = await db.execute(
       `INSERT INTO users (name, email, password, mobile, employee_id, role, org_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -262,7 +264,7 @@ router.post('/admins', async (req, res) => {
         String(email).trim().toLowerCase(),
         hashed,
         mobile || null,
-        employee_id || null,
+        safeEmployeeId,
         'admin',
         orgId,
       ]
@@ -275,7 +277,7 @@ router.post('/admins', async (req, res) => {
       org_id: orgId,
     });
   } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === 'ER_DUP_ENTRY' || error.number === 2627 || error.number === 2601) {
       return res.status(400).json({ error: 'Email or employee id already exists' });
     }
     res.status(400).json({ error: error.message });

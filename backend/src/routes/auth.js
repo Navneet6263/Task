@@ -4,13 +4,22 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
+const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const router = express.Router();
+
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, mobile, employee_id, role, team_code, company_code, company_name } = req.body;
+    const normalizedEmail = normalizeEmail(email);
     const hashed = await bcrypt.hash(password, 10);
     const userRole = ['admin', 'manager', 'person'].includes(role) ? role : 'person';
+    const safeEmployeeId = await ensureUniqueEmployeeId(
+      db,
+      employee_id,
+      userRole === 'manager' ? 'MGR' : 'EMP'
+    );
     let resolvedOrgId = null;
 
     // PERSON: must provide team_code → get org from team
@@ -42,7 +51,7 @@ router.post('/register', async (req, res) => {
 
     const [result] = await db.execute(
       'INSERT INTO users (name, email, password, mobile, employee_id, role, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, hashed, mobile || null, employee_id || null, userRole, resolvedOrgId]
+      [name, normalizedEmail, hashed, mobile || null, safeEmployeeId, userRole, resolvedOrgId]
     );
     const userId = result.insertId;
 
@@ -78,7 +87,7 @@ router.post('/register', async (req, res) => {
       token,
       id: userId,
       name,
-      email,
+      email: normalizedEmail,
       role: userRole,
       org_id: resolvedOrgId,
       org_ids: orgIds,
@@ -93,10 +102,10 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const normalizedEmail = String(email || '').trim();
+    const normalizedEmail = normalizeEmail(email);
 
     const [companyAdmins] = await db.execute(
-      'SELECT * FROM company_admins WHERE email = ? LIMIT 1',
+      'SELECT * FROM company_admins WHERE LOWER(email) = ? LIMIT 1',
       [normalizedEmail]
     );
     const companyAdmin = companyAdmins[0] || null;
@@ -144,7 +153,7 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    const [users] = await db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
     if (users.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const user = users[0];
     const valid = await bcrypt.compare(password, user.password);
@@ -160,7 +169,7 @@ router.post('/login', async (req, res) => {
       token,
       id: user.id,
       name: user.name,
-      email: user.email,
+      email: normalizedEmail,
       role: user.role,
       org_id: user.org_id,
       org_ids: orgIds,

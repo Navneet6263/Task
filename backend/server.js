@@ -12,15 +12,32 @@ const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = [
+const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
+
+const configuredOrigins = [
   'http://localhost:3000',
   'https://task-qds4.vercel.app',
   process.env.FRONTEND_URL,
-].filter(Boolean);
+  ...(process.env.FRONTEND_ORIGINS || '')
+    .split(',')
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean),
+]
+  .map((origin) => normalizeOrigin(origin))
+  .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set(configuredOrigins));
+
+const isAllowedOrigin = (origin) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return true;
+  if (allowedOrigins.includes(normalizedOrigin)) return true;
+  return /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(normalizedOrigin);
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true

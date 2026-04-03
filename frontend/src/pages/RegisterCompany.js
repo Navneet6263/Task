@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthShowcase from '../components/AuthShowcase';
+import { API_BASE_URL } from '../services/runtimeConfig';
 import './RegisterCompany.css';
 
 const stepMeta = [
@@ -128,7 +129,7 @@ const RegisterCompany = () => {
 
     try {
       setSubmitting(true);
-      await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/company-auth/register`, payload);
+      await axios.post(`${API_BASE_URL}/company-auth/register`, payload);
       setSuccess(true);
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to submit registration right now.');

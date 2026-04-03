@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../services/runtimeConfig';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
 
-const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const BASE = API_BASE_URL;
 const token = () => localStorage.getItem('token') || localStorage.getItem('company_token');
 const api = () => axios.create({ baseURL: BASE, headers: { Authorization: `Bearer ${token()}` } });
 const me = () => {
