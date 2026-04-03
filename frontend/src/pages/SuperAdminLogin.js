@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './SuperAdminLogin.css';
 
-const sa = axios.create({ baseURL: 'http://localhost:5000/api/sa' });
+const sa = axios.create({ baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/sa` });
 
 const SuperAdminLogin = () => {
   const [step, setStep] = useState(1);

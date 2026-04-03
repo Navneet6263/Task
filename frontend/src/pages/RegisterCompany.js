@@ -128,7 +128,7 @@ const RegisterCompany = () => {
 
     try {
       setSubmitting(true);
-      await axios.post('http://localhost:5000/api/company-auth/register', payload);
+      await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/company-auth/register`, payload);
       setSuccess(true);
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to submit registration right now.');

@@ -5,7 +5,7 @@ import './SuperAdminDashboard.css';
 
 const sa = () =>
   axios.create({
-    baseURL: 'http://localhost:5000/api/sa',
+    baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/sa`,
     headers: { Authorization: `Bearer ${localStorage.getItem('sa_token')}` },
   });
 

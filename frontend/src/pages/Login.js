@@ -5,7 +5,7 @@ import { auth } from '../services/api';
 import AuthShowcase from '../components/AuthShowcase';
 import './Login.css';
 
-const sa = axios.create({ baseURL: 'http://localhost:5000/api/sa' });
+const sa = axios.create({ baseURL: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/sa` });
 
 const initialForm = {
   name: '',

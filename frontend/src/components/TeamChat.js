@@ -3,7 +3,7 @@ import axios from 'axios';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
 
-const BASE = 'http://localhost:5000/api';
+const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 const token = () => localStorage.getItem('token') || localStorage.getItem('company_token');
 const api = () => axios.create({ baseURL: BASE, headers: { Authorization: `Bearer ${token()}` } });
 const me = () => {

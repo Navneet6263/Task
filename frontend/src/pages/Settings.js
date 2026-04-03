@@ -35,7 +35,7 @@ const api = () => {
   if (activeOrgId) headers['x-org-id'] = activeOrgId;
 
   return axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
     headers,
   });
 };

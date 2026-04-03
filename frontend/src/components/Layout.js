@@ -37,7 +37,9 @@ const Layout = () => {
     const token = localStorage.getItem('company_token') || localStorage.getItem('token');
     if (!token) return;
 
-    const ws = new WebSocket(`ws://localhost:5000?token=${token}`);
+    const wsUrl = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api')
+      .replace(/^http/, 'ws').replace('/api', '');
+    const ws = new WebSocket(`${wsUrl}?token=${token}`);
     wsRef.current = ws;
     setSocketVersion((prev) => prev + 1);
 

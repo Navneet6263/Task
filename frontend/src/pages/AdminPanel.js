@@ -4,7 +4,7 @@ import './AdminPanel.css';
 
 const api = () =>
   axios.create({
-    baseURL: 'http://localhost:5000/api',
+    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
     headers: {
       Authorization: `Bearer ${localStorage.getItem('company_token') || localStorage.getItem('token')}`,
       'x-org-id': localStorage.getItem('active_org_id') || '',
