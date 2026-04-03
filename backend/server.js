@@ -12,7 +12,10 @@ const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 
 // Request logger — shows every request in CMD
