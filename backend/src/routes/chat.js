@@ -48,11 +48,10 @@ const canReviewTeam = async (req, teamId) => {
 
 const ensureDefaultThread = async (teamId, userId) => {
   const [[existing]] = await db.execute(
-    `SELECT id, team_id, title, is_default, created_by, created_at, updated_at, last_message_at
+    `SELECT TOP 1 id, team_id, title, is_default, created_by, created_at, updated_at, last_message_at
      FROM team_discussion_threads
      WHERE team_id = ? AND is_default = TRUE
-     ORDER BY id ASC
-     LIMIT 1`,
+     ORDER BY id ASC`,
     [teamId]
   );
 
@@ -123,7 +122,7 @@ const getThreads = async (teamId, userId) => {
             )
         ) AS message_count,
         (
-          SELECT m.message
+          SELECT TOP 1 m.message
           FROM team_messages m
           WHERE m.team_id = t.team_id
             AND (
@@ -131,7 +130,6 @@ const getThreads = async (teamId, userId) => {
               OR (t.is_default = TRUE AND m.thread_id IS NULL)
             )
           ORDER BY m.created_at DESC
-          LIMIT 1
         ) AS last_message
       FROM team_discussion_threads t
       JOIN users u ON u.id = t.created_by
@@ -229,7 +227,7 @@ const attachParticipantsAndEvents = async (session) => {
       FROM team_review_session_participants p
       JOIN users u ON u.id = p.user_id
       WHERE p.session_id = ?
-      ORDER BY FIELD(p.role, 'sharer', 'viewer'), p.joined_at ASC`,
+      ORDER BY CASE WHEN p.role = 'sharer' THEN 0 ELSE 1 END, p.joined_at ASC`,
     [session.id]
   );
 
@@ -280,11 +278,10 @@ const getHistory = async (teamId) => {
 
 const getActiveSession = async (teamId) => {
   const [[session]] = await db.execute(
-    `SELECT id
+    `SELECT TOP 1 id
      FROM team_review_sessions
      WHERE team_id = ? AND status IN ('active', 'awaiting_review')
-     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, started_at DESC
-     LIMIT 1`,
+     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, started_at DESC`,
     [teamId]
   );
 
@@ -432,11 +429,10 @@ router.post('/:teamId/review-sessions', authenticate, async (req, res) => {
     }
 
     const [[existing]] = await db.execute(
-      `SELECT id
+      `SELECT TOP 1 id
        FROM team_review_sessions
        WHERE team_id = ? AND status = 'active'
-       ORDER BY started_at DESC
-       LIMIT 1`,
+       ORDER BY started_at DESC`,
       [teamId]
     );
 
@@ -455,9 +451,16 @@ router.post('/:teamId/review-sessions', authenticate, async (req, res) => {
     );
 
     await db.execute(
-      `INSERT INTO team_review_session_participants (session_id, user_id, role)
-       VALUES (?, ?, 'sharer')
-       ON DUPLICATE KEY UPDATE left_at = NULL`,
+      `MERGE team_review_session_participants AS target
+       USING (SELECT ? AS session_id, ? AS user_id, 'sharer' AS role) AS source
+       ON target.session_id = source.session_id
+         AND target.user_id = source.user_id
+         AND target.role = source.role
+       WHEN MATCHED THEN
+         UPDATE SET left_at = NULL
+       WHEN NOT MATCHED THEN
+         INSERT (session_id, user_id, role)
+         VALUES (source.session_id, source.user_id, source.role);`,
       [result.insertId, req.userId]
     );
 
@@ -486,9 +489,16 @@ router.post('/review-sessions/:sessionId/join', authenticate, async (req, res) =
 
     if (session.sharer_id !== req.userId) {
       await db.execute(
-        `INSERT INTO team_review_session_participants (session_id, user_id, role)
-         VALUES (?, ?, 'viewer')
-         ON DUPLICATE KEY UPDATE left_at = NULL`,
+        `MERGE team_review_session_participants AS target
+         USING (SELECT ? AS session_id, ? AS user_id, 'viewer' AS role) AS source
+         ON target.session_id = source.session_id
+           AND target.user_id = source.user_id
+           AND target.role = source.role
+         WHEN MATCHED THEN
+           UPDATE SET left_at = NULL
+         WHEN NOT MATCHED THEN
+           INSERT (session_id, user_id, role)
+           VALUES (source.session_id, source.user_id, source.role);`,
         [sessionId, req.userId]
       );
 
@@ -660,7 +670,8 @@ router.post('/:teamId', authenticate, async (req, res) => {
 
     await db.execute(
       `UPDATE team_discussion_threads
-       SET last_message_at = CURRENT_TIMESTAMP
+       SET last_message_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [thread.id]
     );

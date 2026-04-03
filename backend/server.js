@@ -50,11 +50,11 @@ cron.schedule('0 * * * *', async () => {
     const [overdue] = await db.execute(
       `SELECT t.id, t.title, t.team_id, t.assigned_to
        FROM tasks t
-       WHERE t.due_date < CURDATE() AND t.status != 'DONE' AND t.is_deleted = FALSE
+       WHERE t.due_date < CAST(GETDATE() AS DATE) AND t.status != 'DONE' AND t.is_deleted = FALSE
          AND NOT EXISTS (
            SELECT 1 FROM audit_logs al
            WHERE al.task_id = t.id AND al.activity = 'Overdue Alert'
-             AND al.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+             AND al.created_at > DATEADD(HOUR, -24, GETDATE())
          )`
     );
     for (const task of overdue) {

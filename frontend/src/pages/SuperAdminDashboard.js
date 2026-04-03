@@ -9,6 +9,10 @@ const sa = () =>
     headers: { Authorization: `Bearer ${localStorage.getItem('sa_token')}` },
   });
 
+const snapshotFields = ['Company Name', 'Industry', 'Company Size', 'Headquarters', 'Website'];
+const contactFields = ['Primary Contact', 'Alternate Contact Number', 'Support Email', 'Billing Contact'];
+const operationsFields = ['Work Mode', 'Timezone', 'Active Shifts', 'Onboarding Goal', 'Integration Needs', 'Additional Notes'];
+
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const saUser = JSON.parse(localStorage.getItem('sa_user') || '{}');
@@ -23,14 +27,11 @@ const SuperAdminDashboard = () => {
     max_staff_per_company: 50,
   });
   const [rejectReason, setRejectReason] = useState('');
-
   const [logs, setLogs] = useState([]);
   const [logActor, setLogActor] = useState('');
-
   const [subUsers, setSubUsers] = useState([]);
   const [newSubEmail, setNewSubEmail] = useState('');
   const [newSubName, setNewSubName] = useState('');
-
   const [leftFilter, setLeftFilter] = useState('pending');
   const [rightTab, setRightTab] = useState('detail');
 
@@ -38,16 +39,22 @@ const SuperAdminDashboard = () => {
     try {
       const response = await sa().get('/dashboard');
       const payload = response.data || {};
+      const admins = Array.isArray(payload.admins) ? payload.admins : [];
       setData({
-        admins: Array.isArray(payload.admins) ? payload.admins : [],
+        admins,
         pending_count: payload.pending_count || 0,
         total_orgs: payload.total_orgs || 0,
         total_users: payload.total_users || 0,
       });
+
+      if (!selectedAdminId && admins.length > 0) {
+        const preferred = admins.find((item) => item.status === 'pending') || admins[0];
+        if (preferred?.id) fetchDetail(preferred.id);
+      }
     } catch (error) {
-      if (error.response?.status === 401) navigate('/sa-login');
+      if (error.response?.status === 401) navigate('/login?mode=system-admin');
     }
-  }, [navigate]);
+  }, [navigate, selectedAdminId]);
 
   const fetchLogs = useCallback(async (actor = '') => {
     try {
@@ -133,7 +140,7 @@ const SuperAdminDashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem('sa_token');
     localStorage.removeItem('sa_user');
-    navigate('/sa-login');
+    navigate('/login?mode=system-admin');
   };
 
   const filteredAdmins = useMemo(
@@ -147,67 +154,98 @@ const SuperAdminDashboard = () => {
 
   const activeSubUsers = subUsers.filter((user) => user.is_active);
 
+  const companyProfile = useMemo(() => parseCompanyProfile(detail?.company_description), [detail?.company_description]);
+
+  const detailStats = useMemo(() => {
+    const organizations = detail?.organizations || [];
+    return {
+      organizations: organizations.length,
+      managers: organizations.reduce((sum, item) => sum + Number(item.manager_count || 0), 0),
+      staff: organizations.reduce((sum, item) => sum + Number(item.staff_count || 0), 0),
+    };
+  }, [detail]);
+
+  const headerCompanyName = companyProfile.values['Company Name'] || detail?.name || 'Company Admin';
+
   return (
     <div className="sa-page">
       <aside className="sa-sidebar">
-        <div className="sa-brand">
-          <div className="sa-brand-mark">SA</div>
-          <div>
-            <p>Control Console</p>
-            <h2>Super Admin</h2>
+        <div className="sa-sidebar-top">
+          <div className="sa-brand">
+            <div className="sa-brand-mark">SA</div>
+            <div>
+              <p>Control Console</p>
+              <h2>Super Admin</h2>
+            </div>
+          </div>
+
+          <div className="sa-profile">
+            <div className="sa-profile-avatar">{initials(saUser.name)}</div>
+            <div>
+              <strong>{saUser.name || 'Super Admin'}</strong>
+              <span>{saUser.email || '-'}</span>
+              {isMaster && <b>Master Access</b>}
+            </div>
+          </div>
+
+          <div className="sa-side-metrics">
+            <article>
+              <span>Company Admins</span>
+              <strong>{data.admins.length}</strong>
+            </article>
+            <article>
+              <span>Pending Queue</span>
+              <strong>{data.pending_count}</strong>
+            </article>
           </div>
         </div>
 
-        <div className="sa-profile">
-          <div className="sa-profile-avatar">{initials(saUser.name)}</div>
-          <div>
-            <strong>{saUser.name || 'Super Admin'}</strong>
-            <span>{saUser.email || '-'}</span>
-            {isMaster && <b>Master Access</b>}
+        <div className="sa-side-section">
+          <div className="sa-section-head">
+            <div>
+              <p>Approval Queue</p>
+              <small>Pick a company admin to review</small>
+            </div>
+            <span>{filteredAdmins.length}</span>
           </div>
-        </div>
 
-        <div className="sa-side-metrics">
-          <div>
-            <p>Company Admins</p>
-            <h3>{data.admins.length}</h3>
-          </div>
-          <div>
-            <p>Pending Approvals</p>
-            <h3>{data.pending_count}</h3>
-          </div>
-        </div>
-
-        <div className="sa-filter-tabs">
-          <button type="button" className={leftFilter === 'pending' ? 'is-active' : ''} onClick={() => setLeftFilter('pending')}>
-            Pending
-          </button>
-          <button type="button" className={leftFilter === 'approved' ? 'is-active' : ''} onClick={() => setLeftFilter('approved')}>
-            Approved
-          </button>
-          <button type="button" className={leftFilter === 'all' ? 'is-active' : ''} onClick={() => setLeftFilter('all')}>
-            All
-          </button>
-        </div>
-
-        <div className="sa-admin-list">
-          {filteredAdmins.map((admin) => (
-            <button
-              key={admin.id}
-              type="button"
-              className={`sa-admin-item ${selectedAdminId === admin.id ? 'is-selected' : ''}`}
-              onClick={() => fetchDetail(admin.id)}
-            >
-              <span className="sa-admin-avatar">{initials(admin.name)}</span>
-              <div>
-                <strong>{admin.name}</strong>
-                <small>{admin.email}</small>
-              </div>
-              <em className={`sa-status ${admin.status}`}>{admin.status}</em>
+          <div className="sa-filter-tabs">
+            <button type="button" className={leftFilter === 'pending' ? 'is-active' : ''} onClick={() => setLeftFilter('pending')}>
+              Pending
             </button>
-          ))}
+            <button type="button" className={leftFilter === 'approved' ? 'is-active' : ''} onClick={() => setLeftFilter('approved')}>
+              Approved
+            </button>
+            <button type="button" className={leftFilter === 'all' ? 'is-active' : ''} onClick={() => setLeftFilter('all')}>
+              All
+            </button>
+          </div>
 
-          {filteredAdmins.length === 0 && <p className="sa-empty">No records</p>}
+          <div className="sa-admin-list">
+            {filteredAdmins.map((admin) => (
+              <button
+                key={admin.id}
+                type="button"
+                className={`sa-admin-item ${selectedAdminId === admin.id ? 'is-selected' : ''}`}
+                onClick={() => fetchDetail(admin.id)}
+              >
+                <div className="sa-admin-item-top">
+                  <span className="sa-admin-avatar">{initials(admin.name)}</span>
+                  <div>
+                    <strong>{admin.name}</strong>
+                    <small>{admin.email}</small>
+                  </div>
+                  <em className={`sa-status ${admin.status}`}>{admin.status}</em>
+                </div>
+                <div className="sa-admin-item-meta">
+                  <span>{admin.org_count || 0} orgs</span>
+                  <span>{admin.total_users || 0} users</span>
+                </div>
+              </button>
+            ))}
+
+            {filteredAdmins.length === 0 && <p className="sa-empty">No records</p>}
+          </div>
         </div>
 
         <button type="button" className="sa-logout-btn" onClick={handleLogout}>
@@ -218,6 +256,10 @@ const SuperAdminDashboard = () => {
       <main className="sa-main">
         <section className="sa-top-cards">
           <article>
+            <p>Total Company Admins</p>
+            <h3>{data.admins.length || 0}</h3>
+          </article>
+          <article>
             <p>Total Organizations</p>
             <h3>{data.total_orgs || 0}</h3>
           </article>
@@ -226,13 +268,17 @@ const SuperAdminDashboard = () => {
             <h3>{data.total_users || 0}</h3>
           </article>
           <article>
-            <p>Pending Companies</p>
+            <p>Pending Approvals</p>
             <h3>{data.pending_count || 0}</h3>
           </article>
         </section>
 
         <section className="sa-content-card">
           <div className="sa-content-head">
+            <div>
+              <p className="sa-kicker">Super Admin Workspace</p>
+              <h1>Approvals, limits, and audit visibility</h1>
+            </div>
             <div className="sa-tab-row">
               <button type="button" className={rightTab === 'detail' ? 'is-active' : ''} onClick={() => setRightTab('detail')}>
                 Company Detail
@@ -251,44 +297,50 @@ const SuperAdminDashboard = () => {
           {rightTab === 'detail' && !detail && (
             <div className="sa-placeholder">
               <h3>Select a company admin</h3>
-              <p>Choose an entry from the left list to review details and approval controls.</p>
+              <p>Choose an entry from the left queue to review registration details, limits, and approval controls.</p>
             </div>
           )}
 
           {rightTab === 'detail' && detail && (
             <div className="sa-scroll-area">
-              <section className="sa-detail-head">
+              <section className="sa-detail-hero">
                 <div>
+                  <p className="sa-detail-kicker">{headerCompanyName}</p>
                   <h2>{detail.name}</h2>
                   <p>{detail.email}</p>
                 </div>
                 <span className={`sa-status ${detail.status}`}>{String(detail.status).toUpperCase()}</span>
               </section>
 
-              <section className="sa-detail-grid">
-                <article className="sa-block">
-                  <h4>Registration Info</h4>
-                  <div className="sa-info-list">
-                    <div>
-                      <span>Description</span>
-                      <b>{detail.company_description || '-'}</b>
-                    </div>
-                    <div>
-                      <span>Expected Companies</span>
-                      <b>{detail.expected_companies || '-'}</b>
-                    </div>
-                    <div>
-                      <span>Expected Managers</span>
-                      <b>{detail.expected_managers || '-'}</b>
-                    </div>
-                    <div>
-                      <span>Expected Staff</span>
-                      <b>{detail.expected_staff || '-'}</b>
-                    </div>
-                    <div>
-                      <span>Registered On</span>
-                      <b>{dateLabel(detail.created_at)}</b>
-                    </div>
+              <section className="sa-highlight-grid">
+                <article className="sa-highlight">
+                  <span>Organizations</span>
+                  <strong>{detailStats.organizations}</strong>
+                  <small>Registered workspaces</small>
+                </article>
+                <article className="sa-highlight">
+                  <span>Managers</span>
+                  <strong>{detailStats.managers}</strong>
+                  <small>Across linked organizations</small>
+                </article>
+                <article className="sa-highlight">
+                  <span>Staff</span>
+                  <strong>{detailStats.staff}</strong>
+                  <small>Active employee seats</small>
+                </article>
+              </section>
+
+              <section className="sa-info-rail">
+                <article className="sa-block sa-block--summary">
+                  <h4>Business Summary</h4>
+                  <p className="sa-rich-text">{companyProfile.summary || 'No primary description provided.'}</p>
+                  <div className="sa-meta-grid">
+                    {snapshotFields.slice(0, 4).map((label) => (
+                      <div key={label} className="sa-meta-item">
+                        <span>{label}</span>
+                        <strong>{companyProfile.values[label] || '-'}</strong>
+                      </div>
+                    ))}
                   </div>
                 </article>
 
@@ -335,6 +387,30 @@ const SuperAdminDashboard = () => {
                       Save Limit Updates
                     </button>
                   )}
+                </article>
+              </section>
+
+              <section className="sa-section-grid">
+                <article className="sa-block">
+                  <h4>Company Snapshot</h4>
+                  <div className="sa-data-list">
+                    {snapshotFields.map((label) => (
+                      <InfoRow key={label} label={label} value={companyProfile.values[label]} />
+                    ))}
+                    <InfoRow label="Registered On" value={dateLabel(detail.created_at)} />
+                  </div>
+                </article>
+
+                <article className="sa-block">
+                  <h4>Contacts and Operations</h4>
+                  <div className="sa-data-list">
+                    {contactFields.map((label) => (
+                      <InfoRow key={label} label={label} value={companyProfile.values[label]} />
+                    ))}
+                    {operationsFields.map((label) => (
+                      <InfoRow key={label} label={label} value={companyProfile.values[label]} />
+                    ))}
+                  </div>
                 </article>
               </section>
 
@@ -397,7 +473,10 @@ const SuperAdminDashboard = () => {
           {rightTab === 'logs' && (
             <div className="sa-scroll-area">
               <section className="sa-logs-head">
-                <h2>Super Admin Activity Logs</h2>
+                <div>
+                  <h2>Super Admin Activity Logs</h2>
+                  <p>Platform-level actions and approval history.</p>
+                </div>
                 <select
                   value={logActor}
                   onChange={(event) => {
@@ -513,6 +592,46 @@ const SuperAdminDashboard = () => {
       </main>
     </div>
   );
+};
+
+const InfoRow = ({ label, value }) => (
+  <div className="sa-data-row">
+    <span>{label}</span>
+    <strong>{renderInfoValue(label, value)}</strong>
+  </div>
+);
+
+const renderInfoValue = (label, value) => {
+  const safeValue = value && String(value).trim() ? String(value).trim() : '-';
+  if (label === 'Website' && safeValue !== '-' && /^https?:\/\//i.test(safeValue)) {
+    return (
+      <a href={safeValue} target="_blank" rel="noreferrer">
+        {safeValue}
+      </a>
+    );
+  }
+  return safeValue;
+};
+
+const parseCompanyProfile = (description) => {
+  const values = {};
+  let summary = '';
+  const lines = String(description || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  lines.forEach((line) => {
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) return;
+    const label = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    if (!label) return;
+    values[label] = value || '-';
+    if (label.toLowerCase() === 'primary description') summary = value || '-';
+  });
+
+  return { summary, values };
 };
 
 const initials = (name) => {

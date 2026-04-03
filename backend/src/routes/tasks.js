@@ -553,7 +553,7 @@ router.patch('/:id/pick', authenticate, async (req, res) => {
     if (task.length === 0) return res.status(404).json({ error: 'Bug not found' });
     const [user] = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
     await db.execute(
-      'UPDATE tasks SET picked_by = ?, picked_at = NOW(), assigned_to = ?, status = ? WHERE id = ?',
+      'UPDATE tasks SET picked_by = ?, picked_at = NOW(), assigned_to = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [req.userId, req.userId, 'IN_PROGRESS', req.params.id]
     );
     // Notify reporter
@@ -579,7 +579,7 @@ router.patch('/:id/resolve', authenticate, async (req, res) => {
     if (task.length === 0) return res.status(404).json({ error: 'Bug not found' });
     const [user] = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
     await db.execute(
-      'UPDATE tasks SET status = ?, resolved_at = NOW() WHERE id = ?',
+      'UPDATE tasks SET status = ?, resolved_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       ['DONE', req.params.id]
     );
     if (task[0].reported_by) {
@@ -703,7 +703,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const [result] = await db.execute(
       `UPDATE tasks
-       SET title=?, description=?, status=?, priority=?, priority_locked=?, assigned_to=?, task_type=?, product=?, category=?, start_date=?, assigned_date=?, due_date=?, reference_image=?, version=version+1
+       SET title=?, description=?, status=?, priority=?, priority_locked=?, assigned_to=?, task_type=?, product=?, category=?, start_date=?, assigned_date=?, due_date=?, reference_image=?, version=version+1, updated_at=CURRENT_TIMESTAMP
        WHERE id=? AND is_deleted=FALSE`,
       [
         nextTitle,
@@ -864,7 +864,7 @@ router.patch('/:id/reassign', authenticate, async (req, res) => {
     const [toUser]   = await db.execute('SELECT name FROM users WHERE id = ?', [assign_to]);
 
     await db.execute(
-      'UPDATE tasks SET assigned_to = ?, assigned_by = ?, version = version + 1 WHERE id = ?',
+      'UPDATE tasks SET assigned_to = ?, assigned_by = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [assign_to, req.userId, req.params.id]
     );
 
@@ -894,7 +894,7 @@ router.patch('/:id/priority-lock', authenticate, async (req, res) => {
     if (task.length === 0) return res.status(403).json({ error: 'Not your task', code: 'FORBIDDEN' });
 
     const newLock = !task[0].priority_locked;
-    await db.execute('UPDATE tasks SET priority_locked = ? WHERE id = ?', [newLock, req.params.id]);
+    await db.execute('UPDATE tasks SET priority_locked = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newLock, req.params.id]);
     await logActivity(req.userId, task[0].team_id, req.params.id, 'Priority Lock',
       task[0].title, `Priority lock ${newLock ? 'activated' : 'deactivated'}`, 'User (Local)');
     res.json({ priority_locked: newLock });
@@ -913,7 +913,7 @@ router.delete('/:id', authenticate, async (req, res) => {
 
     const teamId = task[0].team_id;
     await db.execute(
-      'UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [req.params.id]
+      'UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.id]
     );
     if (teamId) ws.broadcast(teamId, 'task_deleted', { id: req.params.id });
     res.json({ message: 'Task deleted' });

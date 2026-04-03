@@ -11,7 +11,7 @@ import AdminPanel from './pages/AdminPanel';
 import Reports from './pages/Reports';
 import RegisterCompany from './pages/RegisterCompany';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import SuperAdminLogin from './pages/SuperAdminLogin';
+import ForgotPassword from './pages/ForgotPassword';
 import Layout from './components/Layout';
 
 const PrivateRoute = ({ children }) => {
@@ -19,14 +19,20 @@ const PrivateRoute = ({ children }) => {
   return token ? children : <Navigate to="/login" />;
 };
 
+const SuperAdminRoute = ({ children }) => {
+  const token = localStorage.getItem('sa_token');
+  return token ? children : <Navigate to="/login?mode=system-admin" replace />;
+};
+
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/register-company" element={<RegisterCompany />} />
-        <Route path="/sa-login" element={<SuperAdminLogin />} />
-        <Route path="/sa-dashboard" element={<SuperAdminDashboard />} />
+        <Route path="/sa-login" element={<Navigate to="/login?mode=system-admin" replace />} />
+        <Route path="/sa-dashboard" element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />

@@ -20,7 +20,9 @@ router.post('/register', async (req, res) => {
     );
     res.status(201).json({ message: 'Registration submitted. Awaiting approval.', id: result.insertId });
   } catch (e) {
-    if (e.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Email already registered' });
+    if (e.code === 'ER_DUP_ENTRY' || e.number === 2627 || e.number === 2601) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
     res.status(400).json({ error: e.message });
   }
 });

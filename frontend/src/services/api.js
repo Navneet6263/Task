@@ -13,6 +13,7 @@ api.interceptors.request.use((config) => {
 export const auth = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
   companyLogin: (data) => api.post('/company-auth/login', data),
 };
 

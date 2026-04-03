@@ -32,9 +32,9 @@ const clearState = (chatId) => { delete chatState[chatId]; };
 // ─── Session helpers ───
 const getSession = async (chatId) => {
   const [rows] = await db.execute(
-    `SELECT ts.*, u.name, u.email FROM telegram_sessions ts
+    `SELECT TOP 1 ts.*, u.name, u.email FROM telegram_sessions ts
      JOIN users u ON u.id = ts.user_id
-     WHERE ts.chat_id = ? AND ts.is_active = TRUE LIMIT 1`,
+     WHERE ts.chat_id = ? AND ts.is_active = TRUE`,
     [chatId]
   );
   return rows[0] || null;
@@ -42,16 +42,26 @@ const getSession = async (chatId) => {
 
 const createSession = async (chatId, user) => {
   await db.execute(
-    `INSERT INTO telegram_sessions (chat_id, user_id, employee_id, role, org_id)
-     VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), employee_id=VALUES(employee_id),
-       role=VALUES(role), org_id=VALUES(org_id), is_active=TRUE`,
+    `MERGE telegram_sessions AS target
+     USING (SELECT ? AS chat_id, ? AS user_id, ? AS employee_id, ? AS role, ? AS org_id) AS source
+     ON target.chat_id = source.chat_id
+     WHEN MATCHED THEN
+       UPDATE SET
+         user_id = source.user_id,
+         employee_id = source.employee_id,
+         role = source.role,
+         org_id = source.org_id,
+         is_active = 1,
+         updated_at = CURRENT_TIMESTAMP
+     WHEN NOT MATCHED THEN
+       INSERT (chat_id, user_id, employee_id, role, org_id, is_active)
+       VALUES (source.chat_id, source.user_id, source.employee_id, source.role, source.org_id, 1);`,
     [chatId, user.id, user.employee_id, user.role, user.org_id || null]
   );
 };
 
 const destroySession = async (chatId) => {
-  await db.execute('UPDATE telegram_sessions SET is_active = FALSE WHERE chat_id = ?', [chatId]);
+  await db.execute('UPDATE telegram_sessions SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE chat_id = ?', [chatId]);
 };
 
 // ─── Task helpers ───
@@ -80,7 +90,7 @@ const handleStart = async (chatId) => {
 
 const handleEmployeeLogin = async (chatId, employeeId) => {
   const [users] = await db.execute(
-    'SELECT id, name, email, role, employee_id, org_id FROM users WHERE employee_id = ? AND is_deleted = FALSE LIMIT 1',
+    'SELECT TOP 1 id, name, email, role, employee_id, org_id FROM users WHERE employee_id = ? AND is_deleted = FALSE',
     [employeeId.trim().toUpperCase()]
   );
 
@@ -102,7 +112,13 @@ const handleMyTasks = async (chatId, session) => {
   const [tasks] = await db.execute(
     `SELECT t.id, t.title, t.status, t.priority, t.due_date
      FROM tasks t WHERE t.assigned_to = ? AND t.is_deleted = FALSE
-     ORDER BY FIELD(t.status,'IN_PROGRESS','TODO','PENDING','DONE'), t.due_date ASC LIMIT 15`,
+     ORDER BY CASE t.status
+       WHEN 'IN_PROGRESS' THEN 0
+       WHEN 'TODO' THEN 1
+       WHEN 'PENDING' THEN 2
+       WHEN 'DONE' THEN 3
+       ELSE 4
+     END, t.due_date ASC LIMIT 15`,
     [session.user_id]
   );
 
@@ -272,7 +288,7 @@ const handleCreateConfirm = async (chatId, session) => {
   try {
     const [result] = await db.execute(
       `INSERT INTO tasks (title, description, priority, status, issue_type, task_type, product, category, assigned_to, assigned_by, team_id, org_id, assigned_date, start_date, due_date, reference_image, reported_by)
-       VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), CURDATE(), ?, ?, ?)`,
+       VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, ?, ?, ?, ?, CAST(GETDATE() AS DATE), CAST(GETDATE() AS DATE), ?, ?, ?)`,
       [s.title, s.description || null, s.priority || 'MEDIUM', issueType, s.task_type || null, s.product || null, s.category || null, assignee, session.user_id, s.team_id, session.org_id, s.due_date || null, s.reference_image || null, reportedBy]
     );
     clearState(chatId);
@@ -495,7 +511,7 @@ const handleCallback = async (query) => {
     if (!state || state.step !== 'update_pick_status') return;
     const newStatus = data.replace('st_', '');
     try {
-      await db.execute('UPDATE tasks SET status = ?, version = version + 1 WHERE id = ? AND is_deleted = FALSE', [newStatus, state.task_id]);
+      await db.execute('UPDATE tasks SET status = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = FALSE', [newStatus, state.task_id]);
       clearState(chatId);
       bot.sendMessage(chatId, `✅ Task status updated to *${escMd(newStatus)}*`, { parse_mode: 'Markdown', ...getMenu(session.role) });
     } catch (e) {
@@ -525,7 +541,7 @@ const handleCallback = async (query) => {
     const decision = data === 'rv_approve' ? 'approved' : 'rejected';
     try {
       await db.execute(
-        `UPDATE team_review_sessions SET status = ?, decision = ?, decision_by = ?, decision_at = NOW()
+        `UPDATE team_review_sessions SET status = ?, decision = ?, decision_by = ?, decision_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status = 'awaiting_review'`,
         [decision, decision, session.user_id, state.review_session_id]
       );

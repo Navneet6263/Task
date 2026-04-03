@@ -170,4 +170,59 @@ router.post('/login', async (req, res) => {
   }
 });
 
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const nextPassword = String(password || '');
+
+    if (!normalizedEmail || !nextPassword) {
+      return res.status(422).json({ error: 'Email and new password are required' });
+    }
+
+    if (nextPassword.length < 4) {
+      return res.status(422).json({ error: 'Password must be at least 4 characters' });
+    }
+
+    const hashed = await bcrypt.hash(nextPassword, 10);
+    let updated = false;
+
+    const [companyAdmins] = await db.execute(
+      'SELECT id FROM company_admins WHERE LOWER(email) = ?',
+      [normalizedEmail]
+    );
+    if (companyAdmins.length > 0) {
+      await db.execute(
+        'UPDATE company_admins SET password = ? WHERE LOWER(email) = ?',
+        [hashed, normalizedEmail]
+      );
+      await db.execute(
+        'UPDATE users SET password = ? WHERE LOWER(email) = ?',
+        [hashed, normalizedEmail]
+      );
+      updated = true;
+    } else {
+      const [users] = await db.execute(
+        'SELECT id FROM users WHERE LOWER(email) = ? AND is_deleted = FALSE',
+        [normalizedEmail]
+      );
+      if (users.length > 0) {
+        await db.execute(
+          'UPDATE users SET password = ? WHERE LOWER(email) = ? AND is_deleted = FALSE',
+          [hashed, normalizedEmail]
+        );
+        updated = true;
+      }
+    }
+
+    if (!updated) {
+      return res.status(404).json({ error: 'No account found for this email' });
+    }
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 module.exports = router;
