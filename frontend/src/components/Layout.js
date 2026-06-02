@@ -114,26 +114,98 @@ const Layout = () => {
   }, [user?.name]);
 
   const isAdmin = resolvedRole === 'admin' || resolvedRole === 'company_admin';
-  const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: <GridIcon /> },
-    { path: '/my-tasks', label: 'My Tasks', icon: <ListIcon /> },
-    { path: '/team', label: 'Team Management', icon: <TeamIcon /> },
-    { path: '/reports', label: 'Reports', icon: <ReportsIcon /> },
-    { path: '/settings', label: 'Settings', icon: <SettingsIcon /> },
-    { path: '/audit-logs', label: 'Audit Logs', icon: <LogsIcon /> },
-    { path: '/pms-hub', label: 'My PMS Hub', icon: <PmsIcon /> },
-    ...(isAdmin ? [{ path: '/admin', label: 'Admin Panel', icon: <AdminIcon /> }] : []),
-  ];
+  const navItems = useMemo(
+    () => [
+      {
+        path: '/dashboard',
+        label: 'Dashboard',
+        note: 'Workspace pulse and quick actions',
+        section: 'Main',
+        icon: <GridIcon />,
+      },
+      {
+        path: '/my-tasks',
+        label: 'My Tasks',
+        note: 'Assigned work and due dates',
+        section: 'Main',
+        icon: <ListIcon />,
+      },
+      {
+        path: '/team',
+        label: 'Team Management',
+        note: 'Members, ownership, and structure',
+        section: 'Main',
+        icon: <TeamIcon />,
+      },
+      {
+        path: '/reports',
+        label: 'Reports',
+        note: 'Velocity, workload, and delivery risk',
+        section: 'Main',
+        icon: <ReportsIcon />,
+      },
+      {
+        path: '/settings',
+        label: 'Settings',
+        note: 'Profile, security, and task options',
+        section: 'Control',
+        icon: <SettingsIcon />,
+      },
+      {
+        path: '/audit-logs',
+        label: 'Audit Logs',
+        note: 'Review activity and changes',
+        section: 'Control',
+        icon: <LogsIcon />,
+      },
+      {
+        path: '/pms-hub',
+        label: 'My PMS Hub',
+        note: 'Personal workspace overview',
+        section: 'Control',
+        icon: <PmsIcon />,
+      },
+      ...(isAdmin
+        ? [
+            {
+              path: '/admin',
+              label: 'Admin Panel',
+              note: 'Organization level controls',
+              section: 'Control',
+              icon: <AdminIcon />,
+            },
+          ]
+        : []),
+    ],
+    [isAdmin]
+  );
 
   const formattedDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
   });
+  const navGroups = useMemo(() => {
+    const groups = [];
+    navItems.forEach((item) => {
+      const existingGroup = groups.find((group) => group.label === item.section);
+      if (existingGroup) {
+        existingGroup.items.push(item);
+      } else {
+        groups.push({ label: item.section, items: [item] });
+      }
+    });
+    return groups;
+  }, [navItems]);
 
   const closeTransientUi = () => {
     if (showNotif) setShowNotif(false);
     if (sidebarOpen) setSidebarOpen(false);
+  };
+
+  const handlePlanSprint = () => {
+    setSidebarOpen(false);
+    navigate('/reports?focus=sprint');
   };
 
   return (
@@ -146,43 +218,60 @@ const Layout = () => {
       />
 
       <aside className="shell-sidebar">
-        <div className="shell-brand">
-          <div className="shell-brand-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M3 3L10 10M10 10L17 3M10 10L10 20M10 10L3 17M10 10L17 17"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-              />
-            </svg>
+        <div className="shell-sidebar-body">
+          <div className="shell-brand">
+            <div className="shell-brand-mark">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M3 3L10 10M10 10L17 3M10 10L10 20M10 10L3 17M10 10L17 17"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <div>
+              <p className="shell-brand-sub">workspace</p>
+              <h2 className="shell-brand-title">NavTask</h2>
+            </div>
+            <span className="shell-brand-badge">Live</span>
           </div>
-          <div>
-            <p className="shell-brand-sub">workspace</p>
-            <h2 className="shell-brand-title">NavTask</h2>
-          </div>
+
+          {navGroups.map((group) => (
+            <div key={group.label} className="shell-nav-group">
+              <p className="shell-nav-group-label">{group.label}</p>
+              <nav className="shell-nav">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) => `shell-nav-item ${isActive ? 'is-active' : ''}`}
+                  >
+                    <span className="shell-nav-icon">{item.icon}</span>
+                    <span className="shell-nav-copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.note}</small>
+                    </span>
+                    <span className="shell-nav-arrow">
+                      <ChevronIcon />
+                    </span>
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          ))}
         </div>
 
-        <nav className="shell-nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) => `shell-nav-item ${isActive ? 'is-active' : ''}`}
-            >
-              <span className="shell-nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
         <div className="shell-upgrade-card">
+          <p className="shell-upgrade-kicker">Sprint Mode</p>
           <p className="shell-upgrade-title">Boost Team Flow</p>
           <p className="shell-upgrade-text">Track velocity, bottlenecks, and delivery confidence in one place.</p>
-          <button type="button" className="shell-upgrade-btn">
+          <button type="button" className="shell-upgrade-btn" onClick={handlePlanSprint}>
             Plan Sprint
+            <ChevronIcon />
           </button>
+          <span className="shell-upgrade-note">Opens the sprint planner spotlight inside Reports.</span>
         </div>
       </aside>
 
@@ -419,6 +508,12 @@ const BellIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
     <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+  </svg>
+);
+
+const ChevronIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="9 18 15 12 9 6" />
   </svg>
 );
 

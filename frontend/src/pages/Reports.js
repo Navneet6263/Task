@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { analytics, teams } from '../services/api';
 import './Reports.css';
 
 const Reports = () => {
+  const location = useLocation();
+  const sprintPlannerRef = useRef(null);
   const [teamList, setTeamList] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [energy, setEnergy] = useState([]);
@@ -11,6 +14,7 @@ const Reports = () => {
   const [allWorkload, setAllWorkload] = useState([]);
   const [perfMap, setPerfMap] = useState({});
   const [loading, setLoading] = useState(false);
+  const focusSprint = new URLSearchParams(location.search).get('focus') === 'sprint';
 
   useEffect(() => {
     teams
@@ -52,6 +56,101 @@ const Reports = () => {
     setLoading(false);
   };
 
+  const averageEnergy = useMemo(() => {
+    if (energy.length === 0) return 0;
+    return Math.round(energy.reduce((total, member) => total + Number(member.energy_score || 0), 0) / energy.length);
+  }, [energy]);
+
+  const performanceSummary = useMemo(() => {
+    const performanceList = allWorkload
+      .map((member) => perfMap[member.id])
+      .filter(Boolean);
+
+    if (performanceList.length === 0) {
+      return {
+        averagePerformance: 0,
+        onTimeRate: 0,
+      };
+    }
+
+    const averagePerformance = Math.round(
+      performanceList.reduce((total, item) => total + Number(item.performance_index || 0), 0) /
+        performanceList.length
+    );
+    const totalCompleted = performanceList.reduce((total, item) => total + Number(item.completed || 0), 0);
+    const totalOnTime = performanceList.reduce((total, item) => total + Number(item.on_time || 0), 0);
+
+    return {
+      averagePerformance,
+      onTimeRate: totalCompleted ? Math.round((totalOnTime / totalCompleted) * 100) : 0,
+    };
+  }, [allWorkload, perfMap]);
+
+  const bottleneckCount = useMemo(
+    () =>
+      (behavioral?.bottlenecks || []).reduce(
+        (total, member) => total + Number(member.stuck_tasks || 0),
+        0
+      ),
+    [behavioral]
+  );
+
+  const afterHoursCount = useMemo(
+    () =>
+      (behavioral?.after_hours || []).reduce(
+        (total, member) => total + Number(member.after_hours_count || 0),
+        0
+      ),
+    [behavioral]
+  );
+
+  const readyMembers = useMemo(
+    () => energy.filter((member) => Number(member.energy_score || 0) >= 50).length,
+    [energy]
+  );
+
+  const deliveryConfidence = useMemo(() => {
+    const rawScore =
+      averageEnergy * 0.45 +
+      performanceSummary.averagePerformance * 0.45 +
+      Math.min(readyMembers * 4, 20) -
+      Math.min(bottleneckCount * 7, 28) -
+      Math.min(afterHoursCount * 2, 12);
+
+    return Math.max(0, Math.min(100, Math.round(rawScore)));
+  }, [afterHoursCount, averageEnergy, bottleneckCount, performanceSummary.averagePerformance, readyMembers]);
+
+  const confidenceTone =
+    deliveryConfidence >= 75 ? 'good' : deliveryConfidence >= 50 ? 'steady' : 'risk';
+
+  const confidenceLabel =
+    deliveryConfidence >= 75 ? 'High confidence' : deliveryConfidence >= 50 ? 'Watch scope' : 'Needs cleanup';
+
+  const planningNote = useMemo(() => {
+    if (!selectedTeam) return 'Pick a team to start planning the next sprint.';
+
+    if (bottleneckCount > 0) {
+      return `${selectedTeam.name} has ${bottleneckCount} stuck item${
+        bottleneckCount > 1 ? 's' : ''
+      }. Clear blockers first, then commit the next sprint batch.`;
+    }
+
+    if (suggested) {
+      return `${suggested.name} currently has the best capacity for the next high priority item. Use the workload table below before locking ownership.`;
+    }
+
+    if (energy.length === 0) {
+      return `No live workload signal is available for ${selectedTeam.name} yet. Start with active assignments and this planner will become more accurate.`;
+    }
+
+    return `${selectedTeam.name} looks balanced for the next sprint. Keep delivery confidence above 70% and watch the on-time rate before adding more scope.`;
+  }, [bottleneckCount, energy.length, selectedTeam, suggested]);
+
+  useEffect(() => {
+    if (!focusSprint || loading || !selectedTeam || !sprintPlannerRef.current) return;
+    sprintPlannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [focusSprint, loading, selectedTeam]);
+
   return (
     <div className="reports-page">
       <header className="reports-head">
@@ -76,6 +175,59 @@ const Reports = () => {
 
       {!loading && selectedTeam && (
         <>
+          <section
+            ref={sprintPlannerRef}
+            className={`reports-card reports-sprint-card ${focusSprint ? 'is-spotlight' : ''}`}
+          >
+            <div className="reports-sprint-top">
+              <div className="reports-card-head reports-card-head--stack">
+                <div>
+                  <p className="reports-eyebrow">Sprint Planner</p>
+                  <h2>{selectedTeam.name} planning board</h2>
+                  <span>Read delivery confidence, bottlenecks, and team capacity before you commit the next sprint.</span>
+                </div>
+              </div>
+
+              <div className={`reports-confidence-chip ${confidenceTone}`}>
+                <strong>{deliveryConfidence}%</strong>
+                <span>{confidenceLabel}</span>
+              </div>
+            </div>
+
+            <div className="reports-sprint-grid">
+              <article className="reports-sprint-metric">
+                <span>Ready Capacity</span>
+                <strong>
+                  {readyMembers}/{energy.length || 0}
+                </strong>
+                <p>Members with moderate or better energy who can absorb new work safely.</p>
+              </article>
+
+              <article className="reports-sprint-metric">
+                <span>Bottlenecks</span>
+                <strong>{bottleneckCount}</strong>
+                <p>Tasks stuck in progress for more than three days and likely slowing delivery.</p>
+              </article>
+
+              <article className="reports-sprint-metric">
+                <span>Team Energy</span>
+                <strong>{averageEnergy}%</strong>
+                <p>Average capacity signal based on active priority load and overdue work.</p>
+              </article>
+
+              <article className="reports-sprint-metric">
+                <span>On-Time Rate</span>
+                <strong>{performanceSummary.onTimeRate}%</strong>
+                <p>How often the team is closing completed work before the due date.</p>
+              </article>
+            </div>
+
+            <div className="reports-sprint-note">
+              <strong>Suggested next move</strong>
+              <p>{planningNote}</p>
+            </div>
+          </section>
+
           <section className="reports-card">
             <div className="reports-card-head">
               <h2>Task Energy Score</h2>

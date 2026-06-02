@@ -12,6 +12,8 @@ import Reports from './pages/Reports';
 import RegisterCompany from './pages/RegisterCompany';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import ForgotPassword from './pages/ForgotPassword';
+import LiveReviewRoom from './pages/LiveReviewRoom';
+import TeamWorkspaceRoom from './pages/TeamWorkspaceRoom';
 import Layout from './components/Layout';
 
 const PrivateRoute = ({ children }) => {
@@ -31,6 +33,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/register-company" element={<RegisterCompany />} />
+        <Route path="/live-review" element={<PrivateRoute><LiveReviewRoom /></PrivateRoute>} />
+        <Route path="/team-workspace" element={<PrivateRoute><TeamWorkspaceRoom /></PrivateRoute>} />
         <Route path="/sa-login" element={<Navigate to="/login?mode=system-admin" replace />} />
         <Route path="/sa-dashboard" element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>

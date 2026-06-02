@@ -17,7 +17,7 @@ router.get('/suggest-assignee', authenticate, async (req, res) => {
         AVG(CASE WHEN t.status = 'DONE' THEN DATEDIFF(HOUR, t.created_at, t.updated_at) END) as avg_completion_hours
        FROM team_members tm
        JOIN users u ON tm.user_id = u.id
-       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ?
+       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ? AND t.is_deleted = FALSE
        WHERE tm.team_id = ? AND u.is_deleted = FALSE
        GROUP BY u.id, u.name`,
       [teamId, teamId]
@@ -65,7 +65,7 @@ router.get('/energy/:teamId', authenticate, async (req, res) => {
         COUNT(CASE WHEN t.due_date < CURRENT_TIMESTAMP AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as overdue
        FROM team_members tm
        JOIN users u ON tm.user_id = u.id
-       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ?
+       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ? AND t.is_deleted = FALSE
        WHERE tm.team_id = ? AND u.is_deleted = FALSE
        GROUP BY u.id, u.name`,
       [req.params.teamId, req.params.teamId]

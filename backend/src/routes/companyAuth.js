@@ -35,7 +35,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const normalizedEmail = normalizeEmail(email);
-    const [rows] = await db.execute('SELECT * FROM company_admins WHERE LOWER(email) = ?', [normalizedEmail]);
+    const [rows] = await db.execute('SELECT * FROM company_admins WHERE email = ?', [normalizedEmail]);
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const ca = rows[0];
     const valid = await bcrypt.compare(password, ca.password);

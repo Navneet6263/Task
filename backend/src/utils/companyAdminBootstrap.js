@@ -65,7 +65,7 @@ const ensureCompanyAdminBootstrap = async (db, companyAdminId) => {
 
   const primaryOrgId = orgs[0].id;
   const [users] = await db.execute(
-    'SELECT id, is_deleted, employee_id FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id ASC',
+    'SELECT id, is_deleted, employee_id FROM users WHERE email = ? ORDER BY id ASC',
     [companyAdmin.email]
   );
 

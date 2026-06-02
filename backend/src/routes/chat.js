@@ -46,59 +46,68 @@ const canReviewTeam = async (req, teamId) => {
   return Boolean(member?.is_reporting_manager);
 };
 
-const ensureDefaultThread = async (teamId, userId) => {
-  const [[existing]] = await db.execute(
-    `SELECT TOP 1 id, team_id, title, is_default, created_by, created_at, updated_at, last_message_at
-     FROM team_discussion_threads
-     WHERE team_id = ? AND is_default = TRUE
-     ORDER BY id ASC`,
-    [teamId]
-  );
+const normalizeThreadType = (value) => String(value || 'group').trim().toLowerCase() || 'group';
 
-  if (existing) return existing;
-
-  const [result] = await db.execute(
-    `INSERT INTO team_discussion_threads (team_id, title, created_by, is_default, last_message_at)
-     VALUES (?, 'General', ?, TRUE, CURRENT_TIMESTAMP)`,
-    [teamId, userId]
-  );
-
-  const [[created]] = await db.execute(
-    `SELECT id, team_id, title, is_default, created_by, created_at, updated_at, last_message_at
-     FROM team_discussion_threads
-     WHERE id = ?`,
-    [result.insertId]
-  );
-
-  return created;
+const resolveDirectPartnerId = (thread, userId) => {
+  if (normalizeThreadType(thread?.thread_type) !== 'direct') return null;
+  return Number(thread.direct_user_one) === Number(userId) ? thread.direct_user_two : thread.direct_user_one;
 };
 
-const resolveThread = async (teamId, threadId, userId) => {
-  if (!threadId) return ensureDefaultThread(teamId, userId);
+const enrichThreads = async (threads, userId) => {
+  if (!Array.isArray(threads) || threads.length === 0) return [];
 
-  const [[thread]] = await db.execute(
-    `SELECT id, team_id, title, is_default, created_by, created_at, updated_at, last_message_at
-     FROM team_discussion_threads
-     WHERE id = ? AND team_id = ?`,
-    [threadId, teamId]
-  );
+  const partnerIds = Array.from(new Set(
+    threads
+      .map((thread) => resolveDirectPartnerId(thread, userId))
+      .filter((value) => Number(value) > 0)
+  ));
 
-  return thread || null;
+  const partnerMap = new Map();
+  if (partnerIds.length > 0) {
+    const placeholders = partnerIds.map(() => '?').join(',');
+    const [partners] = await db.execute(
+      `SELECT id, name, email, avatar, role
+       FROM users
+       WHERE id IN (${placeholders})`,
+      partnerIds
+    );
+    partners.forEach((partner) => partnerMap.set(String(partner.id), partner));
+  }
+
+  return threads.map((thread) => {
+    const threadType = normalizeThreadType(thread.thread_type);
+    const partnerId = resolveDirectPartnerId(thread, userId);
+    const partner = partnerId ? partnerMap.get(String(partnerId)) || null : null;
+
+    return {
+      ...thread,
+      thread_type: threadType,
+      direct_partner_id: partnerId || null,
+      direct_partner_name: partner?.name || null,
+      direct_partner_email: partner?.email || null,
+      direct_partner_avatar: partner?.avatar || null,
+      direct_partner_role: partner?.role || null,
+      display_title: threadType === 'direct'
+        ? (partner?.name || thread.title || 'Direct conversation')
+        : thread.title,
+    };
+  });
 };
 
-const getThreads = async (teamId, userId) => {
-  await ensureDefaultThread(teamId, userId);
-
+const loadVisibleThreadRows = async (teamId, userId) => {
   const [threads] = await db.execute(
     `SELECT
         t.id,
         t.team_id,
         t.title,
-        t.is_default,
         t.created_by,
-        u.name AS created_by_name,
+        t.is_default,
         t.created_at,
         t.updated_at,
+        COALESCE(t.thread_type, 'group') AS thread_type,
+        t.direct_user_one,
+        t.direct_user_two,
+        u.name AS created_by_name,
         COALESCE(
           (
             SELECT MAX(m.created_at)
@@ -130,15 +139,147 @@ const getThreads = async (teamId, userId) => {
               OR (t.is_default = TRUE AND m.thread_id IS NULL)
             )
           ORDER BY m.created_at DESC
-        ) AS last_message
+        ) AS last_message,
+        (
+          SELECT COUNT(*)
+          FROM team_messages m
+          LEFT JOIN team_message_reads r ON r.message_id = m.id AND r.user_id = ?
+          WHERE m.team_id = t.team_id
+            AND (
+              m.thread_id = t.id
+              OR (t.is_default = TRUE AND m.thread_id IS NULL)
+            )
+            AND m.user_id != ?
+            AND r.id IS NULL
+        ) AS unread_count
       FROM team_discussion_threads t
       JOIN users u ON u.id = t.created_by
       WHERE t.team_id = ?
-      ORDER BY t.is_default DESC, last_message_at DESC, t.created_at DESC`,
-    [teamId]
+        AND (
+          COALESCE(t.thread_type, 'group') <> 'direct'
+          OR t.direct_user_one = ?
+          OR t.direct_user_two = ?
+        )
+      ORDER BY
+        CASE WHEN COALESCE(t.thread_type, 'group') = 'group' THEN 0 ELSE 1 END,
+        t.is_default DESC,
+        last_message_at DESC,
+        t.created_at DESC`,
+    [userId, userId, teamId, userId, userId]
   );
 
   return threads;
+};
+
+const getThreads = async (teamId, userId) => {
+  await ensureDefaultThread(teamId, userId);
+  const rows = await loadVisibleThreadRows(teamId, userId);
+  return enrichThreads(rows, userId);
+};
+
+const getThreadById = async (teamId, threadId, userId) => {
+  const [rows] = await db.execute(
+    `SELECT
+        t.id,
+        t.team_id,
+        t.title,
+        t.created_by,
+        t.is_default,
+        t.created_at,
+        t.updated_at,
+        COALESCE(t.thread_type, 'group') AS thread_type,
+        t.direct_user_one,
+        t.direct_user_two,
+        u.name AS created_by_name,
+        t.last_message_at,
+        0 AS message_count,
+        NULL AS last_message,
+        0 AS unread_count
+      FROM team_discussion_threads t
+      JOIN users u ON u.id = t.created_by
+      WHERE t.id = ?
+        AND t.team_id = ?
+        AND (
+          COALESCE(t.thread_type, 'group') <> 'direct'
+          OR t.direct_user_one = ?
+          OR t.direct_user_two = ?
+        )`,
+    [threadId, teamId, userId, userId]
+  );
+
+  if (rows.length === 0) return null;
+  const [thread] = await enrichThreads(rows, userId);
+  return thread || null;
+};
+
+const ensureDefaultThread = async (teamId, userId) => {
+  const [[existing]] = await db.execute(
+    `SELECT TOP 1 id
+     FROM team_discussion_threads
+     WHERE team_id = ? AND is_default = TRUE
+     ORDER BY id ASC`,
+    [teamId]
+  );
+
+  if (existing?.id) {
+    return getThreadById(teamId, existing.id, userId);
+  }
+
+  const [result] = await db.execute(
+    `INSERT INTO team_discussion_threads (team_id, title, created_by, is_default, last_message_at, thread_type)
+     VALUES (?, 'General', ?, TRUE, CURRENT_TIMESTAMP, 'group')`,
+    [teamId, userId]
+  );
+
+  return getThreadById(teamId, result.insertId, userId);
+};
+
+const resolveThread = async (teamId, threadId, userId) => {
+  if (!threadId) return ensureDefaultThread(teamId, userId);
+  return getThreadById(teamId, threadId, userId);
+};
+
+const createOrGetDirectThread = async (teamId, userId, targetUserId) => {
+  const targetId = Number(targetUserId);
+  if (!targetId || targetId === Number(userId)) {
+    throw new Error('Choose a different teammate');
+  }
+
+  const [[target]] = await db.execute(
+    `SELECT u.id, u.name, u.email, u.avatar, u.role
+     FROM team_members tm
+     JOIN users u ON u.id = tm.user_id
+     WHERE tm.team_id = ? AND tm.user_id = ? AND u.is_deleted = FALSE`,
+    [teamId, targetId]
+  );
+
+  if (!target) {
+    throw new Error('Selected teammate is not available in this team');
+  }
+
+  const [firstUserId, secondUserId] = [Number(userId), targetId].sort((a, b) => a - b);
+  const [[existing]] = await db.execute(
+    `SELECT TOP 1 id
+     FROM team_discussion_threads
+     WHERE team_id = ?
+       AND COALESCE(thread_type, 'group') = 'direct'
+       AND direct_user_one = ?
+       AND direct_user_two = ?`,
+    [teamId, firstUserId, secondUserId]
+  );
+
+  if (existing?.id) {
+    return getThreadById(teamId, existing.id, userId);
+  }
+
+  const [result] = await db.execute(
+    `INSERT INTO team_discussion_threads
+      (team_id, title, created_by, is_default, last_message_at, thread_type, direct_user_one, direct_user_two)
+     VALUES (?, ?, ?, FALSE, CURRENT_TIMESTAMP, 'direct', ?, ?)`,
+    [teamId, 'Direct conversation', userId, firstUserId, secondUserId]
+  );
+
+  return getThreadById(teamId, result.insertId, userId);
 };
 
 const getMessages = async (teamId, thread) => {
@@ -154,6 +295,7 @@ const getMessages = async (teamId, thread) => {
         m.message,
         m.created_at,
         m.reply_to,
+        COALESCE(t.thread_type, 'group') AS thread_type,
         u.id AS user_id,
         u.name AS user_name,
         rm.message AS reply_text,
@@ -162,6 +304,7 @@ const getMessages = async (teamId, thread) => {
       JOIN users u ON m.user_id = u.id
       LEFT JOIN team_messages rm ON m.reply_to = rm.id
       LEFT JOIN users ru ON rm.user_id = ru.id
+      LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
       WHERE m.team_id = ?
       ${whereClause}
       ORDER BY m.created_at ASC
@@ -313,9 +456,17 @@ router.get('/unread/counts', authenticate, async (req, res) => {
        FROM team_messages m
        JOIN team_members tm ON tm.team_id = m.team_id AND tm.user_id = ?
        LEFT JOIN team_message_reads r ON r.message_id = m.id AND r.user_id = ?
-       WHERE r.id IS NULL AND m.user_id != ?
+       LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
+       WHERE r.id IS NULL
+         AND m.user_id != ?
+         AND (
+           t.id IS NULL
+           OR COALESCE(t.thread_type, 'group') <> 'direct'
+           OR t.direct_user_one = ?
+           OR t.direct_user_two = ?
+         )
        GROUP BY m.team_id`,
-      [req.userId, req.userId, req.userId]
+      [req.userId, req.userId, req.userId, req.userId, req.userId]
     );
 
     const counts = {};
@@ -354,32 +505,36 @@ router.post('/:teamId/threads', authenticate, async (req, res) => {
     if (!title) return res.status(422).json({ error: 'Thread title required' });
 
     const [result] = await db.execute(
-      `INSERT INTO team_discussion_threads (team_id, title, created_by, is_default, last_message_at)
-       VALUES (?, ?, ?, FALSE, CURRENT_TIMESTAMP)`,
+      `INSERT INTO team_discussion_threads (team_id, title, created_by, is_default, last_message_at, thread_type)
+       VALUES (?, ?, ?, FALSE, CURRENT_TIMESTAMP, 'group')`,
       [teamId, title, req.userId]
     );
 
-    const [[thread]] = await db.execute(
-      `SELECT
-          t.id,
-          t.team_id,
-          t.title,
-          t.is_default,
-          t.created_by,
-          u.name AS created_by_name,
-          t.created_at,
-          t.updated_at,
-          t.last_message_at,
-          0 AS message_count,
-          NULL AS last_message
-       FROM team_discussion_threads t
-       JOIN users u ON u.id = t.created_by
-       WHERE t.id = ?`,
-      [result.insertId]
-    );
+    const thread = await getThreadById(teamId, result.insertId, req.userId);
+    const ws = req.app.get('ws');
+    if (ws && thread) ws.broadcast(teamId, 'thread_created', thread);
+
+    res.json(thread);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/:teamId/direct-thread', authenticate, async (req, res) => {
+  try {
+    const teamId = Number(req.params.teamId);
+    if (!(await canAccessTeam(req, teamId))) {
+      return res.status(403).json({ error: 'Team access denied' });
+    }
+
+    const thread = await createOrGetDirectThread(teamId, req.userId, req.body?.target_user_id);
+    if (!thread) return res.status(400).json({ error: 'Unable to create direct conversation' });
 
     const ws = req.app.get('ws');
-    if (ws) ws.broadcast(teamId, 'thread_created', thread);
+    if (ws) {
+      const recipients = Array.from(new Set([thread.direct_user_one, thread.direct_user_two].filter(Boolean)));
+      recipients.forEach((recipientId) => ws.sendToUser(recipientId, 'thread_created', thread));
+    }
 
     res.json(thread);
   } catch (error) {
@@ -651,6 +806,7 @@ router.post('/:teamId', authenticate, async (req, res) => {
     }
 
     const message = String(req.body?.message || '').trim();
+    const clientTempId = String(req.body?.client_temp_id || '').trim() || null;
     if (!message) return res.status(422).json({ error: 'Message required' });
 
     const thread = await resolveThread(teamId, Number(req.body?.thread_id || 0), req.userId);
@@ -684,6 +840,7 @@ router.post('/:teamId', authenticate, async (req, res) => {
           m.message,
           m.created_at,
           m.reply_to,
+          COALESCE(t.thread_type, 'group') AS thread_type,
           u.id AS user_id,
           u.name AS user_name,
           rm.message AS reply_text,
@@ -692,14 +849,21 @@ router.post('/:teamId', authenticate, async (req, res) => {
        JOIN users u ON m.user_id = u.id
        LEFT JOIN team_messages rm ON m.reply_to = rm.id
        LEFT JOIN users ru ON rm.user_id = ru.id
+       LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
        WHERE m.id = ?`,
       [result.insertId]
     );
 
+    const payload = clientTempId ? { ...newMessage, client_temp_id: clientTempId } : newMessage;
     const ws = req.app.get('ws');
-    if (ws) ws.broadcast(teamId, 'new_message', newMessage);
+    if (ws && normalizeThreadType(thread.thread_type) === 'direct') {
+      const recipients = Array.from(new Set([thread.direct_user_one, thread.direct_user_two].filter(Boolean)));
+      recipients.forEach((recipientId) => ws.sendToUser(recipientId, 'new_message', payload));
+    } else if (ws) {
+      ws.broadcast(teamId, 'new_message', payload);
+    }
 
-    res.json(newMessage);
+    res.json(payload);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -712,13 +876,41 @@ router.post('/:teamId/read', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Team access denied' });
     }
 
-    const [unread] = await db.execute(
-      `SELECT m.id
-       FROM team_messages m
-       LEFT JOIN team_message_reads r ON r.message_id = m.id AND r.user_id = ?
-       WHERE m.team_id = ? AND r.id IS NULL`,
-      [req.userId, teamId]
-    );
+    const requestedThreadId = Number(req.body?.thread_id || req.query?.thread_id || 0);
+    let unread = [];
+
+    if (requestedThreadId) {
+      const thread = await resolveThread(teamId, requestedThreadId, req.userId);
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const whereClause = thread.is_default
+        ? 'AND (m.thread_id = ? OR m.thread_id IS NULL)'
+        : 'AND m.thread_id = ?';
+
+      [unread] = await db.execute(
+        `SELECT m.id
+         FROM team_messages m
+         LEFT JOIN team_message_reads r ON r.message_id = m.id AND r.user_id = ?
+         WHERE m.team_id = ? AND r.id IS NULL
+         ${whereClause}`,
+        [req.userId, teamId, thread.id]
+      );
+    } else {
+      [unread] = await db.execute(
+        `SELECT m.id
+         FROM team_messages m
+         LEFT JOIN team_message_reads r ON r.message_id = m.id AND r.user_id = ?
+         LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
+         WHERE m.team_id = ? AND r.id IS NULL
+           AND (
+             t.id IS NULL
+             OR COALESCE(t.thread_type, 'group') <> 'direct'
+             OR t.direct_user_one = ?
+             OR t.direct_user_two = ?
+           )`,
+        [req.userId, teamId, req.userId, req.userId]
+      );
+    }
 
     if (unread.length > 0) {
       const values = unread.map((message) => `(${message.id}, ${req.userId})`).join(',');

@@ -37,6 +37,23 @@ const leaveTeamRoom = (ws, teamId) => {
   ws.teamIds.delete(key);
 };
 
+const buildPreviewMessage = (ws, payload) => ({
+  id: `preview:${payload.clientTempId}`,
+  client_temp_id: payload.clientTempId,
+  team_id: Number(payload.teamId),
+  thread_id: Number(payload.threadId),
+  message: String(payload.message || ''),
+  created_at: new Date().toISOString(),
+  reply_to: payload.reply_to || null,
+  reply_text: payload.reply_text || null,
+  reply_user_name: payload.reply_user_name || null,
+  thread_type: payload.threadType || 'group',
+  user_id: ws.userId,
+  user_name: payload.userName || 'Teammate',
+  optimistic: true,
+  pending: true,
+});
+
 const packMessage = (event, data) =>
   JSON.stringify({ event, data, timestamp: new Date().toISOString() });
 
@@ -79,6 +96,19 @@ function init(server) {
             fromUserId: ws.userId,
             payload: payload.payload || {},
           });
+          return;
+        }
+
+        if (payload.type === 'chat_preview' && payload.teamId && payload.threadId && payload.clientTempId) {
+          const teamKey = normalizeTeamId(payload.teamId);
+          if (!ws.teamIds.has(teamKey)) return;
+
+          const preview = buildPreviewMessage(ws, payload);
+          if (String(preview.thread_type) === 'direct' && payload.targetUserId) {
+            sendToUser(payload.targetUserId, 'chat_preview', preview);
+          } else {
+            broadcast(payload.teamId, 'chat_preview', preview, { excludeSocket: ws });
+          }
         }
       } catch (error) {}
     });
@@ -106,12 +136,14 @@ function init(server) {
   }, 30000);
 }
 
-function broadcast(teamId, event, data) {
+function broadcast(teamId, event, data, options = {}) {
   const key = normalizeTeamId(teamId);
   if (!teamRooms.has(key)) return;
 
+  const excludeSocket = options.excludeSocket || null;
   const message = packMessage(event, data);
   teamRooms.get(key).forEach((ws) => {
+    if (excludeSocket && ws === excludeSocket) return;
     if (ws.readyState === WebSocket.OPEN) ws.send(message);
   });
 }

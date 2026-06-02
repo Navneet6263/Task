@@ -3,6 +3,8 @@ const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+
 const canAccessTeam = async (req, teamId) => {
   if (req.userRole === 'company_admin') {
     const [[team]] = await db.execute(
@@ -119,7 +121,7 @@ router.get('/:teamId/members', authenticate, async (req, res) => {
     const [members] = await db.execute(
       `SELECT u.id, u.name, u.email, u.mobile, u.employee_id, u.role, u.avatar,
         tm.role as team_role, tm.is_reporting_manager,
-        (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND team_id = ? AND status != 'DONE') as current_tasks
+        (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND team_id = ? AND status != 'DONE' AND is_deleted = FALSE) as current_tasks
        FROM team_members tm
        JOIN users u ON tm.user_id = u.id
        WHERE tm.team_id = ?`,
@@ -140,12 +142,13 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: 'Team access denied' });
 
     const { email, role } = req.body;
+    const normalizedEmail = normalizeEmail(email);
     const [users] = await db.execute(
       `SELECT u.id
        FROM users u
        JOIN teams t ON t.id = ?
        WHERE u.email = ? AND u.org_id = t.org_id AND u.is_deleted = FALSE`,
-      [req.params.teamId, email]
+      [req.params.teamId, normalizedEmail]
     );
     if (users.length === 0) return res.status(404).json({ error: 'User not found' });
     await db.execute(

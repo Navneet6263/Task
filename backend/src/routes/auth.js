@@ -105,7 +105,7 @@ router.post('/login', async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
 
     const [companyAdmins] = await db.execute(
-      'SELECT * FROM company_admins WHERE LOWER(email) = ? LIMIT 1',
+      'SELECT * FROM company_admins WHERE email = ? LIMIT 1',
       [normalizedEmail]
     );
     const companyAdmin = companyAdmins[0] || null;
@@ -153,7 +153,7 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    const [users] = await db.execute('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
+    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     if (users.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const user = users[0];
     const valid = await bcrypt.compare(password, user.password);
@@ -197,27 +197,27 @@ router.post('/reset-password', async (req, res) => {
     let updated = false;
 
     const [companyAdmins] = await db.execute(
-      'SELECT id FROM company_admins WHERE LOWER(email) = ?',
+      'SELECT id FROM company_admins WHERE email = ?',
       [normalizedEmail]
     );
     if (companyAdmins.length > 0) {
       await db.execute(
-        'UPDATE company_admins SET password = ? WHERE LOWER(email) = ?',
+        'UPDATE company_admins SET password = ? WHERE email = ?',
         [hashed, normalizedEmail]
       );
       await db.execute(
-        'UPDATE users SET password = ? WHERE LOWER(email) = ?',
+        'UPDATE users SET password = ? WHERE email = ?',
         [hashed, normalizedEmail]
       );
       updated = true;
     } else {
       const [users] = await db.execute(
-        'SELECT id FROM users WHERE LOWER(email) = ? AND is_deleted = FALSE',
+        'SELECT id FROM users WHERE email = ? AND is_deleted = FALSE',
         [normalizedEmail]
       );
       if (users.length > 0) {
         await db.execute(
-          'UPDATE users SET password = ? WHERE LOWER(email) = ? AND is_deleted = FALSE',
+          'UPDATE users SET password = ? WHERE email = ? AND is_deleted = FALSE',
           [hashed, normalizedEmail]
         );
         updated = true;

@@ -74,9 +74,9 @@ BEGIN
       FOREIGN KEY (org_id) REFERENCES dbo.organizations(id)
   );
 
-  CREATE INDEX idx_users_role ON dbo.users(role);
-  CREATE INDEX idx_users_org_id ON dbo.users(org_id);
   CREATE INDEX idx_users_is_deleted ON dbo.users(is_deleted);
+  CREATE INDEX idx_users_org_role_active ON dbo.users(org_id, role, is_deleted);
+  CREATE INDEX idx_users_last_active ON dbo.users(last_active);
   CREATE UNIQUE INDEX idx_users_employee_id_not_null
     ON dbo.users(employee_id)
     WHERE employee_id IS NOT NULL;
@@ -164,17 +164,18 @@ BEGIN
     CONSTRAINT FK_tasks_picked_by FOREIGN KEY (picked_by) REFERENCES dbo.users(id)
   );
 
-  CREATE INDEX idx_tasks_assigned_to ON dbo.tasks(assigned_to);
   CREATE INDEX idx_tasks_assigned_by ON dbo.tasks(assigned_by);
-  CREATE INDEX idx_tasks_team_id ON dbo.tasks(team_id);
-  CREATE INDEX idx_tasks_org_id ON dbo.tasks(org_id);
-  CREATE INDEX idx_tasks_status ON dbo.tasks(status);
   CREATE INDEX idx_tasks_issue_type ON dbo.tasks(issue_type);
   CREATE INDEX idx_tasks_assigned_date ON dbo.tasks(assigned_date);
   CREATE INDEX idx_tasks_due_date ON dbo.tasks(due_date);
-  CREATE INDEX idx_tasks_is_deleted ON dbo.tasks(is_deleted);
-  CREATE INDEX idx_tasks_team_status ON dbo.tasks(team_id, status);
-  CREATE INDEX idx_tasks_assigned_status ON dbo.tasks(assigned_to, status);
+  CREATE INDEX idx_tasks_assigned_active_created ON dbo.tasks(assigned_to, created_at DESC) WHERE is_deleted = 0;
+  CREATE INDEX idx_tasks_assigned_team_status_active
+    ON dbo.tasks(assigned_to, team_id, status)
+    INCLUDE (priority_locked, due_date, priority, updated_at, created_at)
+    WHERE is_deleted = 0;
+  CREATE INDEX idx_tasks_team_active_created ON dbo.tasks(team_id, created_at DESC) WHERE is_deleted = 0;
+  CREATE INDEX idx_tasks_team_status_active_created ON dbo.tasks(team_id, status, created_at DESC) WHERE is_deleted = 0;
+  CREATE INDEX idx_tasks_org_active_created ON dbo.tasks(org_id, created_at DESC) WHERE is_deleted = 0;
 END
 GO
 
@@ -211,11 +212,9 @@ BEGIN
     CONSTRAINT FK_audit_logs_task FOREIGN KEY (task_id) REFERENCES dbo.tasks(id)
   );
 
-  CREATE INDEX idx_audit_logs_user_id ON dbo.audit_logs(user_id);
-  CREATE INDEX idx_audit_logs_team_id ON dbo.audit_logs(team_id);
-  CREATE INDEX idx_audit_logs_task_id ON dbo.audit_logs(task_id);
-  CREATE INDEX idx_audit_logs_created_at ON dbo.audit_logs(created_at);
   CREATE INDEX idx_audit_logs_team_created ON dbo.audit_logs(team_id, created_at);
+  CREATE INDEX idx_audit_logs_user_created ON dbo.audit_logs(user_id, created_at DESC);
+  CREATE INDEX idx_audit_logs_task_activity_created ON dbo.audit_logs(task_id, activity, created_at DESC);
 END
 GO
 
@@ -249,9 +248,7 @@ BEGIN
     CONSTRAINT FK_notifications_task FOREIGN KEY (task_id) REFERENCES dbo.tasks(id)
   );
 
-  CREATE INDEX idx_notifications_user_id ON dbo.notifications(user_id);
-  CREATE INDEX idx_notifications_is_read ON dbo.notifications(is_read);
-  CREATE INDEX idx_notifications_created_at ON dbo.notifications(created_at);
+  CREATE INDEX idx_notifications_user_created ON dbo.notifications(user_id, created_at DESC);
 END
 GO
 
@@ -285,16 +282,23 @@ BEGIN
     team_id INT NOT NULL,
     title NVARCHAR(160) NOT NULL,
     created_by INT NOT NULL,
+    thread_type NVARCHAR(20) NOT NULL CONSTRAINT DF_team_discussion_threads_type DEFAULT 'group',
+    direct_user_one INT NULL,
+    direct_user_two INT NULL,
     is_default BIT NOT NULL CONSTRAINT DF_team_discussion_threads_is_default DEFAULT 0,
     last_message_at DATETIME2 NULL CONSTRAINT DF_team_discussion_threads_last_message_at DEFAULT SYSDATETIME(),
     created_at DATETIME2 NOT NULL CONSTRAINT DF_team_discussion_threads_created_at DEFAULT SYSDATETIME(),
     updated_at DATETIME2 NOT NULL CONSTRAINT DF_team_discussion_threads_updated_at DEFAULT SYSDATETIME(),
     CONSTRAINT FK_team_discussion_threads_team FOREIGN KEY (team_id) REFERENCES dbo.teams(id),
-    CONSTRAINT FK_team_discussion_threads_user FOREIGN KEY (created_by) REFERENCES dbo.users(id)
+    CONSTRAINT FK_team_discussion_threads_user FOREIGN KEY (created_by) REFERENCES dbo.users(id),
+    CONSTRAINT FK_team_discussion_threads_direct_user_one FOREIGN KEY (direct_user_one) REFERENCES dbo.users(id),
+    CONSTRAINT FK_team_discussion_threads_direct_user_two FOREIGN KEY (direct_user_two) REFERENCES dbo.users(id)
   );
 
   CREATE INDEX idx_team_discussion_threads_default ON dbo.team_discussion_threads(team_id, is_default);
   CREATE INDEX idx_team_discussion_threads_last_message ON dbo.team_discussion_threads(team_id, last_message_at);
+  CREATE INDEX idx_team_discussion_threads_type ON dbo.team_discussion_threads(team_id, thread_type, last_message_at);
+  CREATE INDEX idx_team_discussion_threads_direct_users ON dbo.team_discussion_threads(team_id, direct_user_one, direct_user_two);
 END
 GO
 
