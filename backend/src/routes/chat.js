@@ -131,7 +131,7 @@ const loadVisibleThreadRows = async (teamId, userId) => {
             )
         ) AS message_count,
         (
-          SELECT TOP 1 m.message
+          SELECT m.message
           FROM team_messages m
           WHERE m.team_id = t.team_id
             AND (
@@ -139,6 +139,7 @@ const loadVisibleThreadRows = async (teamId, userId) => {
               OR (t.is_default = TRUE AND m.thread_id IS NULL)
             )
           ORDER BY m.created_at DESC
+          LIMIT 1
         ) AS last_message,
         (
           SELECT COUNT(*)
@@ -214,10 +215,11 @@ const getThreadById = async (teamId, threadId, userId) => {
 
 const ensureDefaultThread = async (teamId, userId) => {
   const [[existing]] = await db.execute(
-    `SELECT TOP 1 id
+    `SELECT id
      FROM team_discussion_threads
      WHERE team_id = ? AND is_default = TRUE
-     ORDER BY id ASC`,
+     ORDER BY id ASC
+     LIMIT 1`,
     [teamId]
   );
 
@@ -259,12 +261,13 @@ const createOrGetDirectThread = async (teamId, userId, targetUserId) => {
 
   const [firstUserId, secondUserId] = [Number(userId), targetId].sort((a, b) => a - b);
   const [[existing]] = await db.execute(
-    `SELECT TOP 1 id
+    `SELECT id
      FROM team_discussion_threads
      WHERE team_id = ?
        AND COALESCE(thread_type, 'group') = 'direct'
        AND direct_user_one = ?
-       AND direct_user_two = ?`,
+       AND direct_user_two = ?
+     LIMIT 1`,
     [teamId, firstUserId, secondUserId]
   );
 
@@ -421,10 +424,11 @@ const getHistory = async (teamId) => {
 
 const getActiveSession = async (teamId) => {
   const [[session]] = await db.execute(
-    `SELECT TOP 1 id
+    `SELECT id
      FROM team_review_sessions
      WHERE team_id = ? AND status IN ('active', 'awaiting_review')
-     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, started_at DESC`,
+     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, started_at DESC
+     LIMIT 1`,
     [teamId]
   );
 
@@ -584,10 +588,11 @@ router.post('/:teamId/review-sessions', authenticate, async (req, res) => {
     }
 
     const [[existing]] = await db.execute(
-      `SELECT TOP 1 id
+      `SELECT id
        FROM team_review_sessions
        WHERE team_id = ? AND status = 'active'
-       ORDER BY started_at DESC`,
+       ORDER BY started_at DESC
+       LIMIT 1`,
       [teamId]
     );
 
