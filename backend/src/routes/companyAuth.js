@@ -58,6 +58,7 @@ router.post('/login', async (req, res) => {
     );
     res.json({
       token, name: ca.name, email: ca.email, role: 'company_admin',
+      id: bootstrap.linkedUserId,
       user_id: bootstrap.linkedUserId,
       org_id: bootstrap.primaryOrgId,
       org_ids: orgIds,

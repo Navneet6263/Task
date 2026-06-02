@@ -56,7 +56,7 @@ const Login = () => {
   const persistWorkspaceSession = (responseData) => {
     const isCompanyAdminResponse = responseData?.role === 'company_admin';
     const userPayload = {
-      id: responseData.id,
+      id: responseData.id || responseData.user_id,
       org_id: responseData.org_id,
       org_ids: responseData.org_ids || [],
       name: responseData.name,
