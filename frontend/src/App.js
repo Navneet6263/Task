@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './pages/Dashboard/index';
 import MyTasks from './pages/MyTasks';
 import TeamManagement from './pages/TeamManagement';
 import AuditLogs from './pages/AuditLogs';
