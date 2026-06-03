@@ -81,6 +81,7 @@ const Dashboard = () => {
   const [filterAssignee, setFilterAssignee] = useState('');
 
   const [selectedTask, setSelectedTask] = useState(null);
+  const [sheetTab, setSheetTab] = useState('details');
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showMgrModal, setShowMgrModal] = useState(false);
 
@@ -412,7 +413,7 @@ const Dashboard = () => {
 
         <tbody>
           {paginated.map((task) => (
-            <tr key={task.id} className={selectedTask?.id === task.id ? 'is-selected' : ''} onClick={() => setSelectedTask(task)}>
+            <tr key={task.id} className={selectedTask?.id === task.id ? 'is-selected' : ''} onClick={() => { setSelectedTask(task); setSheetTab('details'); }}>
               <td>
                 <div className="dash-task-main">
                   <span className={`dash-issue-tag ${task.issue_type || 'task'}`}>{(task.issue_type || 'task').toUpperCase()}</span>
@@ -488,7 +489,7 @@ const Dashboard = () => {
             </header>
 
             {columnItems.map((task) => (
-              <div key={task.id} className="dash-board-card" onClick={() => setSelectedTask(task)}>
+              <div key={task.id} className="dash-board-card" onClick={() => { setSelectedTask(task); setSheetTab('details'); }}>
                 <h5>{task.title}</h5>
                 <p>{task.assigned_to_name || 'Unassigned'}</p>
 
@@ -515,7 +516,7 @@ const Dashboard = () => {
   const renderTimelineView = () => (
     <div className="dash-timeline">
       {filtered.map((task) => (
-        <article key={task.id} className="dash-timeline-item" onClick={() => setSelectedTask(task)}>
+        <article key={task.id} className="dash-timeline-item" onClick={() => { setSelectedTask(task); setSheetTab('details'); }}>
           <div className="dash-timeline-top">
             <strong>{task.title}</strong>
             <span>{dateLabel(task.due_date)}</span>
@@ -710,128 +711,214 @@ const Dashboard = () => {
 
       {selectedTask && (
         <div className="dash-sheet-overlay" onClick={() => setSelectedTask(null)}>
-          <aside className="dash-sheet" onClick={(event) => event.stopPropagation()}>
-            <div className="dash-sheet-head">
-              <span>TASK-{selectedTask.id}</span>
-              <button type="button" onClick={() => setSelectedTask(null)}>Close</button>
+          <aside className="dash-sheet-v2" onClick={(event) => event.stopPropagation()}>
+
+            {/* ── LEFT PANEL ── */}
+            <div className="dsv2-left">
+              <div className="dsv2-left-top">
+                <div className="dsv2-id-badge">TASK-{selectedTask.id}</div>
+                <button className="dsv2-close-btn" type="button" onClick={() => setSelectedTask(null)}
+                  title="Close">
+                  ✕
+                </button>
+              </div>
+
+              <div className="dsv2-tags">
+                <span className={`dash-issue-tag ${selectedTask.issue_type || 'task'}`}>
+                  {(selectedTask.issue_type || 'task').toUpperCase()}
+                </span>
+                {selectedTask.manager_assigned && <span className="dash-manager-tag">MGR</span>}
+                <span className={`dsv2-priority-badge pri-${(selectedTask.priority || 'MEDIUM').toLowerCase()}`}>
+                  {selectedTask.priority || 'MEDIUM'}
+                </span>
+              </div>
+
+              <h2 className="dsv2-title">{selectedTask.title}</h2>
+              <p className="dsv2-desc">{selectedTask.description || 'No description provided for this task.'}</p>
+
+              {/* Progress indicator */}
+              <div className="dsv2-progress-wrap">
+                <div className="dsv2-progress-labels">
+                  <span>Progress</span>
+                  <span>{statusProgress(selectedTask.status)}%</span>
+                </div>
+                <div className="dsv2-progress-track">
+                  <div className="dsv2-progress-fill" style={{ width: `${statusProgress(selectedTask.status)}%` }} />
+                </div>
+                <span className={`dsv2-status-pill st-${statusClass(selectedTask.status)}`}>
+                  {STATUS_LABEL[selectedTask.status] || selectedTask.status}
+                </span>
+              </div>
+
+              {/* Key meta grid */}
+              <div className="dsv2-meta-grid">
+                <div className="dsv2-meta-card">
+                  <span>Product</span>
+                  <strong>{selectedTask.product || '—'}</strong>
+                </div>
+                <div className="dsv2-meta-card">
+                  <span>Type</span>
+                  <strong>{selectedTask.task_type || '—'}</strong>
+                </div>
+                <div className="dsv2-meta-card">
+                  <span>Category</span>
+                  <strong>{selectedTask.category || '—'}</strong>
+                </div>
+                <div className="dsv2-meta-card">
+                  <span>Due Date</span>
+                  <strong>{dateLabel(selectedTask.due_date)}</strong>
+                </div>
+                <div className="dsv2-meta-card">
+                  <span>Assignee</span>
+                  <strong>{selectedTask.assigned_to_name || 'Unassigned'}</strong>
+                </div>
+                <div className="dsv2-meta-card">
+                  <span>Start</span>
+                  <strong>{dateLabel(selectedTask.start_date)}</strong>
+                </div>
+              </div>
+
+              {selectedTask.reference_image && (
+                <div className="dsv2-ref-img">
+                  <span>Reference Image</span>
+                  <img src={selectedTask.reference_image} alt={`${selectedTask.title} reference`} />
+                </div>
+              )}
+
+              <button type="button" className="dsv2-delete-btn" onClick={() => handleDelete(selectedTask.id)}>
+                Delete Task
+              </button>
             </div>
 
-            <div className="dash-sheet-tags">
-              <span className={`dash-issue-tag ${selectedTask.issue_type || 'task'}`}>{(selectedTask.issue_type || 'task').toUpperCase()}</span>
-              {selectedTask.manager_assigned && <span className="dash-manager-tag">MANAGER</span>}
-            </div>
-
-            <h3>{selectedTask.title}</h3>
-            <p className="dash-sheet-desc">{selectedTask.description || 'No description available.'}</p>
-
-            <div className="dash-sheet-grid">
-              <div className="dash-sheet-meta">
-                <span>Task Type</span>
-                <strong>{selectedTask.task_type || '-'}</strong>
-              </div>
-              <div className="dash-sheet-meta">
-                <span>Product</span>
-                <strong>{selectedTask.product || '-'}</strong>
-              </div>
-              <div className="dash-sheet-meta">
-                <span>Category</span>
-                <strong>{selectedTask.category || '-'}</strong>
-              </div>
-              <div className="dash-sheet-meta">
-                <span>End Date</span>
-                <strong>{dateLabel(selectedTask.due_date)}</strong>
-              </div>
-            </div>
-
-            {selectedTask.reference_image && (
-              <div className="dash-sheet-media">
-                <span>Reference Image</span>
-                <img src={selectedTask.reference_image} alt={`${selectedTask.title} reference`} />
-              </div>
-            )}
-
-            <label>
-              <span>Status</span>
-              <select className="dash-select" value={selectedTask.status} onChange={(event) => handlePanelUpdate('status', event.target.value)}>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{STATUS_LABEL[status]}</option>
+            {/* ── RIGHT PANEL ── */}
+            <div className="dsv2-right">
+              <div className="dsv2-tabs">
+                {['details', 'edit', 'comments'].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`dsv2-tab ${sheetTab === tab ? 'is-active' : ''}`}
+                    onClick={() => setSheetTab(tab)}
+                  >
+                    {tab === 'details' ? 'Details' : tab === 'edit' ? 'Edit' : 'Comments'}
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
 
-            <div className="dash-field-row">
-              <label>
-                <span>Priority</span>
-                <select className="dash-select" value={selectedTask.priority} onChange={(event) => handlePanelUpdate('priority', event.target.value)}>
-                  <option value="HIGH">High</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="LOW">Low</option>
-                </select>
-              </label>
+              <div className="dsv2-tab-body">
 
-              <label>
-                <span>Assignee</span>
-                <select className="dash-select" value={selectedTask.assigned_to || ''} onChange={(event) => handlePanelUpdate('assigned_to', event.target.value)}>
-                  <option value="">Unassigned</option>
-                  {members.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                  ))}
-                </select>
-              </label>
+                {/* DETAILS TAB */}
+                {sheetTab === 'details' && (
+                  <div className="dsv2-details-view">
+                    <div className="dsv2-detail-section">
+                      <h4>Task Overview</h4>
+                      <div className="dsv2-detail-rows">
+                        <div className="dsv2-detail-row"><span>Issue Type</span><strong>{(selectedTask.issue_type || 'task').toUpperCase()}</strong></div>
+                        <div className="dsv2-detail-row"><span>Status</span><strong className={`dsv2-status-pill st-${statusClass(selectedTask.status)}`}>{STATUS_LABEL[selectedTask.status]}</strong></div>
+                        <div className="dsv2-detail-row"><span>Priority</span><strong className={`dsv2-priority-badge pri-${(selectedTask.priority || 'MEDIUM').toLowerCase()}`}>{selectedTask.priority || 'MEDIUM'}</strong></div>
+                        <div className="dsv2-detail-row"><span>Assignee</span><strong>{selectedTask.assigned_to_name || 'Unassigned'}</strong></div>
+                        <div className="dsv2-detail-row"><span>Assigned By</span><strong>{selectedTask.assigned_by_name || '—'}</strong></div>
+                      </div>
+                    </div>
+                    <div className="dsv2-detail-section">
+                      <h4>Classification</h4>
+                      <div className="dsv2-detail-rows">
+                        <div className="dsv2-detail-row"><span>Task Type</span><strong>{selectedTask.task_type || '—'}</strong></div>
+                        <div className="dsv2-detail-row"><span>Product</span><strong>{selectedTask.product || '—'}</strong></div>
+                        <div className="dsv2-detail-row"><span>Category</span><strong>{selectedTask.category || '—'}</strong></div>
+                      </div>
+                    </div>
+                    <div className="dsv2-detail-section">
+                      <h4>Timeline</h4>
+                      <div className="dsv2-detail-rows">
+                        <div className="dsv2-detail-row"><span>Assigned Date</span><strong>{dateLabel(selectedTask.assigned_date)}</strong></div>
+                        <div className="dsv2-detail-row"><span>Start Date</span><strong>{dateLabel(selectedTask.start_date)}</strong></div>
+                        <div className="dsv2-detail-row"><span>Due Date</span><strong>{dateLabel(selectedTask.due_date)}</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* EDIT TAB */}
+                {sheetTab === 'edit' && (
+                  <div className="dsv2-edit-view">
+                    <label className="dsv2-label">
+                      <span>Status</span>
+                      <select className="dash-select" value={selectedTask.status} onChange={(e) => handlePanelUpdate('status', e.target.value)}>
+                        {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                      </select>
+                    </label>
+
+                    <div className="dsv2-row-2">
+                      <label className="dsv2-label">
+                        <span>Priority</span>
+                        <select className="dash-select" value={selectedTask.priority} onChange={(e) => handlePanelUpdate('priority', e.target.value)}>
+                          <option value="HIGH">High</option>
+                          <option value="MEDIUM">Medium</option>
+                          <option value="LOW">Low</option>
+                        </select>
+                      </label>
+                      <label className="dsv2-label">
+                        <span>Assignee</span>
+                        <select className="dash-select" value={selectedTask.assigned_to || ''} onChange={(e) => handlePanelUpdate('assigned_to', e.target.value)}>
+                          <option value="">Unassigned</option>
+                          {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="dsv2-row-2">
+                      <label className="dsv2-label">
+                        <span>Task Type</span>
+                        <select className="dash-select" value={selectedTask.task_type || ''} onChange={(e) => handlePanelUpdate('task_type', e.target.value)}>
+                          <option value="">Select type</option>
+                          {availableTaskOptions.task_types.map((o) => <option key={o.id || o.label} value={o.label}>{o.label}</option>)}
+                        </select>
+                      </label>
+                      <label className="dsv2-label">
+                        <span>Product / Module</span>
+                        <select className="dash-select" value={selectedTask.product || ''} onChange={(e) => handlePanelUpdate('product', e.target.value)}>
+                          <option value="">Select product</option>
+                          {availableTaskOptions.products.map((o) => <option key={o.id || o.label} value={o.label}>{o.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="dsv2-label">
+                      <span>Category</span>
+                      <select className="dash-select" value={selectedTask.category || ''} onChange={(e) => handlePanelUpdate('category', e.target.value)}>
+                        <option value="">Select category</option>
+                        {selectedTaskCategories.map((o) => <option key={o.id || `${o.label}-${o.parent_value || ''}`} value={o.label}>{o.label}</option>)}
+                      </select>
+                    </label>
+
+                    <div className="dsv2-row-3">
+                      <label className="dsv2-label">
+                        <span>Assigned Date</span>
+                        <input className="dash-input" type="date" value={toInputDate(selectedTask.assigned_date)} onChange={(e) => handlePanelUpdate('assigned_date', e.target.value)} />
+                      </label>
+                      <label className="dsv2-label">
+                        <span>Start Date</span>
+                        <input className="dash-input" type="date" value={toInputDate(selectedTask.start_date)} onChange={(e) => handlePanelUpdate('start_date', e.target.value)} />
+                      </label>
+                      <label className="dsv2-label">
+                        <span>End Date</span>
+                        <input className="dash-input" type="date" value={toInputDate(selectedTask.due_date)} onChange={(e) => handlePanelUpdate('due_date', e.target.value)} />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* COMMENTS TAB */}
+                {sheetTab === 'comments' && (
+                  <div className="dsv2-comments-view">
+                    <TaskComments taskId={selectedTask.id} />
+                  </div>
+                )}
+
+              </div>
             </div>
 
-            <div className="dash-field-row">
-              <label>
-                <span>Task Type</span>
-                <select className="dash-select" value={selectedTask.task_type || ''} onChange={(event) => handlePanelUpdate('task_type', event.target.value)}>
-                  <option value="">Select task type</option>
-                  {availableTaskOptions.task_types.map((option) => (
-                    <option key={option.id || option.label} value={option.label}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                <span>Product / Module</span>
-                <select className="dash-select" value={selectedTask.product || ''} onChange={(event) => handlePanelUpdate('product', event.target.value)}>
-                  <option value="">Select product</option>
-                  {availableTaskOptions.products.map((option) => (
-                    <option key={option.id || option.label} value={option.label}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <label>
-              <span>Category</span>
-              <select className="dash-select" value={selectedTask.category || ''} onChange={(event) => handlePanelUpdate('category', event.target.value)}>
-                <option value="">Select category</option>
-                {selectedTaskCategories.map((option) => (
-                  <option key={option.id || `${option.label}-${option.parent_value || 'general'}`} value={option.label}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <div className="dash-field-row">
-              <label>
-                <span>Assigned Date</span>
-                <input className="dash-input" type="date" value={toInputDate(selectedTask.assigned_date)} onChange={(event) => handlePanelUpdate('assigned_date', event.target.value)} />
-              </label>
-
-              <label>
-                <span>Start Date</span>
-                <input className="dash-input" type="date" value={toInputDate(selectedTask.start_date)} onChange={(event) => handlePanelUpdate('start_date', event.target.value)} />
-              </label>
-            </div>
-
-            <label>
-              <span>End Date</span>
-              <input className="dash-input" type="date" value={toInputDate(selectedTask.due_date)} onChange={(event) => handlePanelUpdate('due_date', event.target.value)} />
-            </label>
-
-            <TaskComments taskId={selectedTask.id} />
-
-            <button type="button" className="dash-btn dash-btn-danger dash-sheet-delete" onClick={() => handleDelete(selectedTask.id)}>Delete Task</button>
           </aside>
         </div>
       )}
