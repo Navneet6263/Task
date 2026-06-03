@@ -31,8 +31,6 @@ const Dashboard = () => {
 
   const {
     taskForm,
-    setTaskForm,
-    taskFormOptions,
     mgrForm,
     setMgrForm,
     updateTaskFormField,

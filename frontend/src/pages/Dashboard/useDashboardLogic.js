@@ -32,7 +32,20 @@ const MAX_REFERENCE_IMAGE_BYTES = 450 * 1024;
 
 const buildInitialTaskForm = () => {
   const today = new Date().toISOString().split('T')[0];
-  return { title: '', description: '', priority: 'MEDIUM', assigned_to: '', assigned_date: today, start_date: today, due_date: '', issue_type: 'task', task_type: '', product: '', category: '', reference_image: '' };
+  return {
+    title: '', description: '', priority: 'MEDIUM', assigned_to: '',
+    assigned_date: today, start_date: today, due_date: '',
+    issue_type: 'task', task_type: '', product: '', category: '',
+    reference_image: '', client_name: '',
+    // bug fields
+    severity: 'MEDIUM', bug_type: '', environment: '', affected_module: '', steps_to_reproduce: '',
+    // feature fields
+    feature_area: '', story_points: '', feature_priority: '', acceptance_criteria: '',
+    // enhancement fields
+    enhancement_type: '', impact_level: '', effort_estimate: '', improvement_detail: '',
+    // story fields
+    story_role: '', epic: '', persona: '', story_notes: '',
+  };
 };
 
 const initialMgrForm = { title: '', description: '', priority: 'MEDIUM', assigned_to: '', due_date: '' };

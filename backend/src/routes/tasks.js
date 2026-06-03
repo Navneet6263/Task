@@ -5,7 +5,7 @@ const ws = require('../websocket');
 const router = express.Router();
 
 const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
-const TASK_ISSUE_TYPES = ['task', 'bug', 'story'];
+const TASK_ISSUE_TYPES = ['task', 'bug', 'story', 'feature', 'enhancement'];
 const TASK_OPTION_GROUPS = {
   task_type: 'task_types',
   product: 'products',
@@ -59,7 +59,7 @@ const normalizeIssueType = (value) => {
   if (!value) return 'task';
   const normalized = String(value).trim().toLowerCase();
   if (!TASK_ISSUE_TYPES.includes(normalized)) {
-    throw new Error('issue_type must be task, bug, or story');
+    throw new Error('issue_type must be task, bug, story, feature, or enhancement');
   }
   return normalized;
 };
@@ -114,6 +114,29 @@ const normalizeTaskPayload = (payload = {}) => {
     startDate,
     dueDate,
     referenceImage: normalizeReferenceImage(payload.reference_image),
+    // shared
+    clientName:         normalizeText(payload.client_name, 255),
+    // bug fields
+    severity:           normalizeText(payload.severity, 20),
+    bugType:            normalizeText(payload.bug_type, 50),
+    environment:        normalizeText(payload.environment, 30),
+    affectedModule:     normalizeText(payload.affected_module, 255),
+    stepsToReproduce:   normalizeText(payload.steps_to_reproduce, 5000),
+    // feature fields
+    featureArea:        normalizeText(payload.feature_area, 50),
+    storyPoints:        normalizeText(payload.story_points, 10),
+    featurePriority:    normalizeText(payload.feature_priority, 30),
+    acceptanceCriteria: normalizeText(payload.acceptance_criteria, 5000),
+    // enhancement fields
+    enhancementType:    normalizeText(payload.enhancement_type, 50),
+    impactLevel:        normalizeText(payload.impact_level, 20),
+    effortEstimate:     normalizeText(payload.effort_estimate, 10),
+    improvementDetail:  normalizeText(payload.improvement_detail, 5000),
+    // story fields
+    storyRole:          normalizeText(payload.story_role, 50),
+    epic:               normalizeText(payload.epic, 255),
+    persona:            normalizeText(payload.persona, 255),
+    storyNotes:         normalizeText(payload.story_notes, 5000),
   };
 };
 
@@ -504,26 +527,25 @@ router.post('/', authenticate, async (req, res) => {
 
     const [result] = await db.execute(
       `INSERT INTO tasks
-       (title, description, priority, status, assigned_to, assigned_by, team_id, task_type, product, category, start_date, assigned_date, due_date, reference_image, org_id, issue_type, reported_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (title, description, priority, status, assigned_to, assigned_by, team_id, task_type, product, category,
+        start_date, assigned_date, due_date, reference_image, org_id, issue_type, reported_by,
+        client_name, severity, bug_type, environment, affected_module, steps_to_reproduce,
+        feature_area, story_points, feature_priority, acceptance_criteria,
+        enhancement_type, impact_level, effort_estimate, improvement_detail,
+        story_role, epic, persona, story_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        taskPayload.title,
-        taskPayload.description,
-        taskPayload.priority,
-        taskStatus,
-        assignedTo,
-        req.userId,
-        team_id,
-        taskPayload.taskType,
-        taskPayload.product,
-        taskPayload.category,
-        taskPayload.startDate,
-        taskPayload.assignedDate,
-        taskPayload.dueDate,
-        taskPayload.referenceImage,
-        resolvedOrgId,
-        type,
-        reportedBy,
+        taskPayload.title, taskPayload.description, taskPayload.priority, taskStatus,
+        assignedTo, req.userId, team_id,
+        taskPayload.taskType, taskPayload.product, taskPayload.category,
+        taskPayload.startDate, taskPayload.assignedDate, taskPayload.dueDate,
+        taskPayload.referenceImage, resolvedOrgId, type, reportedBy,
+        taskPayload.clientName, taskPayload.severity, taskPayload.bugType,
+        taskPayload.environment, taskPayload.affectedModule, taskPayload.stepsToReproduce,
+        taskPayload.featureArea, taskPayload.storyPoints, taskPayload.featurePriority,
+        taskPayload.acceptanceCriteria, taskPayload.enhancementType, taskPayload.impactLevel,
+        taskPayload.effortEstimate, taskPayload.improvementDetail,
+        taskPayload.storyRole, taskPayload.epic, taskPayload.persona, taskPayload.storyNotes,
       ]
     );
 
@@ -788,16 +810,16 @@ router.post('/manager-assign', authenticate, async (req, res) => {
     const reportedBy = taskPayload.issueType === 'bug' ? req.userId : null;
     const [result] = await db.execute(
       `INSERT INTO tasks
-       (title, description, priority, status, assigned_to, assigned_by, team_id, task_type, product, category, start_date, assigned_date, due_date, reference_image, org_id, issue_type, reported_by, manager_assigned)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+       (title, description, priority, status, assigned_to, assigned_by, team_id, task_type, product, category,
+        start_date, assigned_date, due_date, reference_image, org_id, issue_type, reported_by, manager_assigned,
+        client_name, severity, bug_type, environment, affected_module, steps_to_reproduce,
+        feature_area, story_points, feature_priority, acceptance_criteria,
+        enhancement_type, impact_level, effort_estimate, improvement_detail,
+        story_role, epic, persona, story_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        taskPayload.title,
-        taskPayload.description,
-        taskPayload.priority,
-        'TODO',
-        assignedTo,
-        req.userId,
-        taskTeamId,
+        taskPayload.title, taskPayload.description, taskPayload.priority, 'TODO',
+        assignedTo, req.userId, taskTeamId,
         taskPayload.taskType,
         taskPayload.product,
         taskPayload.category,
@@ -808,6 +830,12 @@ router.post('/manager-assign', authenticate, async (req, res) => {
         team.org_id,
         taskPayload.issueType,
         reportedBy,
+        taskPayload.clientName, taskPayload.severity, taskPayload.bugType,
+        taskPayload.environment, taskPayload.affectedModule, taskPayload.stepsToReproduce,
+        taskPayload.featureArea, taskPayload.storyPoints, taskPayload.featurePriority,
+        taskPayload.acceptanceCriteria, taskPayload.enhancementType, taskPayload.impactLevel,
+        taskPayload.effortEstimate, taskPayload.improvementDetail,
+        taskPayload.storyRole, taskPayload.epic, taskPayload.persona, taskPayload.storyNotes,
       ]
     );
 

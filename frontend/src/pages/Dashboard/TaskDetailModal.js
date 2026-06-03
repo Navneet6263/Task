@@ -11,12 +11,7 @@ const statusProgress = (status) => {
   return 14;
 };
 
-const statusClass = (status) => {
-  if (status === 'DONE') return 'done';
-  if (status === 'IN_PROGRESS') return 'progress';
-  if (status === 'PENDING') return 'pending';
-  return 'todo';
-};
+
 
 const dateLabel = (value) => {
   if (!value) return '-';
@@ -31,7 +26,6 @@ const toInputDate = (value) => {
 };
 
 const TaskDetailModal = ({ selectedTask, sheetTab, setSheetTab, setSelectedTask, handleDelete, handlePanelUpdate, members, availableTaskOptions, selectedTaskCategories }) => {
-  const wasEdited = selectedTask.updated_at && selectedTask.created_at && selectedTask.updated_at !== selectedTask.created_at;
 
   return (
     <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={() => setSelectedTask(null)}>
