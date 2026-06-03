@@ -131,7 +131,7 @@ const loadVisibleThreadRows = async (teamId, userId) => {
             )
         ) AS message_count,
         (
-          SELECT m.message
+          SELECT TOP 1 m.message
           FROM team_messages m
           WHERE m.team_id = t.team_id
             AND (
@@ -139,7 +139,6 @@ const loadVisibleThreadRows = async (teamId, userId) => {
               OR (t.is_default = TRUE AND m.thread_id IS NULL)
             )
           ORDER BY m.created_at DESC
-          LIMIT 1
         ) AS last_message,
         (
           SELECT COUNT(*)

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { teams, tasks } from '../services/api';
+import TaskComments from '../components/TaskComments';
 import './Dashboard.css';
 
 const PAGE_SIZE = 12;
@@ -827,6 +828,8 @@ const Dashboard = () => {
               <span>End Date</span>
               <input className="dash-input" type="date" value={toInputDate(selectedTask.due_date)} onChange={(event) => handlePanelUpdate('due_date', event.target.value)} />
             </label>
+
+            <TaskComments taskId={selectedTask.id} />
 
             <button type="button" className="dash-btn dash-btn-danger dash-sheet-delete" onClick={() => handleDelete(selectedTask.id)}>Delete Task</button>
           </aside>

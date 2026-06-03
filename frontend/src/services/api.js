@@ -85,4 +85,11 @@ export const notifications = {
   read: (id) => api.patch(`/notifications/${id}/read`),
 };
 
+export const comments = {
+  getByTask: (taskId) => api.get(`/comments/task/${taskId}`),
+  create: (data) => api.post('/comments', data),
+  update: (id, data) => api.put(`/comments/${id}`, data),
+  delete: (id) => api.delete(`/comments/${id}`),
+};
+
 export default api;

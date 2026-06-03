@@ -71,7 +71,7 @@ const formatTask = (t, index) => {
   return `${index}. ${status} *${escMd(t.title)}*\n   Priority: ${t.priority}${due}\n   ID: \`${t.id}\``;
 };
 
-const escMd = (text) => String(text || '').replace(/([_*[\]()~`>#+\-=|{}.!])/g, '\\$1');
+const escMd = (text) => String(text || '').replace(/([_*[\]()~`>#+=|{}.!-])/g, '\\$1');
 
 // ─── Handlers ───
 
@@ -155,7 +155,6 @@ const handleAllTeamTasks = async (chatId, session) => {
 };
 
 const handleCreateTaskStart = async (chatId, session) => {
-  // Get user's teams
   const [teams] = await db.execute(
     `SELECT t.id, t.name FROM teams t
      JOIN team_members tm ON tm.team_id = t.id
@@ -173,13 +172,11 @@ const handleCreateTaskStart = async (chatId, session) => {
     });
   }
 
-  // Multiple teams — let user pick
   const buttons = teams.map((t) => [{ text: t.name, callback_data: `pick_team_${t.id}` }]);
   chatState[chatId] = { step: 'create_pick_team' };
   bot.sendMessage(chatId, 'Select a team:', { reply_markup: { inline_keyboard: buttons } });
 };
 
-// Helper: send a create-flow step with Skip + Submit buttons
 const sendCreateStep = (chatId, text, extraButtons = []) => {
   const rows = [...extraButtons, [{ text: '⏭ Skip', callback_data: 'c_skip' }, { text: '✅ Submit Now', callback_data: 'c_submit' }, { text: '❌ Cancel', callback_data: 'cancel_create' }]];
   bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: rows } });
@@ -312,7 +309,6 @@ const handleCreateConfirm = async (chatId, session) => {
   }
 };
 
-// Create flow: which step comes after skip
 const CREATE_STEP_ORDER = [
   'create_description', 'create_issue_type', 'create_priority',
   'create_task_type', 'create_product', 'create_category',
@@ -359,7 +355,6 @@ const handleUpdateStatusStart = async (chatId, session) => {
 };
 
 const handleApproveVideoStart = async (chatId, session) => {
-  // Get pending review sessions from user's teams
   const [teams] = await db.execute(
     'SELECT team_id FROM team_members WHERE user_id = ?', [session.user_id]
   );
@@ -409,21 +404,18 @@ const handleCallback = async (query) => {
 
   bot.answerCallbackQuery(query.id);
 
-  // Team pick for create task
   if (data.startsWith('pick_team_')) {
     const teamId = parseInt(data.replace('pick_team_', ''));
     chatState[chatId] = { step: 'create_title', team_id: teamId };
     return bot.sendMessage(chatId, 'Enter task *title*:', { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } });
   }
 
-  // Skip current create step
   if (data === 'c_skip') {
     const state = chatState[chatId];
     if (!state || !state.step?.startsWith('create_')) return;
     return advanceCreateStep(chatId, session);
   }
 
-  // Submit now from any create step
   if (data === 'c_submit') {
     const state = chatState[chatId];
     if (!state || !state.title) return bot.sendMessage(chatId, '❌ Title is required first.');
@@ -435,7 +427,6 @@ const handleCallback = async (query) => {
     return bot.sendMessage(chatId, '❌ Cancelled.', getMenu(session.role));
   }
 
-  // Issue type pick
   if (data.startsWith('cit_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -443,7 +434,6 @@ const handleCallback = async (query) => {
     return askPriority(chatId);
   }
 
-  // Priority pick
   if (data.startsWith('pri_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -451,7 +441,6 @@ const handleCallback = async (query) => {
     return askTaskType(chatId, session);
   }
 
-  // Task type pick
   if (data.startsWith('ctt_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -459,7 +448,6 @@ const handleCallback = async (query) => {
     return askProduct(chatId, session);
   }
 
-  // Product pick
   if (data.startsWith('cpd_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -467,7 +455,6 @@ const handleCallback = async (query) => {
     return askCategory(chatId, session);
   }
 
-  // Category pick
   if (data.startsWith('cca_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -475,7 +462,6 @@ const handleCallback = async (query) => {
     return askAssignee(chatId, session);
   }
 
-  // Assignee pick
   if (data.startsWith('cas_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -483,7 +469,6 @@ const handleCallback = async (query) => {
     return askDueDate(chatId);
   }
 
-  // Due date pick
   if (data.startsWith('cdu_')) {
     const state = chatState[chatId];
     if (!state) return;
@@ -491,7 +476,6 @@ const handleCallback = async (query) => {
     return askImage(chatId);
   }
 
-  // Task pick for status update
   if (data.startsWith('upd_task_')) {
     const taskId = parseInt(data.replace('upd_task_', ''));
     chatState[chatId] = { step: 'update_pick_status', task_id: taskId };
@@ -505,7 +489,6 @@ const handleCallback = async (query) => {
     });
   }
 
-  // Status update
   if (data.startsWith('st_')) {
     const state = chatState[chatId];
     if (!state || state.step !== 'update_pick_status') return;
@@ -521,7 +504,6 @@ const handleCallback = async (query) => {
     return;
   }
 
-  // Video review approve/reject
   if (data.startsWith('review_')) {
     const sessionId = parseInt(data.replace('review_', ''));
     chatState[chatId] = { step: 'review_decision', review_session_id: sessionId };
@@ -583,17 +565,14 @@ const handleMessage = async (msg) => {
 
   if (text === '/start') return handleStart(chatId);
 
-  // Check if in login flow
   const state = chatState[chatId];
   if (state?.step === 'awaiting_employee_id') return handleEmployeeLogin(chatId, text);
 
-  // Must be logged in for everything else
   const session = await getSession(chatId);
   if (!session) {
     return bot.sendMessage(chatId, '⚠️ Please login first. Send /start');
   }
 
-  // Create task multi-step text inputs
   if (state?.step === 'create_title') return handleCreateTitle(chatId, text);
   if (state?.step === 'create_description') return handleCreateDescription(chatId, text);
   if (state?.step === 'create_due_date') {
@@ -601,7 +580,6 @@ const handleMessage = async (msg) => {
     return askImage(chatId);
   }
 
-  // Menu buttons
   const isAdmin = ['admin', 'manager'].includes(session.role);
 
   switch (text) {
@@ -622,7 +600,10 @@ const handleMessage = async (msg) => {
   }
 };
 
-// ─── Init ───
+// ─── Init with exponential backoff ───
+let retryDelay = 5000;
+let retryTimer = null;
+
 const startBot = () => {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -630,12 +611,48 @@ const startBot = () => {
     return null;
   }
 
-  bot = new TelegramBot(token, { polling: true });
-  bot.on('message', handleMessage);
-  bot.on('callback_query', handleCallback);
-  bot.on('polling_error', (err) => console.error('[Telegram] Polling error:', err.message));
+  const launchPolling = () => {
+    if (bot) {
+      try { bot.stopPolling(); } catch (_) {}
+      bot = null;
+    }
 
-  console.log('[Telegram] Bot started ✅');
+    bot = new TelegramBot(token, {
+      polling: {
+        interval: 2000,
+        autoStart: true,
+        params: { timeout: 30 },
+      },
+    });
+
+    bot.on('message', (msg) => {
+      retryDelay = 5000; // reset backoff on successful message
+      handleMessage(msg);
+    });
+    bot.on('callback_query', handleCallback);
+
+    bot.on('polling_error', (err) => {
+      const code = err?.code || '';
+      const errMsg = err?.message || String(err);
+
+      // ECONNRESET / EFATAL = network hiccup — reconnect silently with backoff
+      if (code === 'EFATAL' || errMsg.includes('ECONNRESET') || errMsg.includes('ETIMEDOUT')) {
+        console.warn(`[Telegram] Network hiccup. Reconnecting in ${retryDelay / 1000}s…`);
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => {
+          retryDelay = Math.min(retryDelay * 2, 60000); // cap at 60s
+          launchPolling();
+        }, retryDelay);
+        return;
+      }
+
+      console.error('[Telegram] Polling error:', errMsg);
+    });
+
+    console.log('[Telegram] Bot started ✅');
+  };
+
+  launchPolling();
   return bot;
 };
 

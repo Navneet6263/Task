@@ -72,6 +72,7 @@ app.use('/api/company-admin', require('./src/routes/companyAdmin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/notifications', require('./src/routes/notifications'));
 app.use('/api/chat', require('./src/routes/chat'));
+app.use('/api/comments', require('./src/routes/comments'));
 
 // Cron: overdue alert every hour
 cron.schedule('0 * * * *', async () => {
@@ -95,6 +96,7 @@ cron.schedule('0 * * * *', async () => {
         'INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)',
         [task.assigned_to, 'overdue', `Task overdue: ${task.title}`, task.id]
       );
+
       ws.broadcast(task.team_id, 'overdue_alert', { taskId: task.id, title: task.title });
     }
     if (overdue.length) console.log(`[CRON] ${overdue.length} overdue alerts sent`);
@@ -110,11 +112,19 @@ const { startBot } = require('./src/telegram/bot');
 
 const startServer = async () => {
   try {
-    await ensureCollaborationSchema();
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     startBot();
+
+    console.log('Bootstrapping database schema and indexes...');
+    ensureCollaborationSchema()
+      .then(() => {
+        console.log('Database schema and indexes verified successfully.');
+      })
+      .catch((error) => {
+        console.error('Failed to bootstrap collaboration schema:', error.message);
+      });
   } catch (error) {
-    console.error('Failed to bootstrap collaboration schema:', error.message);
+    console.error('Failed to start server:', error.message);
     process.exit(1);
   }
 };
