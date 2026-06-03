@@ -652,43 +652,38 @@ router.put('/:id', authenticate, async (req, res) => {
       }
     }
 
-    const nextAssignedTo = req.body.assigned_to === undefined
-      ? currentTask.assigned_to
-      : normalizeUserId(req.body.assigned_to);
-    const nextTitle = req.body.title === undefined
-      ? currentTask.title
-      : normalizeText(req.body.title, 255);
-    const nextDescription = req.body.description === undefined
-      ? currentTask.description
-      : normalizeText(req.body.description, 5000);
-    const nextPriority = ['LOW', 'MEDIUM', 'HIGH'].includes(req.body.priority)
-      ? req.body.priority
-      : currentTask.priority;
+    const nextAssignedTo = req.body.assigned_to === undefined ? currentTask.assigned_to : normalizeUserId(req.body.assigned_to);
+    const nextTitle = req.body.title === undefined ? currentTask.title : normalizeText(req.body.title, 255);
+    const nextDescription = req.body.description === undefined ? currentTask.description : normalizeText(req.body.description, 5000);
+    const nextPriority = ['LOW', 'MEDIUM', 'HIGH'].includes(req.body.priority) ? req.body.priority : currentTask.priority;
     const nextStatus = TASK_STATUSES.includes(status) ? status : currentTask.status;
-    const nextPriorityLocked = priority_locked === undefined
-      ? Boolean(currentTask.priority_locked)
-      : Boolean(priority_locked);
-    const nextTaskType = req.body.task_type === undefined
-      ? currentTask.task_type
-      : normalizeText(req.body.task_type, 120);
-    const nextProduct = req.body.product === undefined
-      ? currentTask.product
-      : normalizeText(req.body.product, 120);
-    const nextCategory = req.body.category === undefined
-      ? currentTask.category
-      : normalizeText(req.body.category, 120);
-    const nextAssignedDate = req.body.assigned_date === undefined
-      ? currentTask.assigned_date
-      : normalizeDate(req.body.assigned_date, 'assigned_date');
-    const nextStartDate = req.body.start_date === undefined
-      ? currentTask.start_date
-      : normalizeDate(req.body.start_date, 'start_date');
-    const nextDueDate = req.body.due_date === undefined
-      ? currentTask.due_date
-      : normalizeDate(req.body.due_date, 'due_date');
-    const nextReferenceImage = req.body.reference_image === undefined
-      ? currentTask.reference_image
-      : normalizeReferenceImage(req.body.reference_image);
+    const nextPriorityLocked = priority_locked === undefined ? Boolean(currentTask.priority_locked) : Boolean(priority_locked);
+    const nextTaskType = req.body.task_type === undefined ? currentTask.task_type : normalizeText(req.body.task_type, 120);
+    const nextProduct = req.body.product === undefined ? currentTask.product : normalizeText(req.body.product, 120);
+    const nextCategory = req.body.category === undefined ? currentTask.category : normalizeText(req.body.category, 120);
+    const nextAssignedDate = req.body.assigned_date === undefined ? currentTask.assigned_date : normalizeDate(req.body.assigned_date, 'assigned_date');
+    const nextStartDate = req.body.start_date === undefined ? currentTask.start_date : normalizeDate(req.body.start_date, 'start_date');
+    const nextDueDate = req.body.due_date === undefined ? currentTask.due_date : normalizeDate(req.body.due_date, 'due_date');
+    const nextReferenceImage = req.body.reference_image === undefined ? currentTask.reference_image : normalizeReferenceImage(req.body.reference_image);
+
+    const nextClientName = req.body.client_name === undefined ? currentTask.client_name : normalizeText(req.body.client_name, 255);
+    const nextSeverity = req.body.severity === undefined ? currentTask.severity : normalizeText(req.body.severity, 20);
+    const nextBugType = req.body.bug_type === undefined ? currentTask.bug_type : normalizeText(req.body.bug_type, 50);
+    const nextEnvironment = req.body.environment === undefined ? currentTask.environment : normalizeText(req.body.environment, 30);
+    const nextAffectedModule = req.body.affected_module === undefined ? currentTask.affected_module : normalizeText(req.body.affected_module, 255);
+    const nextStepsToReproduce = req.body.steps_to_reproduce === undefined ? currentTask.steps_to_reproduce : normalizeText(req.body.steps_to_reproduce, 5000);
+    const nextFeatureArea = req.body.feature_area === undefined ? currentTask.feature_area : normalizeText(req.body.feature_area, 50);
+    const nextStoryPoints = req.body.story_points === undefined ? currentTask.story_points : normalizeText(req.body.story_points, 10);
+    const nextFeaturePriority = req.body.feature_priority === undefined ? currentTask.feature_priority : normalizeText(req.body.feature_priority, 30);
+    const nextAcceptanceCriteria = req.body.acceptance_criteria === undefined ? currentTask.acceptance_criteria : normalizeText(req.body.acceptance_criteria, 5000);
+    const nextEnhancementType = req.body.enhancement_type === undefined ? currentTask.enhancement_type : normalizeText(req.body.enhancement_type, 50);
+    const nextImpactLevel = req.body.impact_level === undefined ? currentTask.impact_level : normalizeText(req.body.impact_level, 20);
+    const nextEffortEstimate = req.body.effort_estimate === undefined ? currentTask.effort_estimate : normalizeText(req.body.effort_estimate, 10);
+    const nextImprovementDetail = req.body.improvement_detail === undefined ? currentTask.improvement_detail : normalizeText(req.body.improvement_detail, 5000);
+    const nextStoryRole = req.body.story_role === undefined ? currentTask.story_role : normalizeText(req.body.story_role, 50);
+    const nextEpic = req.body.epic === undefined ? currentTask.epic : normalizeText(req.body.epic, 255);
+    const nextPersona = req.body.persona === undefined ? currentTask.persona : normalizeText(req.body.persona, 255);
+    const nextStoryNotes = req.body.story_notes === undefined ? currentTask.story_notes : normalizeText(req.body.story_notes, 5000);
 
     if (!nextTitle) {
       return res.status(422).json({ error: 'title is required', code: 'VALIDATION_ERROR' });
@@ -725,22 +720,19 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const [result] = await db.execute(
       `UPDATE tasks
-       SET title=?, description=?, status=?, priority=?, priority_locked=?, assigned_to=?, task_type=?, product=?, category=?, start_date=?, assigned_date=?, due_date=?, reference_image=?, version=version+1, updated_at=CURRENT_TIMESTAMP
+       SET title=?, description=?, status=?, priority=?, priority_locked=?, assigned_to=?, task_type=?, product=?, category=?, start_date=?, assigned_date=?, due_date=?, reference_image=?, 
+           client_name=?, severity=?, bug_type=?, environment=?, affected_module=?, steps_to_reproduce=?, 
+           feature_area=?, story_points=?, feature_priority=?, acceptance_criteria=?, 
+           enhancement_type=?, impact_level=?, effort_estimate=?, improvement_detail=?, 
+           story_role=?, epic=?, persona=?, story_notes=?, 
+           version=version+1, updated_at=CURRENT_TIMESTAMP
        WHERE id=? AND is_deleted=FALSE`,
       [
-        nextTitle,
-        nextDescription,
-        nextStatus,
-        nextPriority,
-        nextPriorityLocked,
-        nextAssignedTo,
-        nextTaskType,
-        nextProduct,
-        nextCategory,
-        nextStartDate,
-        nextAssignedDate,
-        nextDueDate,
-        nextReferenceImage,
+        nextTitle, nextDescription, nextStatus, nextPriority, nextPriorityLocked, nextAssignedTo, nextTaskType, nextProduct, nextCategory, nextStartDate, nextAssignedDate, nextDueDate, nextReferenceImage,
+        nextClientName, nextSeverity, nextBugType, nextEnvironment, nextAffectedModule, nextStepsToReproduce,
+        nextFeatureArea, nextStoryPoints, nextFeaturePriority, nextAcceptanceCriteria,
+        nextEnhancementType, nextImpactLevel, nextEffortEstimate, nextImprovementDetail,
+        nextStoryRole, nextEpic, nextPersona, nextStoryNotes,
         req.params.id,
       ]
     );
