@@ -7,34 +7,58 @@ const initials = (name) => {
 };
 
 const TeamSnapshot = ({ memberSummary, members, maxLoad }) => (
-  <article className="rounded-2xl bg-white/[0.92] border border-gray-200 shadow-sm px-3.5 py-3.5">
-    <header className="flex justify-between items-center mb-3">
-      <h2 className="font-display text-[21px] font-bold">Team Snapshot</h2>
-      <span className="text-xs text-gray-500">{members.length} members</span>
+  <article className="relative overflow-hidden rounded-[24px] bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] px-5 py-6">
+    <div className="absolute top-0 left-0 w-40 h-40 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
+    
+    <header className="flex justify-between items-end mb-5 relative z-10">
+      <div>
+        <h2 className="font-display text-2xl font-extrabold text-slate-900 tracking-tight">Team Snapshot</h2>
+        <p className="text-xs text-slate-500 font-medium mt-0.5">Top contributors by active tasks</p>
+      </div>
+      <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-full px-3 py-1 border border-slate-200/50">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+        </span>
+        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">{members.length} Members</span>
+      </div>
     </header>
     
-    {memberSummary.length === 0 && <p className="text-xs text-gray-500">No members in this team yet.</p>}
-    
-    {memberSummary.map((member) => (
-      <div key={member.id} className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-xl grid place-items-center text-white text-[11px] font-extrabold bg-gradient-to-br from-[#2f5dff] to-[#0ea5e9]">
-            {initials(member.name)}
-          </span>
-          <div>
-            <p className="text-xs font-bold">{member.name}</p>
-            <span className="text-[11px] text-gray-500">{member.role || member.team_role || 'Member'}</span>
+    <div className="flex flex-col gap-3.5 relative z-10">
+      {memberSummary.length === 0 && (
+        <div className="text-center py-6 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <p className="text-sm text-slate-500 font-medium">No members in this team yet.</p>
+        </div>
+      )}
+      
+      {memberSummary.map((member) => (
+        <div key={member.id} className="group flex items-center justify-between gap-3 p-2 -mx-2 rounded-xl hover:bg-slate-50 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="w-10 h-10 rounded-2xl grid place-items-center text-white text-xs font-extrabold bg-gradient-to-br from-indigo-500 via-blue-500 to-sky-400 shadow-[0_4px_12px_rgba(59,130,246,0.3)] transform group-hover:scale-105 transition-transform">
+                {initials(member.name)}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800 leading-tight">{member.name}</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{member.role || member.team_role || 'Member'}</span>
+            </div>
+          </div>
+          
+          <div className="w-32 flex flex-col items-end gap-1.5">
+            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden shadow-inner border border-slate-200/40">
+              <span 
+                className="block h-full bg-gradient-to-r from-blue-500 to-sky-400 transition-all duration-700 ease-out" 
+                style={{ width: `${Math.round((member.load / maxLoad) * 100)}%` }} 
+              />
+            </div>
+            <strong className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide">
+              {member.load} Active
+            </strong>
           </div>
         </div>
-        
-        <div className="w-[44%]">
-          <div className="h-1.5 rounded-full bg-[#e8edf8] overflow-hidden">
-            <span className="block h-full bg-gradient-to-r from-[#2f5dff] to-[#60a5fa]" style={{ width: `${Math.round((member.load / maxLoad) * 100)}%` }} />
-          </div>
-          <small className="block text-[10px] text-gray-500 text-right mt-1">{member.load} active</small>
-        </div>
-      </div>
-    ))}
+      ))}
+    </div>
   </article>
 );
 

@@ -141,8 +141,8 @@ const Dashboard = () => {
       )}
 
       {selectedTeam && (
-        <section className="grid grid-cols-[2fr_1fr] gap-3.5 items-start">
-          <div className="flex flex-col gap-3.5">
+        <section className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3.5 items-start">
+          <div className="flex flex-col gap-3.5 min-w-0">
             <TaskWorkspace
               view={view}
               setView={setView}
@@ -169,7 +169,7 @@ const Dashboard = () => {
             />
           </div>
 
-          <aside className="flex flex-col gap-3.5 sticky top-[78px]">
+          <aside className="flex flex-col gap-3.5 sticky top-[78px] min-w-0">
             <PriorityBreakdown priorityStats={priorityStats} stats={stats} />
             <TeamSnapshot memberSummary={memberSummary} members={members} maxLoad={maxLoad} />
             <Reminders reminders={reminders} />
