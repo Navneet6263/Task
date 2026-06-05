@@ -178,9 +178,11 @@ const TaskEditFields = ({ t, up, opts, cats }) => (
 );
 
 /* ── Main component ─────────────────────────────────────────── */
-const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTask, handleDelete, handlePanelUpdate, members, availableTaskOptions, selectedTaskCategories }) => {
+const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTask, handleDelete, handleApproveDelete, handleRejectDelete, handlePanelUpdate, members, availableTaskOptions, selectedTaskCategories }) => {
   const type = t.issue_type || 'task';
   const up = (field, value) => handlePanelUpdate(field, value);
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
+  const isCreator = t.assigned_by === user.id;
 
   return (
     <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={() => setSelectedTask(null)}>
@@ -224,7 +226,21 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
             </div>
           )}
 
-          <button type="button" className="mt-auto border border-[rgba(239,68,68,0.4)] bg-[rgba(239,68,68,0.1)] text-[#fca5a5] rounded-xl px-4 py-2.5 text-sm font-bold cursor-pointer hover:bg-[rgba(239,68,68,0.22)]" onClick={() => handleDelete(t.id)}>Delete Task</button>
+          {t.delete_requested_by ? (
+            <div className="mt-auto flex flex-col gap-2 p-3 rounded-xl bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.2)]">
+              <span className="text-xs text-[#fca5a5] font-semibold text-center">Delete requested by {t.delete_requested_by_name || 'User'}</span>
+              {isCreator ? (
+                <div className="flex gap-2">
+                  <button type="button" className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer" onClick={() => handleApproveDelete(t.id)}>Approve</button>
+                  <button type="button" className="flex-1 bg-gray-500 hover:bg-gray-600 text-white rounded-lg px-2 py-1.5 text-xs font-bold cursor-pointer" onClick={() => handleRejectDelete(t.id)}>Reject</button>
+                </div>
+              ) : (
+                <span className="text-[10px] text-center text-[#fca5a5]/70">Pending approval...</span>
+              )}
+            </div>
+          ) : (
+            <button type="button" className="mt-auto border border-[rgba(239,68,68,0.4)] bg-[rgba(239,68,68,0.1)] text-[#fca5a5] rounded-xl px-4 py-2.5 text-sm font-bold cursor-pointer hover:bg-[rgba(239,68,68,0.22)]" onClick={() => handleDelete(t.id)}>Delete Task</button>
+          )}
         </div>
 
         {/* RIGHT */}

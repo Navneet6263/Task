@@ -16,7 +16,10 @@ const dateLabel = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, handleStatusChange, handleDelete, handlePickBug, handleResolveBug }) => (
+const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, handleStatusChange, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug }) => {
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
+  
+  return (
   <div className="overflow-auto">
     <table className="w-full min-w-[780px] border-collapse">
       <thead>
@@ -102,7 +105,18 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, h
                   </select>
                 )}
                 
-                <button type="button" className="h-[38px] border border-red-200 rounded-xl bg-red-100 text-red-700 text-sm font-bold px-3.5 cursor-pointer" onClick={() => handleDelete(task.id)}>Delete</button>
+                {task.delete_requested_by ? (
+                  task.assigned_by === user.id ? (
+                    <div className="flex gap-1">
+                      <button type="button" className="h-[38px] border border-red-200 rounded-xl bg-red-500 text-white text-xs font-bold px-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleApproveDelete(task.id); }}>Approve Delete</button>
+                      <button type="button" className="h-[38px] border border-gray-300 rounded-xl bg-gray-500 text-white text-xs font-bold px-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRejectDelete(task.id); }}>Reject</button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-bold text-red-500 px-2">Delete Pending</span>
+                  )
+                ) : (
+                  <button type="button" className="h-[38px] border border-red-200 rounded-xl bg-red-100 text-red-700 text-sm font-bold px-3.5 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}>Delete</button>
+                )}
               </div>
             </td>
           </tr>
@@ -116,6 +130,7 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, h
       </tbody>
     </table>
   </div>
-);
+  );
+};
 
 export default TaskListView;

@@ -19,6 +19,8 @@ const TaskWorkspace = ({
   setSheetTab,
   handleStatusChange,
   handleDelete,
+  handleApproveDelete,
+  handleRejectDelete,
   handlePickBug,
   handleResolveBug,
   page,
@@ -72,6 +74,8 @@ const TaskWorkspace = ({
         setSheetTab={setSheetTab}
         handleStatusChange={handleStatusChange}
         handleDelete={handleDelete}
+        handleApproveDelete={handleApproveDelete}
+        handleRejectDelete={handleRejectDelete}
         handlePickBug={handlePickBug}
         handleResolveBug={handleResolveBug}
       />
@@ -83,6 +87,8 @@ const TaskWorkspace = ({
         setSelectedTask={setSelectedTask}
         setSheetTab={setSheetTab}
         handleStatusChange={handleStatusChange}
+        handleApproveDelete={handleApproveDelete}
+        handleRejectDelete={handleRejectDelete}
       />
     )}
     

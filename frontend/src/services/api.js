@@ -45,6 +45,8 @@ export const tasks = {
   togglePriorityLock: (id) => api.patch(`/tasks/${id}/priority-lock`),
   reassign: (id, assign_to) => api.patch(`/tasks/${id}/reassign`, { assign_to }),
   delete: (id) => api.delete(`/tasks/${id}`),
+  approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
+  rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),
 };
 
 export const logs = {

@@ -392,12 +392,14 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
         u1.name as assigned_to_name, u1.avatar as assigned_to_avatar,
         u2.name as assigned_by_name,
         u3.name as reported_by_name,
-        u4.name as picked_by_name
+        u4.name as picked_by_name,
+        u5.name as delete_requested_by_name
        FROM tasks t
        LEFT JOIN users u1 ON t.assigned_to = u1.id
        LEFT JOIN users u2 ON t.assigned_by = u2.id
        LEFT JOIN users u3 ON t.reported_by = u3.id
        LEFT JOIN users u4 ON t.picked_by = u4.id
+       LEFT JOIN users u5 ON t.delete_requested_by = u5.id
        WHERE ${where}
        ORDER BY t.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -426,10 +428,11 @@ router.get('/my', authenticate, async (req, res) => {
     );
 
     const [tasks] = await db.execute(
-      `SELECT t.*, te.name as team_name, u.name as assigned_by_name
+      `SELECT t.*, te.name as team_name, u.name as assigned_by_name, u2.name as delete_requested_by_name
        FROM tasks t
        LEFT JOIN teams te ON t.team_id = te.id
        LEFT JOIN users u ON t.assigned_by = u.id
+       LEFT JOIN users u2 ON t.delete_requested_by = u2.id
        WHERE t.assigned_to = ? AND t.is_deleted = FALSE
        ORDER BY t.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -923,15 +926,27 @@ router.patch('/:id/priority-lock', authenticate, async (req, res) => {
   }
 });
 
-// Soft delete task
+// Soft delete task (or request deletion if not creator)
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     const [task] = await db.execute(
-      'SELECT id, team_id FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
+      'SELECT id, team_id, assigned_by FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
     );
     if (task.length === 0) return res.status(404).json({ error: 'Task not found', code: 'NOT_FOUND' });
 
     const teamId = task[0].team_id;
+    
+    // If the user requesting deletion is NOT the creator (assigned_by), send a delete request instead
+    if (task[0].assigned_by && task[0].assigned_by !== req.userId) {
+      await db.execute(
+        'UPDATE tasks SET delete_requested_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+        [req.userId, req.params.id]
+      );
+      if (teamId) ws.broadcast(teamId, 'task_updated', { id: req.params.id });
+      return res.json({ message: 'Delete request sent to the task creator' });
+    }
+
+    // Otherwise, delete immediately
     await db.execute(
       'UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.id]
     );
@@ -939,6 +954,48 @@ router.delete('/:id', authenticate, async (req, res) => {
     res.json({ message: 'Task deleted' });
   } catch (error) {
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
+  }
+});
+
+// Approve delete request
+router.patch('/:id/approve-delete', authenticate, async (req, res) => {
+  try {
+    const [task] = await db.execute(
+      'SELECT id, team_id, assigned_by FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
+    );
+    if (task.length === 0) return res.status(404).json({ error: 'Task not found' });
+    if (task[0].assigned_by !== req.userId) return res.status(403).json({ error: 'Only the task creator can approve deletion' });
+
+    const teamId = task[0].team_id;
+    await db.execute(
+      'UPDATE tasks SET delete_requested_by = NULL, is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+      [req.params.id]
+    );
+    if (teamId) ws.broadcast(teamId, 'task_deleted', { id: req.params.id });
+    res.json({ message: 'Task deleted' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Reject delete request
+router.patch('/:id/reject-delete', authenticate, async (req, res) => {
+  try {
+    const [task] = await db.execute(
+      'SELECT id, team_id, assigned_by FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
+    );
+    if (task.length === 0) return res.status(404).json({ error: 'Task not found' });
+    if (task[0].assigned_by !== req.userId) return res.status(403).json({ error: 'Only the task creator can reject deletion' });
+
+    const teamId = task[0].team_id;
+    await db.execute(
+      'UPDATE tasks SET delete_requested_by = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
+      [req.params.id]
+    );
+    if (teamId) ws.broadcast(teamId, 'task_updated', { id: req.params.id });
+    res.json({ message: 'Delete request rejected' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 

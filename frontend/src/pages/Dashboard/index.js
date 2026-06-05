@@ -34,11 +34,14 @@ const Dashboard = () => {
     mgrForm,
     setMgrForm,
     updateTaskFormField,
+    updateMgrFormField,
     handleReferenceImageChange,
     handleCreateTask,
     handleManagerAssign,
     handleStatusChange,
     handleDelete,
+    handleApproveDelete,
+    handleRejectDelete,
     handlePickBug,
     handleResolveBug,
     handlePanelUpdate,
@@ -46,6 +49,7 @@ const Dashboard = () => {
     openTaskComposer,
     availableTaskOptions,
     createTaskCategories,
+    mgrTaskCategories,
     selectedTaskCategories,
   } = useDashboardLogic(selectedTeam, members, orgUsers, setOrgUsers, setShowTaskModal, setShowMgrModal, selectedTask, setSelectedTask, () => selectTeam(selectedTeam))
 
@@ -155,6 +159,8 @@ const Dashboard = () => {
               setSheetTab={setSheetTab}
               handleStatusChange={handleStatusChange}
               handleDelete={handleDelete}
+              handleApproveDelete={handleApproveDelete}
+              handleRejectDelete={handleRejectDelete}
               handlePickBug={handlePickBug}
               handleResolveBug={handleResolveBug}
               page={page}
@@ -178,6 +184,8 @@ const Dashboard = () => {
           setSheetTab={setSheetTab}
           setSelectedTask={setSelectedTask}
           handleDelete={handleDelete}
+          handleApproveDelete={handleApproveDelete}
+          handleRejectDelete={handleRejectDelete}
           handlePanelUpdate={handlePanelUpdate}
           members={members}
           availableTaskOptions={availableTaskOptions}
@@ -190,8 +198,11 @@ const Dashboard = () => {
         setShowMgrModal={setShowMgrModal}
         mgrForm={mgrForm}
         setMgrForm={setMgrForm}
+        updateMgrFormField={updateMgrFormField}
         handleManagerAssign={handleManagerAssign}
         orgUsers={orgUsers}
+        availableTaskOptions={availableTaskOptions}
+        mgrTaskCategories={mgrTaskCategories}
       />
 
       <CreateTaskModal

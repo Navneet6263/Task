@@ -48,7 +48,7 @@ const buildInitialTaskForm = () => {
   };
 };
 
-const initialMgrForm = { title: '', description: '', priority: 'MEDIUM', assigned_to: '', due_date: '' };
+const initialMgrForm = buildInitialTaskForm();
 
 const filterCategoryOptions = (options = [], taskType = '') => {
   if (!taskType) return options;
@@ -76,8 +76,16 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
   useEffect(() => { fetchTaskFormOptions(); }, [fetchTaskFormOptions]);
 
   const updateTaskFormField = (field, value) => {
-    setTaskFormState((current) => {
-      const next = { ...current, [field]: value };
+    setTaskFormState((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'task_type') next.category = '';
+      return next;
+    });
+  };
+
+  const updateMgrFormField = (field, value) => {
+    setMgrForm((prev) => {
+      const next = { ...prev, [field]: value };
       if (field === 'task_type') next.category = '';
       return next;
     });
@@ -147,8 +155,31 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
   const handleDelete = async (taskId) => {
     if (!window.confirm('Delete this task?')) return;
     try {
-      await tasks.delete(taskId);
+      const res = await tasks.delete(taskId);
+      if (res.data?.message === 'Delete request sent to the task creator') {
+        alert('Delete request sent to the task creator.');
+      }
       setSelectedTask(null);
+      await refresh();
+    } catch (error) {}
+  };
+
+  const handleApproveDelete = async (taskId) => {
+    if (!window.confirm('Approve deletion of this task?')) return;
+    try {
+      await tasks.approveDelete(taskId);
+      setSelectedTask(null);
+      await refresh();
+    } catch (error) {}
+  };
+
+  const handleRejectDelete = async (taskId) => {
+    try {
+      await tasks.rejectDelete(taskId);
+      // If we are in the modal, we update the selected task to hide the request UI
+      if (selectedTask?.id === taskId) {
+        setSelectedTask(prev => ({ ...prev, delete_requested_by: null, delete_requested_by_name: null }));
+      }
       await refresh();
     } catch (error) {}
   };
@@ -186,8 +217,9 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
   const availableTaskOptions = useMemo(() => ({ task_types: taskFormOptions.task_types?.length ? taskFormOptions.task_types : DEFAULT_TASK_FORM_OPTIONS.task_types, products: taskFormOptions.products?.length ? taskFormOptions.products : DEFAULT_TASK_FORM_OPTIONS.products, categories: taskFormOptions.categories?.length ? taskFormOptions.categories : DEFAULT_TASK_FORM_OPTIONS.categories }), [taskFormOptions]);
 
   const createTaskCategories = useMemo(() => filterCategoryOptions(availableTaskOptions.categories, taskForm.task_type), [availableTaskOptions.categories, taskForm.task_type]);
+  const mgrTaskCategories = useMemo(() => filterCategoryOptions(availableTaskOptions.categories, mgrForm.task_type), [availableTaskOptions.categories, mgrForm.task_type]);
 
   const selectedTaskCategories = useMemo(() => filterCategoryOptions(availableTaskOptions.categories, selectedTask?.task_type), [availableTaskOptions.categories, selectedTask?.task_type]);
 
-  return { taskForm, setTaskForm: setTaskFormState, taskFormOptions, mgrForm, setMgrForm, updateTaskFormField, handleReferenceImageChange, handleCreateTask, handleManagerAssign, handleStatusChange, handleDelete, handlePickBug, handleResolveBug, handlePanelUpdate, openManagerModal, openTaskComposer, availableTaskOptions, createTaskCategories, selectedTaskCategories };
+  return { taskForm, setTaskForm: setTaskFormState, taskFormOptions, mgrForm, setMgrForm, updateTaskFormField, updateMgrFormField, handleReferenceImageChange, handleCreateTask, handleManagerAssign, handleStatusChange, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug, handlePanelUpdate, openManagerModal, openTaskComposer, availableTaskOptions, createTaskCategories, mgrTaskCategories, selectedTaskCategories };
 };

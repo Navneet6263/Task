@@ -10,7 +10,10 @@ const dateLabel = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusChange }) => (
+const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusChange, handleApproveDelete, handleRejectDelete }) => {
+  const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
+  
+  return (
   <div className="grid grid-cols-4 gap-2.5">
     {STATUS_OPTIONS.map((status) => {
       const columnItems = filtered.filter((task) => task.status === status);
@@ -45,6 +48,17 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
                   <option key={value} value={value}>{STATUS_LABEL[value]}</option>
                 ))}
               </select>
+
+              {task.delete_requested_by ? (
+                task.assigned_by === user.id ? (
+                  <div className="flex gap-1 mt-1">
+                    <button type="button" className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded px-2 py-1.5 text-[10px] font-bold cursor-pointer" onClick={(e) => { e.stopPropagation(); handleApproveDelete(task.id); }}>Approve Delete</button>
+                    <button type="button" className="flex-1 bg-gray-500 hover:bg-gray-600 text-white rounded px-2 py-1.5 text-[10px] font-bold cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRejectDelete(task.id); }}>Reject</button>
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[10px] text-red-500 font-bold text-center bg-red-50 py-1 rounded">Delete Request Pending</div>
+                )
+              ) : null}
             </div>
           ))}
           
@@ -53,6 +67,7 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
       );
     })}
   </div>
-);
+  );
+};
 
 export default TaskBoardView;
