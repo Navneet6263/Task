@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import TaskSetupSection from './TaskComposer/TaskSetupSection';
 
 const ManagerAssignModal = ({ 
