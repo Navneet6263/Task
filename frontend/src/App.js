@@ -15,6 +15,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import LiveReviewRoom from './pages/LiveReviewRoom';
 import TeamWorkspaceRoom from './pages/TeamWorkspaceRoom';
 import Layout from './components/Layout';
+import Communications from './pages/Communications';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token') || localStorage.getItem('company_token');
@@ -47,6 +48,7 @@ function App() {
           <Route path="pms-hub" element={<PmsHub />} />
           <Route path="admin" element={<AdminPanel />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="communications" element={<Communications />} />
         </Route>
       </Routes>
     </Router>

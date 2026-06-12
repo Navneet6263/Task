@@ -25,7 +25,14 @@ const TaskTimelineView = ({ filtered, setSelectedTask, setSheetTab }) => (
         onClick={() => { setSelectedTask(task); setSheetTab('details'); }}
       >
         <div className="flex justify-between gap-2 mb-2">
-          <strong className="text-sm">{task.title}</strong>
+          <strong className="text-sm flex items-center gap-1.5">
+            {task.title}
+            {task.unread_comments > 0 && (
+              <span className="w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-[0_2px_6px_rgba(239,68,68,0.35)] shrink-0">
+                {task.unread_comments}
+              </span>
+            )}
+          </strong>
           <span className="text-[11px] text-gray-500">{dateLabel(task.due_date)}</span>
         </div>
         

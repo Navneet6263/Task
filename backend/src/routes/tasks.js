@@ -342,6 +342,26 @@ router.delete('/form-options/:id', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/tasks/clients - Get distinct client names for autocomplete
+router.get('/clients', authenticate, async (req, res) => {
+  try {
+    const orgId = req.orgId;
+    if (!orgId) return res.status(403).json({ error: 'Org ID required' });
+
+    const [rows] = await db.execute(
+      `SELECT DISTINCT client_name 
+       FROM tasks 
+       WHERE org_id = ? AND client_name IS NOT NULL AND client_name != '' AND is_deleted = FALSE 
+       ORDER BY client_name ASC 
+       LIMIT 50`,
+      [orgId]
+    );
+    res.json(rows.map(r => r.client_name));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get tasks for a team with pagination
 router.get('/team/:teamId', authenticate, async (req, res) => {
   try {
@@ -393,7 +413,9 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
         u2.name as assigned_by_name,
         u3.name as reported_by_name,
         u4.name as picked_by_name,
-        u5.name as delete_requested_by_name
+        u5.name as delete_requested_by_name,
+        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) as total_comments,
+        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) as unread_comments
        FROM tasks t
        LEFT JOIN users u1 ON t.assigned_to = u1.id
        LEFT JOIN users u2 ON t.assigned_by = u2.id
@@ -428,7 +450,9 @@ router.get('/my', authenticate, async (req, res) => {
     );
 
     const [tasks] = await db.execute(
-      `SELECT t.*, te.name as team_name, u.name as assigned_by_name, u2.name as delete_requested_by_name
+      `SELECT t.*, te.name as team_name, u.name as assigned_by_name, u2.name as delete_requested_by_name,
+        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) as total_comments,
+        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) as unread_comments
        FROM tasks t
        LEFT JOIN teams te ON t.team_id = te.id
        LEFT JOIN users u ON t.assigned_by = u.id

@@ -1,4 +1,5 @@
 import React from 'react';
+import ClientAutocomplete from './ClientAutocomplete';
 
 /* ── Shared styled atoms ────────────────────────────────────────────────── */
 const cls = `h-[42px] rounded-xl border-2 border-gray-200 bg-white text-gray-900 text-sm px-3.5
@@ -85,8 +86,14 @@ const TaskSetupSection = ({ taskForm: f, updateTaskFormField: u, availableTaskOp
       </div>
 
       {/* Client Name — always visible */}
-      <div className={`rounded-xl border-l-4 ${ACCENT[type]||ACCENT.task} px-3.5 py-3`}>
-        <Fld label="Client Name"><Inp placeholder="Enter client or project name" value={f.client_name||''} onChange={e=>u('client_name',e.target.value)} /></Fld>
+      <div className={`rounded-xl border-l-4 ${ACCENT[type]||ACCENT.task} px-3.5 py-3 relative z-50`}>
+        <Fld label="Client Name">
+          <ClientAutocomplete 
+            placeholder="Enter client or project name" 
+            value={f.client_name||''} 
+            onChange={val => u('client_name', val)} 
+          />
+        </Fld>
       </div>
 
       {/* Dynamic fields */}

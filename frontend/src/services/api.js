@@ -47,6 +47,8 @@ export const tasks = {
   delete: (id) => api.delete(`/tasks/${id}`),
   approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
   rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),
+  getClients: () => api.get('/tasks/clients'),
+  markTaskViewed: (id) => api.patch(`/tasks/${id}/view`),
 };
 
 export const logs = {
@@ -92,6 +94,10 @@ export const comments = {
   create: (data) => api.post('/comments', data),
   update: (id, data) => api.put(`/comments/${id}`, data),
   delete: (id) => api.delete(`/comments/${id}`),
+};
+
+export const communications = {
+  send: (data) => api.post('/communications/send', data),
 };
 
 export default api;

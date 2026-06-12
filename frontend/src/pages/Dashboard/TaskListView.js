@@ -49,7 +49,14 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, h
                   {(task.issue_type || 'task').toUpperCase()}
                 </span>
                 {task.manager_assigned && <span className="text-[10px] font-extrabold rounded-full px-2 py-0.5 bg-amber-100 text-amber-800">MANAGER</span>}
-                <strong className="font-bold">{task.title}</strong>
+                <strong className="font-bold relative flex items-center gap-1.5">
+                  {task.title}
+                  {task.unread_comments > 0 && (
+                    <span className="w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-[0_2px_6px_rgba(239,68,68,0.35)] shrink-0">
+                      {task.unread_comments}
+                    </span>
+                  )}
+                </strong>
               </div>
             </td>
             

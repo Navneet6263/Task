@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import TaskComments from '../../components/TaskComments';
+import { tasks } from '../../services/api';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
@@ -184,6 +185,13 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
 
+  useEffect(() => {
+    if (t && Number(t.assigned_to) === Number(user.id)) {
+      tasks.markTaskViewed(t.id).catch(() => {});
+      t.unread_comments = 0;
+    }
+  }, [t, user.id]);
+
   return (
     <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={() => setSelectedTask(null)}>
       <aside className="grid grid-cols-[360px_1fr] w-[min(1080px,98vw)] h-[min(88vh,780px)] rounded-3xl bg-white shadow-[0_32px_80px_rgba(15,23,42,0.32)] overflow-hidden animate-[dsv2Slide_0.22s_cubic-bezier(.22,.68,0,1.2)]" onClick={e => e.stopPropagation()}>
@@ -250,7 +258,11 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
               <button key={tab} type="button"
                 className={`px-4 py-3.5 text-sm font-bold border-b-[3px] mb-[-2px] cursor-pointer capitalize whitespace-nowrap bg-none ${sheetTab === tab ? 'text-[#1e40af] border-[#2f5dff]' : 'text-gray-500 border-transparent hover:text-[#2f5dff]'}`}
                 onClick={() => setSheetTab(tab)}>
-                {tab === 'details' ? 'Details' : tab === 'edit' ? 'Edit' : 'Comments'}
+                {tab === 'details' ? 'Details' : tab === 'edit' ? 'Edit' : (
+                  <span className="flex items-center gap-1.5">
+                    Comments {t.total_comments > 0 && <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full">{t.total_comments}</span>}
+                  </span>
+                )}
               </button>
             ))}
           </div>

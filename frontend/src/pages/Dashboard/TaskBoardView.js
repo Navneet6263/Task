@@ -27,9 +27,14 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
           {columnItems.map((task) => (
             <div
               key={task.id}
-              className="rounded-xl border border-[#e5e9f5] bg-white px-2.5 py-2.5 mb-2 flex flex-col gap-2 cursor-pointer"
+              className="relative rounded-xl border border-[#e5e9f5] bg-white px-2.5 py-2.5 mb-2 flex flex-col gap-2 cursor-pointer"
               onClick={() => { setSelectedTask(task); setSheetTab('details'); }}
             >
+              {task.unread_comments > 0 && (
+                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-[0_2px_8px_rgba(239,68,68,0.4)] border-2 border-white z-10">
+                  {task.unread_comments}
+                </div>
+              )}
               <h5 className="text-sm font-bold">{task.title}</h5>
               <p className="text-xs text-gray-500">{task.assigned_to_name || 'Unassigned'}</p>
               
