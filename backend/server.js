@@ -55,6 +55,10 @@ app.use((req, res, next) => {
 ws.init(server);
 app.set('ws', ws);
 
+// Health check routes
+app.get('/', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' }));
+app.get('/api', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' }));
+
 // Rate limiting
 app.use('/api/auth', authLimiter);
 app.use('/api', apiLimiter);
