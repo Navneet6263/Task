@@ -10,8 +10,10 @@ export const API_BASE_URL = normalizeApiBase(process.env.REACT_APP_API_URL);
 
 export const SA_BASE_URL = `${API_BASE_URL}/sa`;
 
-export const WS_BASE_URL = API_BASE_URL
+export const WS_BASE_URL = `${API_BASE_URL
   .replace(/^http:\/\//i, 'ws://')
-  .replace(/^https:\/\//i, 'wss://');
+  .replace(/^https:\/\//i, 'wss://')
+  .replace(/\/+$/, '')}/`;
+
 
 
