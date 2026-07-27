@@ -174,18 +174,50 @@ const TeamChat = ({
     resetRemote();
   };
 
+  const chatRetryRef = useRef(0);
+  const chatTimeoutRef = useRef(null);
+
   const connectInternalSocket = () => {
     const authToken = token();
     if (!authToken) return;
 
-    const ws = new WebSocket(`${WS_BASE_URL}?token=${authToken}`);
-    internalWsRef.current = ws;
-    setInternalSocketVersion((prev) => prev + 1);
+    if (internalWsRef.current && (internalWsRef.current.readyState === WebSocket.CONNECTING || internalWsRef.current.readyState === WebSocket.OPEN)) {
+      return;
+    }
 
-    ws.onclose = () => {
-      if (token()) setTimeout(connectInternalSocket, 4000);
-    };
+    try {
+      const ws = new WebSocket(`${WS_BASE_URL}?token=${authToken}`);
+      internalWsRef.current = ws;
+
+      ws.onopen = () => {
+        chatRetryRef.current = 0;
+        setInternalSocketVersion((prev) => prev + 1);
+      };
+
+      ws.onerror = () => {
+        // Prevent unhandled error event panic
+      };
+
+      ws.onclose = () => {
+        internalWsRef.current = null;
+        if (!token()) return;
+
+        chatRetryRef.current += 1;
+        if (chatRetryRef.current <= 5) {
+          const delay = Math.min(60000, 5000 * Math.pow(2, chatRetryRef.current - 1));
+          if (chatTimeoutRef.current) clearTimeout(chatTimeoutRef.current);
+          chatTimeoutRef.current = setTimeout(connectInternalSocket, delay);
+        } else {
+          if (chatTimeoutRef.current) clearTimeout(chatTimeoutRef.current);
+          chatTimeoutRef.current = setTimeout(() => {
+            chatRetryRef.current = 0;
+            connectInternalSocket();
+          }, 120000);
+        }
+      };
+    } catch (_) {}
   };
+
 
   const fetchTeams = async () => {
     try {

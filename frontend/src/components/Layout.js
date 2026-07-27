@@ -37,28 +37,60 @@ const Layout = () => {
     } catch (error) {}
   }, []);
 
+  const wsRetryRef = useRef(0);
+  const wsTimeoutRef = useRef(null);
+
   const connectWS = useCallback(() => {
     const token = localStorage.getItem('company_token') || localStorage.getItem('token');
     if (!token) return;
 
-    const ws = new WebSocket(`${WS_BASE_URL}?token=${token}`);
-    wsRef.current = ws;
-    setSocketVersion((prev) => prev + 1);
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+      return;
+    }
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (['task_created', 'task_updated', 'overdue_alert'].includes(msg.event)) {
-          fetchNotifications();
+    try {
+      const ws = new WebSocket(`${WS_BASE_URL}?token=${token}`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        wsRetryRef.current = 0;
+        setSocketVersion((prev) => prev + 1);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (['task_created', 'task_updated', 'overdue_alert'].includes(msg.event)) {
+            fetchNotifications();
+          }
+        } catch (error) {}
+      };
+
+      ws.onerror = () => {
+        // Prevent unhandled error event panic
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        const activeToken = localStorage.getItem('company_token') || localStorage.getItem('token');
+        if (!activeToken) return;
+
+        wsRetryRef.current += 1;
+        if (wsRetryRef.current <= 5) {
+          const delay = Math.min(60000, 5000 * Math.pow(2, wsRetryRef.current - 1));
+          if (wsTimeoutRef.current) clearTimeout(wsTimeoutRef.current);
+          wsTimeoutRef.current = setTimeout(connectWS, delay);
+        } else {
+          if (wsTimeoutRef.current) clearTimeout(wsTimeoutRef.current);
+          wsTimeoutRef.current = setTimeout(() => {
+            wsRetryRef.current = 0;
+            connectWS();
+          }, 120000);
         }
-      } catch (error) {}
-    };
-
-    ws.onclose = () => {
-      const activeToken = localStorage.getItem('company_token') || localStorage.getItem('token');
-      if (activeToken) setTimeout(connectWS, 5000);
-    };
+      };
+    } catch (_) {}
   }, [fetchNotifications]);
+
 
   useEffect(() => {
     fetchNotifications();
