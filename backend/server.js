@@ -8,6 +8,7 @@ const ws = require('./src/websocket');
 const { ensureCollaborationSchema } = require('./src/bootstrap/collaborationSchema');
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
 const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
+const { fetchEmailsAndCreateTasks } = require('./src/utils/emailToTask');
 
 const app = express();
 const server = http.createServer(app);
@@ -102,6 +103,11 @@ cron.schedule('0 * * * *', async () => {
     }
     if (overdue.length) console.log(`[CRON] ${overdue.length} overdue alerts sent`);
   } catch (e) { console.error('[CRON] overdue error:', e.message); }
+});
+
+// Cron: Email → Task inbox check every 2 minutes
+cron.schedule('*/2 * * * *', () => {
+  fetchEmailsAndCreateTasks().catch((e) => console.error('[CRON] email→task error:', e.message));
 });
 
 app.use(notFound);

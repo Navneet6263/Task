@@ -5,7 +5,12 @@ const db = require('../config/database');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
+const { sendResetOtp } = require('../utils/mailer');
 const router = express.Router();
+
+// In-memory OTP store: { email → { otp, expiresAt } }
+const otpStore = new Map();
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
@@ -179,15 +184,50 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// ── Step 1: Send OTP to email ──
+router.post('/send-reset-otp', async (req, res) => {
+  try {
+    const normalizedEmail = normalizeEmail(req.body.email);
+    if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
+
+    // Check if email exists (users or company_admins)
+    const [users] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE LIMIT 1', [normalizedEmail]);
+    const [cas]   = await db.execute('SELECT id FROM company_admins WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (!users.length && !cas.length) return res.status(404).json({ error: 'No account found for this email' });
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+    otpStore.set(normalizedEmail, { otp, expiresAt: Date.now() + OTP_TTL_MS });
+
+    await sendResetOtp(normalizedEmail, otp);
+    res.json({ message: 'OTP sent to your email. Valid for 10 minutes.' });
+  } catch (error) {
+    console.error('[send-reset-otp]', error.message);
+    res.status(500).json({ error: 'Failed to send OTP. Check email configuration.' });
+  }
+});
+
+// ── Step 2: Verify OTP + set new password ──
 router.post('/reset-password', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, otp } = req.body;
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const nextPassword = String(password || '');
 
-    if (!normalizedEmail || !nextPassword) {
-      return res.status(422).json({ error: 'Email and new password are required' });
+    if (!normalizedEmail || !nextPassword || !otp) {
+      return res.status(422).json({ error: 'Email, OTP, and new password are required' });
     }
+
+    // ── OTP Validation ──
+    const stored = otpStore.get(normalizedEmail);
+    if (!stored) return res.status(400).json({ error: 'OTP not found. Please request a new one.' });
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(normalizedEmail);
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+    if (stored.otp !== String(otp).trim()) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+    otpStore.delete(normalizedEmail); // consumed
 
     if (nextPassword.length < 4) {
       return res.status(422).json({ error: 'Password must be at least 4 characters' });
@@ -201,14 +241,8 @@ router.post('/reset-password', async (req, res) => {
       [normalizedEmail]
     );
     if (companyAdmins.length > 0) {
-      await db.execute(
-        'UPDATE company_admins SET password = ? WHERE email = ?',
-        [hashed, normalizedEmail]
-      );
-      await db.execute(
-        'UPDATE users SET password = ? WHERE email = ?',
-        [hashed, normalizedEmail]
-      );
+      await db.execute('UPDATE company_admins SET password = ? WHERE email = ?', [hashed, normalizedEmail]);
+      await db.execute('UPDATE users SET password = ? WHERE email = ?', [hashed, normalizedEmail]);
       updated = true;
     } else {
       const [users] = await db.execute(
@@ -216,22 +250,17 @@ router.post('/reset-password', async (req, res) => {
         [normalizedEmail]
       );
       if (users.length > 0) {
-        await db.execute(
-          'UPDATE users SET password = ? WHERE email = ? AND is_deleted = FALSE',
-          [hashed, normalizedEmail]
-        );
+        await db.execute('UPDATE users SET password = ? WHERE email = ? AND is_deleted = FALSE', [hashed, normalizedEmail]);
         updated = true;
       }
     }
 
-    if (!updated) {
-      return res.status(404).json({ error: 'No account found for this email' });
-    }
-
+    if (!updated) return res.status(404).json({ error: 'No account found for this email' });
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 module.exports = router;

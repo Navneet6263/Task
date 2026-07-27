@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
@@ -18,6 +19,23 @@ const dateLabel = (value) => {
 
 const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, handleStatusChange, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
+  const navigate = useNavigate();
+
+  const handleMailClick = (e, task) => {
+    e.stopPropagation();
+    // Save task context to localStorage — Communications page will pick this up
+    localStorage.setItem('comm_task_context', JSON.stringify({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      issue_type: task.issue_type,
+      priority: task.priority,
+      status: task.status,
+      client_name: task.client_name || '',
+      assigned_to_name: task.assigned_to_name || '',
+    }));
+    navigate('/communications');
+  };
   
   return (
   <div className="overflow-auto">
@@ -92,6 +110,18 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, h
             
             <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
               <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                {/* Mail / Send Email Icon */}
+                <button
+                  type="button"
+                  title="Send email about this task"
+                  onClick={(e) => handleMailClick(e, task)}
+                  className="h-[38px] w-[38px] flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)] transition-all duration-200 cursor-pointer"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                  </svg>
+                </button>
+
                 {task.issue_type === 'bug' && task.status !== 'DONE' && !task.picked_by && (
                   <button type="button" className="h-[38px] border border-gray-300 rounded-xl bg-white text-gray-700 text-sm font-bold px-3.5 cursor-pointer" onClick={() => handlePickBug(task.id)}>
                     Pick

@@ -124,31 +124,31 @@ router.get('/performance/:userId', authenticate, async (req, res) => {
 // Behavioral Insights for a team
 router.get('/behavioral/:teamId', authenticate, async (req, res) => {
   try {
-    // Accept delay: avg hours between task assigned and IN_PROGRESS
+    const teamId = req.params.teamId;
+
+    // Accept delay: avg hours from task created → first status change (IN_PROGRESS)
+    // Using a subquery approach compatible with SQL Server
     const [acceptDelay] = await db.execute(
       `SELECT u.id, u.name,
-        AVG(DATEDIFF(HOUR,
-          (SELECT TOP 1 created_at FROM audit_logs WHERE task_id = t.id AND activity = 'Task Assigned'),
-          (SELECT TOP 1 created_at FROM audit_logs WHERE task_id = t.id AND activity = 'Task Updated')
-        )) as avg_accept_delay_hours
+        AVG(CAST(DATEDIFF(HOUR, t.created_at, t.updated_at) AS FLOAT)) as avg_accept_delay_hours
+       FROM tasks t
+       JOIN users u ON t.assigned_to = u.id
+       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
+       WHERE t.team_id = ? AND t.is_deleted = FALSE AND t.status != 'TODO'
+       GROUP BY u.id, u.name`,
+      [teamId, teamId]
+    );
+
+    // After hours activity: tasks updated outside 8am–8pm
+    const [afterHours] = await db.execute(
+      `SELECT u.id, u.name,
+        COUNT(CASE WHEN DATEPART(HOUR, t.updated_at) >= 20 OR DATEPART(HOUR, t.updated_at) < 8 THEN 1 END) as after_hours_count
        FROM tasks t
        JOIN users u ON t.assigned_to = u.id
        JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
        WHERE t.team_id = ? AND t.is_deleted = FALSE
        GROUP BY u.id, u.name`,
-      [req.params.teamId, req.params.teamId]
-    );
-
-    // After hours activity count
-    const [afterHours] = await db.execute(
-      `SELECT u.id, u.name,
-        COUNT(CASE WHEN DATEPART(HOUR, al.created_at) >= 20 OR DATEPART(HOUR, al.created_at) < 8 THEN 1 END) as after_hours_count
-       FROM audit_logs al
-       JOIN users u ON al.user_id = u.id
-       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
-       WHERE al.team_id = ?
-       GROUP BY u.id, u.name`,
-      [req.params.teamId, req.params.teamId]
+      [teamId, teamId]
     );
 
     // Bottleneck: tasks stuck in IN_PROGRESS > 3 days
@@ -160,7 +160,7 @@ router.get('/behavioral/:teamId', authenticate, async (req, res) => {
          AND t.updated_at < DATEADD(DAY, -3, GETDATE())
          AND t.is_deleted = FALSE
        GROUP BY u.id, u.name`,
-      [req.params.teamId]
+      [teamId]
     );
 
     // Fast delivery: completed before deadline
@@ -173,14 +173,16 @@ router.get('/behavioral/:teamId', authenticate, async (req, res) => {
        JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
        WHERE t.team_id = ? AND t.is_deleted = FALSE
        GROUP BY u.id, u.name`,
-      [req.params.teamId, req.params.teamId]
+      [teamId, teamId]
     );
 
     res.json({ accept_delay: acceptDelay, after_hours: afterHours, bottlenecks, fast_delivery: fastDelivery });
   } catch (error) {
+    console.error('[analytics/behavioral]', error.message);
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }
 });
+
 
 // System health for admin
 router.get('/health', authenticate, async (req, res) => {

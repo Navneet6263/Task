@@ -194,13 +194,24 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
 
   return (
     <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={() => setSelectedTask(null)}>
-      <aside className="grid grid-cols-[360px_1fr] w-[min(1080px,98vw)] h-[min(88vh,780px)] rounded-3xl bg-white shadow-[0_32px_80px_rgba(15,23,42,0.32)] overflow-hidden animate-[dsv2Slide_0.22s_cubic-bezier(.22,.68,0,1.2)]" onClick={e => e.stopPropagation()}>
+        <aside className="relative grid grid-cols-[360px_1fr] w-[min(1080px,98vw)] h-[min(88vh,780px)] rounded-3xl bg-white shadow-[0_32px_80px_rgba(15,23,42,0.32)] overflow-hidden animate-[dsv2Slide_0.22s_cubic-bezier(.22,.68,0,1.2)]" onClick={e => e.stopPropagation()}>
+
+          {/* ── Close button — absolute top-right corner ── */}
+          <button
+            className="absolute top-4 right-4 z-50 bg-white/90 backdrop-blur border border-slate-200 text-slate-500 w-9 h-9 rounded-full text-[15px] cursor-pointer flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-md transition-all duration-200"
+            type="button"
+            onClick={() => setSelectedTask(null)}
+            title="Close"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
 
         {/* LEFT */}
         <div className="bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#1d4ed8] px-6 py-7 flex flex-col gap-4 overflow-y-auto text-white">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center">
             <div className="text-[11px] font-extrabold tracking-wider text-[#93c5fd] bg-white/[0.08] border border-white/[0.12] rounded-full px-3 py-1">TASK-{t.id}</div>
-            <button className="bg-white/10 border border-white/[0.18] text-white w-8 h-8 rounded-full text-[15px] cursor-pointer flex items-center justify-center hover:bg-white/[0.22]" type="button" onClick={() => setSelectedTask(null)}>✕</button>
           </div>
 
           <div className="flex gap-2 flex-wrap items-center">

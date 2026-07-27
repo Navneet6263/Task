@@ -23,6 +23,9 @@ const Dashboard = () => {
   const [page, setPage] = useState(1);
   const [filterPriority, setFilterPriority] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
   const [sheetTab, setSheetTab] = useState('details');
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -73,13 +76,16 @@ const Dashboard = () => {
   }, [selectTeam]);
 
   useEffect(() => { fetchTeams(); }, [fetchTeams]);
-  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, view]);
+  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterSearch, view]);
 
   const filtered = useMemo(() => taskList.filter((task) => {
     const matchPriority = !filterPriority || task.priority === filterPriority;
     const matchAssignee = !filterAssignee || task.assigned_to === Number(filterAssignee);
-    return matchPriority && matchAssignee;
-  }), [taskList, filterPriority, filterAssignee]);
+    const matchStatus = !filterStatus || task.status === filterStatus;
+    const matchType = !filterType || task.issue_type === filterType;
+    const matchSearch = !filterSearch || (task.title || '').toLowerCase().includes(filterSearch.toLowerCase());
+    return matchPriority && matchAssignee && matchStatus && matchType && matchSearch;
+  }), [taskList, filterPriority, filterAssignee, filterStatus, filterType, filterSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -154,6 +160,12 @@ const Dashboard = () => {
               setFilterPriority={setFilterPriority}
               filterAssignee={filterAssignee}
               setFilterAssignee={setFilterAssignee}
+              filterStatus={filterStatus}
+              setFilterStatus={setFilterStatus}
+              filterType={filterType}
+              setFilterType={setFilterType}
+              filterSearch={filterSearch}
+              setFilterSearch={setFilterSearch}
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               setSheetTab={setSheetTab}
