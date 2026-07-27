@@ -395,8 +395,9 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
     }
 
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit) || 500));
     const offset = (page - 1) * limit;
+
     const status = req.query.status;
 
     let where = 't.team_id = ? AND t.is_deleted = FALSE';
@@ -441,8 +442,9 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
 router.get('/my', authenticate, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit) || 500));
     const offset = (page - 1) * limit;
+
 
     const [[{ total }]] = await db.execute(
       'SELECT COUNT(*) as total FROM tasks WHERE assigned_to = ? AND is_deleted = FALSE',

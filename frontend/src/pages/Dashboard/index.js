@@ -60,7 +60,8 @@ const Dashboard = () => {
     setSelectedTeam(team);
     setSelectedTask(null);
     try {
-      const [taskRes, memberRes] = await Promise.all([tasks.getByTeam(team.id, 1, 200), teams.getMembers(team.id)]);
+      const [taskRes, memberRes] = await Promise.all([tasks.getByTeam(team.id, 1, 1000), teams.getMembers(team.id)]);
+
       setTaskList(Array.isArray(taskRes.data?.data) ? taskRes.data.data : []);
       setMembers(Array.isArray(memberRes.data) ? memberRes.data : []);
     } catch (error) {}

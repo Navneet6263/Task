@@ -1,35 +1,62 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AuthShowcase from '../components/AuthShowcase';
 import { auth } from '../services/api';
 import './Login.css';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') || '';
+  const emailFromUrl = searchParams.get('email') || '';
+
+  const [email, setEmail] = useState(emailFromUrl);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const updateField = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [linkSent, setLinkSent] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
-  const handleSubmit = async (event) => {
+  // Mode 1: Request Link (no token in URL)
+  const handleRequestLink = async (event) => {
     event.preventDefault();
     setError('');
 
-    if (!form.email.trim() || !form.password || !form.confirmPassword) {
-      setError('Please fill email, new password, and confirm password.');
+    if (!email.trim()) {
+      setError('Please enter your email address.');
       return;
     }
 
-    if (form.password !== form.confirmPassword) {
+    try {
+      setBusy(true);
+      await auth.sendResetLink({ email: email.trim() });
+      setLinkSent(true);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Unable to send reset link. Please check your email and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Mode 2: Reset Password with Token (token present in URL)
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
+    setError('');
+
+    if (!password || !confirmPassword) {
+      setError('Please enter both password and confirm password.');
+      return;
+    }
+
+    if (password.length < 4) {
+      setError('Password must be at least 4 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
       setError('Password and confirm password must match.');
       return;
     }
@@ -37,12 +64,13 @@ const ForgotPassword = () => {
     try {
       setBusy(true);
       await auth.resetPassword({
-        email: form.email.trim(),
-        password: form.password,
+        token,
+        email: email || emailFromUrl,
+        password,
       });
-      setSuccess(true);
+      setResetSuccess(true);
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to reset password right now.');
+      setError(err.response?.data?.error || 'Invalid or expired reset link. Please request a new link.');
     } finally {
       setBusy(false);
     }
@@ -55,9 +83,9 @@ const ForgotPassword = () => {
         <section className="auth-page__panel">
           <div className="auth-page__topbar">
             <button type="button" className="auth-page__brand" onClick={() => navigate('/login')}>
-              <span>NT</span>
+              <span>GT</span>
               <div>
-                <strong>Nav Task</strong>
+                <strong>GreenTask</strong>
                 <small>Password recovery</small>
               </div>
             </button>
@@ -67,77 +95,127 @@ const ForgotPassword = () => {
             </button>
           </div>
 
-          <div className="auth-page__heading">
-            <p className="auth-page__eyebrow">Password reset</p>
-            <h1>Choose a new password.</h1>
-            <p>
-              Enter your registered email and set a fresh password for your workspace access.
-            </p>
-          </div>
+          {!token ? (
+            /* ──────────────── STAGE 1: Request Reset Link ──────────────── */
+            <>
+              <div className="auth-page__heading">
+                <p className="auth-page__eyebrow">Password Reset</p>
+                <h1>Forgot your password?</h1>
+                <p>
+                  Enter your registered email address and we will send you a secure link to reset your password.
+                </p>
+              </div>
 
-          {error && <div className="auth-page__error">{error}</div>}
+              {error && <div className="auth-page__error">{error}</div>}
 
-          {!success ? (
-            <form onSubmit={handleSubmit} className="auth-page__form">
-              <Field
-                label="Email address"
-                type="email"
-                value={form.email}
-                onChange={(value) => updateField('email', value)}
-                placeholder="name@company.com"
-                required
-              />
+              {!linkSent ? (
+                <form onSubmit={handleRequestLink} className="auth-page__form">
+                  <div className="auth-page__field">
+                    <label className="auth-page__label">Email Address</label>
+                    <input
+                      className="auth-page__input"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@company.com"
+                      required
+                    />
+                  </div>
 
-              <div className="auth-page__field">
-                <label className="auth-page__label">New password</label>
-                <div className="auth-page__password-wrap">
-                  <input
-                    className="auth-page__input"
-                    type={showPassword ? 'text' : 'password'}
-                    value={form.password}
-                    onChange={(event) => updateField('password', event.target.value)}
-                    placeholder="Enter new password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="auth-page__inline-btn"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                  >
-                    {showPassword ? 'Hide' : 'Show'}
+                  <div className="auth-page__info">
+                    A password reset link valid for 15 minutes will be sent to this email address.
+                  </div>
+
+                  <button type="submit" className="auth-page__submit" disabled={busy}>
+                    {busy ? 'Sending Reset Link...' : 'Send Reset Link'}
+                  </button>
+                </form>
+              ) : (
+                <div className="auth-page__success-card">
+                  <p className="auth-page__eyebrow">Email Sent!</p>
+                  <h2>Check your inbox</h2>
+                  <p>
+                    We have sent a password reset link to <strong>{email}</strong>. Please check your email inbox and click the link to reset your password.
+                  </p>
+                  <div style={{ marginTop: '16px', fontSize: '13px', color: '#64748b' }}>
+                    Didn't receive the email? Check your spam folder or{' '}
+                    <button
+                      type="button"
+                      style={{ color: '#2563eb', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={() => setLinkSent(false)}
+                    >
+                      try again
+                    </button>.
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* ──────────────── STAGE 2: Choose New Password ──────────────── */
+            <>
+              <div className="auth-page__heading">
+                <p className="auth-page__eyebrow">Set New Password</p>
+                <h1>Choose a new password</h1>
+                <p>
+                  Create a new password for account <strong>{emailFromUrl || email}</strong>.
+                </p>
+              </div>
+
+              {error && <div className="auth-page__error">{error}</div>}
+
+              {!resetSuccess ? (
+                <form onSubmit={handleResetPassword} className="auth-page__form">
+                  <div className="auth-page__field">
+                    <label className="auth-page__label">New Password</label>
+                    <div className="auth-page__password-wrap">
+                      <input
+                        className="auth-page__input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter new password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="auth-page__inline-btn"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                      >
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="auth-page__field">
+                    <label className="auth-page__label">Confirm Password</label>
+                    <input
+                      className="auth-page__input"
+                      type={showPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="auth-page__submit" disabled={busy}>
+                    {busy ? 'Updating Password...' : 'Update Password'}
+                  </button>
+                </form>
+              ) : (
+                <div className="auth-page__success-card">
+                  <p className="auth-page__eyebrow">Success!</p>
+                  <h2>Password Updated</h2>
+                  <p>Your password has been reset successfully. You can now log in with your new password.</p>
+                  <button type="button" className="auth-page__submit" onClick={() => navigate('/login')}>
+                    Go to Sign In
                   </button>
                 </div>
-              </div>
-
-              <Field
-                label="Confirm password"
-                type={showPassword ? 'text' : 'password'}
-                value={form.confirmPassword}
-                onChange={(value) => updateField('confirmPassword', value)}
-                placeholder="Re-enter password"
-                required
-              />
-
-              <div className="auth-page__info">
-                This reset works on the registered email account used for employee, manager, or company admin login.
-              </div>
-
-              <button type="submit" className="auth-page__submit" disabled={busy}>
-                {busy ? 'Updating...' : 'Reset Password'}
-              </button>
-            </form>
-          ) : (
-            <div className="auth-page__success-card">
-              <p className="auth-page__eyebrow">Password updated</p>
-              <h2>You can sign in now.</h2>
-              <p>Your password has been changed successfully. Return to the login page and continue.</p>
-              <button type="button" className="auth-page__submit" onClick={() => navigate('/login')}>
-                Back to Login
-              </button>
-            </div>
+              )}
+            </>
           )}
 
-          {!success && (
+          {!linkSent && !resetSuccess && (
             <div className="auth-page__footer">
               <div className="auth-page__footer-row">
                 <span className="auth-page__footer-text">Remembered your password?</span>
@@ -154,19 +232,5 @@ const ForgotPassword = () => {
     </div>
   );
 };
-
-const Field = ({ label, type = 'text', value, onChange, placeholder, required = false }) => (
-  <div className="auth-page__field">
-    <label className="auth-page__label">{label}</label>
-    <input
-      className="auth-page__input"
-      type={type}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      required={required}
-    />
-  </div>
-);
 
 export default ForgotPassword;

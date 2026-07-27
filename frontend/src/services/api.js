@@ -16,9 +16,11 @@ api.interceptors.request.use((config) => {
 export const auth = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  sendResetLink: (data) => api.post('/auth/send-reset-link', data),
   resetPassword: (data) => api.post('/auth/reset-password', data),
   companyLogin: (data) => api.post('/company-auth/login', data),
 };
+
 
 export const teams = {
   getAll: () => api.get('/teams'),
@@ -29,9 +31,10 @@ export const teams = {
 };
 
 export const tasks = {
-  getByTeam: (teamId, page = 1, limit = 50, status = '') =>
+  getByTeam: (teamId, page = 1, limit = 1000, status = '') =>
     api.get(`/tasks/team/${teamId}?page=${page}&limit=${limit}${status ? '&status=' + status : ''}`),
-  getMy: (page = 1, limit = 50) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
+  getMy: (page = 1, limit = 1000) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
+
   getFormOptions: () => api.get('/tasks/form-options'),
   createFormOption: (data) => api.post('/tasks/form-options', data),
   updateFormOption: (id, data) => api.put(`/tasks/form-options/${id}`, data),

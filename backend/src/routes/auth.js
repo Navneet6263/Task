@@ -1,16 +1,20 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../config/database');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
-const { sendResetOtp } = require('../utils/mailer');
+const { sendResetOtp, sendResetLink } = require('../utils/mailer');
 const router = express.Router();
 
-// In-memory OTP store: { email → { otp, expiresAt } }
+// In-memory OTP & Token stores: { email → { otp/token, expiresAt } }
 const otpStore = new Map();
+const tokenStore = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const LINK_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
@@ -184,7 +188,33 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ── Step 1: Send OTP to email ──
+// ── Step 1 (Link flow): Send Password Reset Link to Email ──
+router.post('/send-reset-link', async (req, res) => {
+  try {
+    const normalizedEmail = normalizeEmail(req.body.email);
+    if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
+
+    // Check if email exists (users or company_admins)
+    const [users] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE LIMIT 1', [normalizedEmail]);
+    const [cas]   = await db.execute('SELECT id FROM company_admins WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (!users.length && !cas.length) return res.status(404).json({ error: 'No account found for this email' });
+
+    // Generate 64-char crypto token
+    const token = crypto.randomBytes(32).toString('hex');
+    tokenStore.set(token, { email: normalizedEmail, expiresAt: Date.now() + LINK_TTL_MS });
+
+    const frontendOrigin = req.headers.origin || process.env.APP_FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${frontendOrigin}/forgot-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
+
+    await sendResetLink(normalizedEmail, resetUrl);
+    res.json({ message: 'Password reset link sent to your email. Valid for 15 minutes.' });
+  } catch (error) {
+    console.error('[send-reset-link]', error.message);
+    res.status(500).json({ error: 'Failed to send reset link. Check email configuration.' });
+  }
+});
+
+// ── Step 1 (OTP flow): Send OTP to email ──
 router.post('/send-reset-otp', async (req, res) => {
   try {
     const normalizedEmail = normalizeEmail(req.body.email);
@@ -206,28 +236,42 @@ router.post('/send-reset-otp', async (req, res) => {
   }
 });
 
-// ── Step 2: Verify OTP + set new password ──
+// ── Step 2: Verify Token / OTP + set new password ──
 router.post('/reset-password', async (req, res) => {
   try {
-    const { email, password, otp } = req.body;
-    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const { email, password, token, otp } = req.body;
+    let normalizedEmail = String(email || '').trim().toLowerCase();
     const nextPassword = String(password || '');
 
-    if (!normalizedEmail || !nextPassword || !otp) {
-      return res.status(422).json({ error: 'Email, OTP, and new password are required' });
+    if (!nextPassword) {
+      return res.status(422).json({ error: 'New password is required' });
     }
 
-    // ── OTP Validation ──
-    const stored = otpStore.get(normalizedEmail);
-    if (!stored) return res.status(400).json({ error: 'OTP not found. Please request a new one.' });
-    if (Date.now() > stored.expiresAt) {
-      otpStore.delete(normalizedEmail);
-      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    // ── Token or OTP Validation ──
+    if (token) {
+      const stored = tokenStore.get(String(token).trim());
+      if (!stored) return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+      if (Date.now() > stored.expiresAt) {
+        tokenStore.delete(String(token).trim());
+        return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+      }
+      normalizedEmail = stored.email;
+      tokenStore.delete(String(token).trim()); // consumed
+    } else if (otp) {
+      if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
+      const stored = otpStore.get(normalizedEmail);
+      if (!stored) return res.status(400).json({ error: 'OTP not found. Please request a new one.' });
+      if (Date.now() > stored.expiresAt) {
+        otpStore.delete(normalizedEmail);
+        return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+      }
+      if (stored.otp !== String(otp).trim()) {
+        return res.status(400).json({ error: 'Invalid OTP' });
+      }
+      otpStore.delete(normalizedEmail); // consumed
+    } else {
+      return res.status(422).json({ error: 'Reset link token or OTP is required' });
     }
-    if (stored.otp !== String(otp).trim()) {
-      return res.status(400).json({ error: 'Invalid OTP' });
-    }
-    otpStore.delete(normalizedEmail); // consumed
 
     if (nextPassword.length < 4) {
       return res.status(422).json({ error: 'Password must be at least 4 characters' });
@@ -261,6 +305,7 @@ router.post('/reset-password', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
 
 
 module.exports = router;
