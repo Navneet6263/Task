@@ -37,7 +37,8 @@ const sendResetOtp = async (toEmail, otp) => {
   const transporter = createTransporter('reset');
   const fromAddr = process.env.RESET_MAIL_USER || process.env.SMTP_USER;
   await transporter.sendMail({
-    from: `"NavTask Support" <${fromAddr}>`,
+    from: `"GreenTask Support" <${fromAddr}>`,
+
     to: toEmail,
     subject: 'Your Password Reset OTP',
     html: `

@@ -52,9 +52,11 @@ export const tasks = {
 };
 
 export const logs = {
-  getByTeam: (teamId) => api.get(`/logs/team/${teamId}`),
-  getMy: () => api.get('/logs/my'),
+  getByTeam: (teamId, page = 1, limit = 20, userId = '', activity = '') =>
+    api.get(`/logs/team/${teamId}?page=${page}&limit=${limit}${userId ? '&userId=' + encodeURIComponent(userId) : ''}${activity ? '&activity=' + encodeURIComponent(activity) : ''}`),
+  getMy: (page = 1, limit = 20) => api.get(`/logs/my?page=${page}&limit=${limit}`),
 };
+
 
 export const users = {
   search: (email) => api.get(`/users/search?email=${email}`),

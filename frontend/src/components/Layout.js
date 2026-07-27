@@ -24,6 +24,9 @@ const Layout = () => {
   const [search, setSearch] = useState('');
   const [accessibleOrgs, setAccessibleOrgs] = useState([]);
   const [activeOrgId, setActiveOrgId] = useState(localStorage.getItem('active_org_id') || '');
+  const [teamChatOpen, setTeamChatOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
 
   const unreadCount = notifList.filter((n) => !n.is_read).length;
 
@@ -210,10 +213,6 @@ const Layout = () => {
     if (sidebarOpen) setSidebarOpen(false);
   };
 
-  const handlePlanSprint = () => {
-    setSidebarOpen(false);
-    navigate('/reports?focus=sprint');
-  };
 
   return (
     <div className={`shell-root ${sidebarOpen ? 'shell-sidebar-open' : ''}`}>
@@ -239,8 +238,9 @@ const Layout = () => {
             </div>
             <div>
               <p className="shell-brand-sub">workspace</p>
-              <h2 className="shell-brand-title">NavTask</h2>
+              <h2 className="shell-brand-title">GreenTask</h2>
             </div>
+
             <span className="shell-brand-badge">Live</span>
           </div>
 
@@ -269,18 +269,8 @@ const Layout = () => {
             </div>
           ))}
         </div>
-
-        <div className="shell-upgrade-card">
-          <p className="shell-upgrade-kicker">Sprint Mode</p>
-          <p className="shell-upgrade-title">Boost Team Flow</p>
-          <p className="shell-upgrade-text">Track velocity, bottlenecks, and delivery confidence in one place.</p>
-          <button type="button" className="shell-upgrade-btn" onClick={handlePlanSprint}>
-            Plan Sprint
-            <ChevronIcon />
-          </button>
-          <span className="shell-upgrade-note">Opens the sprint planner spotlight inside Reports.</span>
-        </div>
       </aside>
+
 
       <div className="shell-main">
         <header className="shell-header">
@@ -302,7 +292,24 @@ const Layout = () => {
           <div className="shell-header-right">
             <span className="shell-date-chip">{formattedDate}</span>
 
+            {/* Team Chat, Notes & Screen Share Header Button */}
+            <button
+              type="button"
+              className={`shell-teamchat-btn ${teamChatOpen ? 'is-active' : ''}`}
+              onClick={() => setTeamChatOpen((prev) => !prev)}
+              title="Team Chat, Notes & Screen Share"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span>Notes & Team Chat</span>
+              {chatUnreadCount > 0 && (
+                <span className="shell-teamchat-badge">{chatUnreadCount > 99 ? '99+' : chatUnreadCount}</span>
+              )}
+            </button>
+
             {accessibleOrgs.length > 1 && (
+
               <select
                 className="shell-org-switch"
                 value={activeOrgId}
@@ -393,8 +400,16 @@ const Layout = () => {
         </main>
       </div>
       <div onClick={e => e.stopPropagation()}>
-        <TeamChat wsRef={wsRef} socketVersion={socketVersion} />
+        <TeamChat
+          wsRef={wsRef}
+          socketVersion={socketVersion}
+          isOpen={teamChatOpen}
+          onToggle={setTeamChatOpen}
+          showFab={false}
+          onUnreadChange={setChatUnreadCount}
+        />
       </div>
+
     </div>
   );
 };

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import axios from 'axios';
 import { API_BASE_URL, WS_BASE_URL } from '../services/runtimeConfig';
 import './TeamChat.css';
@@ -22,6 +23,10 @@ const TeamChat = ({
   socketVersion = 0,
   standalone = false,
   startOpen = false,
+  isOpen: externalOpen,
+  onToggle: externalOnToggle,
+  showFab = false,
+  onUnreadChange,
   initialTeamId = null,
   initialThreadId = null,
   initialTab = 'discussion',
@@ -32,12 +37,24 @@ const TeamChat = ({
   const [internalSocketVersion, setInternalSocketVersion] = useState(0);
   const effectiveSocketVersion = wsRef ? socketVersion : internalSocketVersion;
 
-  const [open, setOpen] = useState(standalone || startOpen);
+  const [internalOpen, setInternalOpen] = useState(standalone || startOpen);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+
+  const setOpen = useCallback((val) => {
+    const nextVal = typeof val === 'function' ? val(open) : val;
+    if (externalOnToggle) {
+      externalOnToggle(nextVal);
+    } else {
+      setInternalOpen(nextVal);
+    }
+  }, [externalOnToggle, open]);
+
   const [expanded, setExpanded] = useState(standalone);
   const [tab, setTab] = useState(initialTab);
   const [teams, setTeams] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
   const [activeTeam, setActiveTeam] = useState(null);
+
   const [threads, setThreads] = useState([]);
   const [activeThread, setActiveThread] = useState(null);
   const [threadTitle, setThreadTitle] = useState('');
@@ -83,10 +100,18 @@ const TeamChat = ({
   const activityNoticeKeysRef = useRef(new Set());
 
   const totalUnread = useMemo(() => Object.values(unread).reduce((a, b) => a + Number(b || 0), 0), [unread]);
+
+  useEffect(() => {
+    if (typeof onUnreadChange === 'function') {
+      onUnreadChange(totalUnread);
+    }
+  }, [totalUnread, onUnreadChange]);
+
   const hasLiveReview = useMemo(
     () => Object.values(teamLiveMap).some((session) => String(session?.status || '') === 'active'),
     [teamLiveMap]
   );
+
   const todayActivityFeed = useMemo(
     () => activityFeed.filter((item) => indiaDateKey(item.createdAt || item.created_at) === indiaDateKey()),
     [activityFeed]
@@ -1335,21 +1360,24 @@ const TeamChat = ({
 
   return (
     <>
-      <button
-        className={`tchat-fab ${totalUnread ? 'has-unread' : ''} ${hasLiveReview ? 'has-live' : ''} ${open ? 'is-hidden' : ''}`}
-        onClick={() => {
-          setOpen((v) => !v);
-          if (!open) requestNotificationAccess().catch(() => {});
-        }}
-        title="Team workspace"
-      >
-        <span className="tchat-fab-label">Notes</span>
-        {hasLiveReview && <span className="tchat-fab-live">Live</span>}
-        {totalUnread > 0 && <span className="tchat-fab-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
-      </button>
+      {showFab && (
+        <button
+          className={`tchat-fab ${totalUnread ? 'has-unread' : ''} ${hasLiveReview ? 'has-live' : ''} ${open ? 'is-hidden' : ''}`}
+          onClick={() => {
+            setOpen((v) => !v);
+            if (!open) requestNotificationAccess().catch(() => {});
+          }}
+          title="Team workspace"
+        >
+          <span className="tchat-fab-label">Notes</span>
+          {hasLiveReview && <span className="tchat-fab-live">Live</span>}
+          {totalUnread > 0 && <span className="tchat-fab-badge">{totalUnread > 99 ? '99+' : totalUnread}</span>}
+        </button>
+      )}
       {open && panel}
     </>
   );
+
 };
 
 const initials = (name) => String(name || '?').split(' ').filter(Boolean).slice(0, 2).map((item) => item[0].toUpperCase()).join('');
