@@ -22,8 +22,8 @@ const dateTimeLabel = (value) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return { date: '-', time: '' };
   return {
-    date: parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-    time: parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    date: parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+    time: parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }),
   };
 };
 

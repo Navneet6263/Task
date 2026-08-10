@@ -7,7 +7,7 @@ const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pend
 
 const statusProgress = (s) => s === 'DONE' ? 100 : s === 'IN_PROGRESS' ? 62 : s === 'PENDING' ? 30 : 14;
 const dateLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
-const dateTimeLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+const dateTimeLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }); };
 const toInputDate = (v) => v ? String(v).split('T')[0] : '';
 const val = (v) => v || '—';
 

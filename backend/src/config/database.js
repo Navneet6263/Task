@@ -1,3 +1,8 @@
+// SQL Server stores this application's DATETIME2 values in India local time
+// (SYSDATETIME). DATETIME2 has no timezone marker, so Tedious must interpret
+// those values in the same timezone instead of treating them as UTC.
+process.env.TZ = process.env.DB_TIMEZONE || 'Asia/Kolkata';
+
 const sql = require('mssql');
 
 let poolPromise = null;
@@ -23,6 +28,7 @@ const config = {
     encrypt: parseBool(process.env.DB_ENCRYPT, false),
     trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERT, true),
     enableArithAbort: true,
+    useUTC: parseBool(process.env.DB_USE_UTC, false),
   },
 };
 
