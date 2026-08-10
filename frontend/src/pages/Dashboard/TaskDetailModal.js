@@ -7,6 +7,7 @@ const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pend
 
 const statusProgress = (s) => s === 'DONE' ? 100 : s === 'IN_PROGRESS' ? 62 : s === 'PENDING' ? 30 : 14;
 const dateLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+const dateTimeLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
 const toInputDate = (v) => v ? String(v).split('T')[0] : '';
 const val = (v) => v || '—';
 
@@ -288,11 +289,12 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
                   <Row label="Status"><span className={`text-[11px] font-extrabold rounded-full px-2.5 py-1 ${t.status === 'DONE' ? 'bg-green-100 text-green-700' : t.status === 'IN_PROGRESS' ? 'bg-sky-100 text-sky-700' : t.status === 'PENDING' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-700'}`}>{STATUS_LABEL[t.status] || t.status}</span></Row>
                   <Row label="Priority"><span className={`text-[11px] font-extrabold rounded-full px-2.5 py-1 ${t.priority === 'HIGH' ? 'bg-red-100 text-red-700' : t.priority === 'LOW' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>{t.priority || 'MEDIUM'}</span></Row>
                   <Row label="Assignee">{val(t.assigned_to_name)}</Row>
-                  <Row label="Assigned By">{val(t.assigned_by_name)}</Row>
+                  <Row label="Created By">{val(t.created_by_name || t.assigned_by_name)}</Row>
                   {t.client_name && <Row label="Client Name">{t.client_name}</Row>}
                 </Sec>
 
                 <Sec title="Timeline">
+                  <Row label="Created At">{dateTimeLabel(t.created_at)}</Row>
                   <Row label="Assigned Date">{dateLabel(t.assigned_date)}</Row>
                   <Row label="Start Date">{dateLabel(t.start_date)}</Row>
                   <Row label="Due Date">{dateLabel(t.due_date)}</Row>

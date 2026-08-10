@@ -399,10 +399,27 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
     const offset = (page - 1) * limit;
 
     const status = req.query.status;
+    const createdFrom = normalizeDate(req.query.created_from, 'created_from');
+    const createdTo = normalizeDate(req.query.created_to, 'created_to');
+
+    if (createdFrom && createdTo && createdFrom > createdTo) {
+      return res.status(422).json({
+        error: 'created_from must be on or before created_to',
+        code: 'VALIDATION_ERROR'
+      });
+    }
 
     let where = 't.team_id = ? AND t.is_deleted = FALSE';
     let params = [req.params.teamId];
     if (status) { where += ' AND t.status = ?'; params.push(status); }
+    if (createdFrom) {
+      where += ' AND t.created_at >= CAST(? AS DATE)';
+      params.push(createdFrom);
+    }
+    if (createdTo) {
+      where += ' AND t.created_at < DATEADD(DAY, 1, CAST(? AS DATE))';
+      params.push(createdTo);
+    }
 
     const [[{ total }]] = await db.execute(
       `SELECT COUNT(*) as total FROM tasks t WHERE ${where}`, params
@@ -411,7 +428,7 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
     const [tasks] = await db.execute(
       `SELECT t.*, 
         u1.name as assigned_to_name, u1.avatar as assigned_to_avatar,
-        u2.name as assigned_by_name,
+        u2.name as assigned_by_name, u2.name as created_by_name,
         u3.name as reported_by_name,
         u4.name as picked_by_name,
         u5.name as delete_requested_by_name,
@@ -452,7 +469,7 @@ router.get('/my', authenticate, async (req, res) => {
     );
 
     const [tasks] = await db.execute(
-      `SELECT t.*, te.name as team_name, u.name as assigned_by_name, u2.name as delete_requested_by_name,
+      `SELECT t.*, te.name as team_name, u.name as assigned_by_name, u.name as created_by_name, u2.name as delete_requested_by_name,
         (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) as total_comments,
         (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) as unread_comments
        FROM tasks t
@@ -913,8 +930,8 @@ router.patch('/:id/reassign', authenticate, async (req, res) => {
     const [toUser]   = await db.execute('SELECT name FROM users WHERE id = ?', [assign_to]);
 
     await db.execute(
-      'UPDATE tasks SET assigned_to = ?, assigned_by = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [assign_to, req.userId, req.params.id]
+      'UPDATE tasks SET assigned_to = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [assign_to, req.params.id]
     );
 
     const desc = `${fromUser[0].name} reassigned task to ${toUser[0].name}`;
@@ -1022,6 +1039,38 @@ router.patch('/:id/reject-delete', authenticate, async (req, res) => {
     res.json({ message: 'Delete request rejected' });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// ── Bulk Delete ──────────────────────────────────────────────────
+router.delete('/bulk', authenticate, async (req, res) => {
+  try {
+    const { ids } = req.body; // array of task IDs
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ error: 'ids array is required' });
+
+    // Fetch all tasks at once to get team_id
+    const placeholders = ids.map(() => '?').join(',');
+    const [tasks] = await db.execute(
+      `SELECT id, team_id FROM tasks WHERE id IN (${placeholders}) AND is_deleted = FALSE`,
+      ids
+    );
+    if (tasks.length === 0) return res.status(404).json({ error: 'No valid tasks found' });
+
+    const validIds = tasks.map(t => t.id);
+    const ph2 = validIds.map(() => '?').join(',');
+    await db.execute(
+      `UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id IN (${ph2})`,
+      validIds
+    );
+
+    // Broadcast per team
+    const teamSet = new Set(tasks.map(t => t.team_id).filter(Boolean));
+    teamSet.forEach(teamId => ws.broadcast(teamId, 'task_bulk_deleted', { ids: validIds }));
+
+    res.json({ message: `${validIds.length} tasks deleted`, deleted: validIds });
+  } catch (error) {
+    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }
 });
 

@@ -31,8 +31,16 @@ export const teams = {
 };
 
 export const tasks = {
-  getByTeam: (teamId, page = 1, limit = 1000, status = '') =>
-    api.get(`/tasks/team/${teamId}?page=${page}&limit=${limit}${status ? '&status=' + status : ''}`),
+  getByTeam: (teamId, page = 1, limit = 1000, status = '', filters = {}) =>
+    api.get(`/tasks/team/${teamId}`, {
+      params: {
+        page,
+        limit,
+        ...(status ? { status } : {}),
+        ...(filters.createdFrom ? { created_from: filters.createdFrom } : {}),
+        ...(filters.createdTo ? { created_to: filters.createdTo } : {}),
+      },
+    }),
   getMy: (page = 1, limit = 1000) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
 
   getFormOptions: () => api.get('/tasks/form-options'),

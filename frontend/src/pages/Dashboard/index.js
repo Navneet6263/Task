@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teams, tasks } from '../../services/api';
 import DashboardHero from './DashboardHero';
 import MetricCards from './MetricCards';
@@ -26,6 +26,8 @@ const Dashboard = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
+  const [filterCreatedTo, setFilterCreatedTo] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
   const [sheetTab, setSheetTab] = useState('details');
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -56,11 +58,19 @@ const Dashboard = () => {
     selectedTaskCategories,
   } = useDashboardLogic(selectedTeam, members, orgUsers, setOrgUsers, setShowTaskModal, setShowMgrModal, selectedTask, setSelectedTask, () => selectTeam(selectedTeam))
 
-  const selectTeam = useCallback(async (team) => {
+  const dateFiltersRef = useRef({ createdFrom: '', createdTo: '' });
+  const selectedTeamRef = useRef(null);
+
+  const selectTeam = useCallback(async (team, dateFilters) => {
+    const activeDateFilters = dateFilters || dateFiltersRef.current;
+    selectedTeamRef.current = team;
     setSelectedTeam(team);
     setSelectedTask(null);
     try {
-      const [taskRes, memberRes] = await Promise.all([tasks.getByTeam(team.id, 1, 1000), teams.getMembers(team.id)]);
+      const [taskRes, memberRes] = await Promise.all([
+        tasks.getByTeam(team.id, 1, 5000, '', activeDateFilters),
+        teams.getMembers(team.id),
+      ]);
 
       setTaskList(Array.isArray(taskRes.data?.data) ? taskRes.data.data : []);
       setMembers(Array.isArray(memberRes.data) ? memberRes.data : []);
@@ -77,7 +87,27 @@ const Dashboard = () => {
   }, [selectTeam]);
 
   useEffect(() => { fetchTeams(); }, [fetchTeams]);
-  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterSearch, view]);
+
+  useEffect(() => {
+    const dateFilters = { createdFrom: filterCreatedFrom, createdTo: filterCreatedTo };
+    dateFiltersRef.current = dateFilters;
+    if (selectedTeamRef.current) selectTeam(selectedTeamRef.current, dateFilters);
+  }, [filterCreatedFrom, filterCreatedTo, selectTeam]);
+
+  const handleBulkDelete = useCallback(async (ids) => {
+    try {
+      const token = localStorage.getItem('token') || localStorage.getItem('company_token');
+      await fetch('/api/tasks/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids }),
+      });
+      setTaskList(prev => prev.filter(t => !ids.includes(t.id)));
+      if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null);
+    } catch (_) {}
+  }, [selectedTask]);
+
+  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterSearch, filterCreatedFrom, filterCreatedTo, view]);
 
   const filtered = useMemo(() => taskList.filter((task) => {
     const matchPriority = !filterPriority || task.priority === filterPriority;
@@ -167,6 +197,10 @@ const Dashboard = () => {
               setFilterType={setFilterType}
               filterSearch={filterSearch}
               setFilterSearch={setFilterSearch}
+              filterCreatedFrom={filterCreatedFrom}
+              setFilterCreatedFrom={setFilterCreatedFrom}
+              filterCreatedTo={filterCreatedTo}
+              setFilterCreatedTo={setFilterCreatedTo}
               selectedTask={selectedTask}
               setSelectedTask={setSelectedTask}
               setSheetTab={setSheetTab}
@@ -176,6 +210,7 @@ const Dashboard = () => {
               handleRejectDelete={handleRejectDelete}
               handlePickBug={handlePickBug}
               handleResolveBug={handleResolveBug}
+              onBulkDelete={handleBulkDelete}
               page={page}
               setPage={setPage}
               totalPages={totalPages}

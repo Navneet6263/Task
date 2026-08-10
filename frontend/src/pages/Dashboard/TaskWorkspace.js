@@ -20,6 +20,10 @@ const TaskWorkspace = ({
   setFilterType,
   filterSearch,
   setFilterSearch,
+  filterCreatedFrom,
+  setFilterCreatedFrom,
+  filterCreatedTo,
+  setFilterCreatedTo,
   selectedTask,
   setSelectedTask,
   setSheetTab,
@@ -29,11 +33,12 @@ const TaskWorkspace = ({
   handleRejectDelete,
   handlePickBug,
   handleResolveBug,
+  onBulkDelete,
   page,
   setPage,
   totalPages,
 }) => {
-  const activeFilterCount = [filterPriority, filterAssignee, filterStatus, filterType, filterSearch].filter(Boolean).length;
+  const activeFilterCount = [filterPriority, filterAssignee, filterStatus, filterType, filterSearch, filterCreatedFrom, filterCreatedTo].filter(Boolean).length;
 
   const clearAllFilters = () => {
     setFilterPriority('');
@@ -41,6 +46,8 @@ const TaskWorkspace = ({
     setFilterStatus('');
     setFilterType('');
     setFilterSearch('');
+    setFilterCreatedFrom('');
+    setFilterCreatedTo('');
   };
 
   const selectClass = "h-[34px] rounded-lg border border-slate-200 bg-white/80 text-slate-700 text-[11px] font-medium px-2.5 shadow-sm hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none cursor-pointer min-w-[120px]";
@@ -155,6 +162,38 @@ const TaskWorkspace = ({
           ))}
         </select>
 
+        <div className="flex items-center gap-1.5 h-[34px] rounded-lg border border-slate-200 bg-white/80 px-2.5 shadow-sm">
+          <label htmlFor="created-from" className="text-[10px] font-bold text-slate-500 whitespace-nowrap">Created from</label>
+          <input
+            id="created-from"
+            type="date"
+            value={filterCreatedFrom}
+            max={filterCreatedTo || undefined}
+            onChange={(e) => {
+              const value = e.target.value;
+              setFilterCreatedFrom(value);
+              if (value && filterCreatedTo && value > filterCreatedTo) setFilterCreatedTo(value);
+            }}
+            className="bg-transparent text-slate-700 text-[11px] font-medium outline-none w-[112px]"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 h-[34px] rounded-lg border border-slate-200 bg-white/80 px-2.5 shadow-sm">
+          <label htmlFor="created-to" className="text-[10px] font-bold text-slate-500 whitespace-nowrap">Created to</label>
+          <input
+            id="created-to"
+            type="date"
+            value={filterCreatedTo}
+            min={filterCreatedFrom || undefined}
+            onChange={(e) => {
+              const value = e.target.value;
+              setFilterCreatedTo(value);
+              if (value && filterCreatedFrom && value < filterCreatedFrom) setFilterCreatedFrom(value);
+            }}
+            className="bg-transparent text-slate-700 text-[11px] font-medium outline-none w-[112px]"
+          />
+        </div>
+
         {/* Clear All Button */}
         {activeFilterCount > 0 && (
           <button
@@ -184,6 +223,7 @@ const TaskWorkspace = ({
             handleRejectDelete={handleRejectDelete}
             handlePickBug={handlePickBug}
             handleResolveBug={handleResolveBug}
+            onBulkDelete={onBulkDelete}
           />
         )}
 
