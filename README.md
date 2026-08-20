@@ -1,4 +1,4 @@
-# Task Manager - Jira Jaisa Easy to Use
+# Task Manager - Jira-like and Easy to Use
 
 Pink themed task management application with React frontend and Node.js backend.
 
@@ -14,10 +14,10 @@ Pink themed task management application with React frontend and Node.js backend.
 
 ### 1. Database Setup
 ```bash
-# MySQL me login karo
+# Log in to MySQL
 mysql -u root -p
 
-# Database.sql file run karo
+# Run the database.sql file
 source backend/database.sql
 ```
 
@@ -26,8 +26,8 @@ source backend/database.sql
 cd backend
 npm install
 
-# .env file me apni database credentials dalo
-# DB_PASSWORD aur JWT_SECRET change karo
+# Add your database credentials to the .env file
+# Change DB_PASSWORD and JWT_SECRET
 
 npm run dev
 # Server will run on http://localhost:5000
@@ -42,7 +42,7 @@ npm start
 ```
 
 ## Default Credentials
-Register karke naya account banao ya existing account se login karo.
+Register a new account or log in with an existing account.
 
 ## Tech Stack
 - **Frontend**: React, React Router, Axios

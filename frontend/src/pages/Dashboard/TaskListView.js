@@ -112,7 +112,7 @@ const TaskListView = ({
           ) : (
             <>
               <span style={{ fontSize: '13px', color: '#7f1d1d', fontWeight: 600 }}>
-                Pakka delete karna hai?
+                Are you sure you want to delete the selected tasks?
               </span>
               <button
                 type="button"
@@ -124,7 +124,7 @@ const TaskListView = ({
                   fontWeight: 700, fontSize: '13px', cursor: 'pointer',
                 }}
               >
-                {bulkBusy ? 'Deleting...' : '✅ Haan, Delete Karo'}
+                {bulkBusy ? 'Deleting...' : '✅ Yes, Delete'}
               </button>
               <button
                 type="button"
