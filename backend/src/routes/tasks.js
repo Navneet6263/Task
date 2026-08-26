@@ -1,6 +1,8 @@
 const express = require('express');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { canAccessTeam, requireTeamAccess } = require('../utils/teamAccess');
+const { getTaskDetail, listTeamTasks } = require('../services/taskQueryService');
 const ws = require('../websocket');
 const router = express.Router();
 
@@ -365,91 +367,22 @@ router.get('/clients', authenticate, async (req, res) => {
 // Get tasks for a team with pagination
 router.get('/team/:teamId', authenticate, async (req, res) => {
   try {
-    let canAccess = false;
-
-    if (req.userRole === 'admin') {
-      const [[team]] = await db.execute(
-        'SELECT id FROM teams WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
-        [req.params.teamId, req.orgId]
-      );
-      canAccess = Boolean(team);
-    } else if (req.userRole === 'company_admin') {
-      const [[team]] = await db.execute(
-        `SELECT t.id
-         FROM teams t
-         JOIN organizations o ON o.id = t.org_id
-         WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
-        [req.params.teamId, req.companyAdminId]
-      );
-      canAccess = Boolean(team);
-    } else {
-      const [membership] = await db.execute(
-        'SELECT id FROM team_members WHERE team_id = ? AND user_id = ?',
-        [req.params.teamId, req.userId]
-      );
-      canAccess = membership.length > 0;
-    }
-
-    if (!canAccess) {
-      return res.status(403).json({ error: 'Not a team member', code: 'FORBIDDEN' });
-    }
-
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit) || 500));
-    const offset = (page - 1) * limit;
-
-    const status = req.query.status;
-    const createdFrom = normalizeDate(req.query.created_from, 'created_from');
-    const createdTo = normalizeDate(req.query.created_to, 'created_to');
-
-    if (createdFrom && createdTo && createdFrom > createdTo) {
-      return res.status(422).json({
-        error: 'created_from must be on or before created_to',
-        code: 'VALIDATION_ERROR'
-      });
-    }
-
-    let where = 't.team_id = ? AND t.is_deleted = FALSE';
-    let params = [req.params.teamId];
-    if (status) { where += ' AND t.status = ?'; params.push(status); }
-    if (createdFrom) {
-      where += ' AND t.created_at >= CAST(? AS DATE)';
-      params.push(createdFrom);
-    }
-    if (createdTo) {
-      where += ' AND t.created_at < DATEADD(DAY, 1, CAST(? AS DATE))';
-      params.push(createdTo);
-    }
-
-    const [[{ total }]] = await db.execute(
-      `SELECT COUNT(*) as total FROM tasks t WHERE ${where}`, params
-    );
-
-    const [tasks] = await db.execute(
-      `SELECT t.*, 
-        u1.name as assigned_to_name, u1.avatar as assigned_to_avatar,
-        u2.name as assigned_by_name, u2.name as created_by_name,
-        u3.name as reported_by_name,
-        u4.name as picked_by_name,
-        u5.name as delete_requested_by_name,
-        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) as total_comments,
-        (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) as unread_comments
-       FROM tasks t
-       LEFT JOIN users u1 ON t.assigned_to = u1.id
-       LEFT JOIN users u2 ON t.assigned_by = u2.id
-       LEFT JOIN users u3 ON t.reported_by = u3.id
-       LEFT JOIN users u4 ON t.picked_by = u4.id
-       LEFT JOIN users u5 ON t.delete_requested_by = u5.id
-       WHERE ${where}
-       ORDER BY t.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-
-    res.json({
-      data: tasks,
-      pagination: { total, page, limit, total_pages: Math.ceil(total / limit) }
+    if (!await requireTeamAccess(req, res, req.params.teamId)) return;
+    res.json(await listTeamTasks(req.params.teamId, req.query));
+  } catch (error) {
+    res.status(error.status || 400).json({
+      error: error.message,
+      code: error.code || 'BAD_REQUEST',
     });
+  }
+});
+
+router.get('/detail/:taskId', authenticate, async (req, res) => {
+  try {
+    const task = await getTaskDetail(req.params.taskId);
+    if (!task) return res.status(404).json({ error: 'Task not found', code: 'NOT_FOUND' });
+    if (!await requireTeamAccess(req, res, task.team_id)) return;
+    res.json(task);
   } catch (error) {
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }
@@ -1043,29 +976,38 @@ router.patch('/:id/reject-delete', authenticate, async (req, res) => {
 });
 
 // ── Bulk Delete ──────────────────────────────────────────────────
-router.delete('/bulk', authenticate, async (req, res) => {
+router.delete('/bulk/delete', authenticate, async (req, res) => {
   try {
-    const { ids } = req.body; // array of task IDs
-    if (!Array.isArray(ids) || ids.length === 0)
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids array is required' });
+    }
+    const normalizedIds = [...new Set(ids.map(Number))];
+    if (normalizedIds.length > 100 || normalizedIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+      return res.status(422).json({ error: 'Provide up to 100 valid task IDs', code: 'VALIDATION_ERROR' });
+    }
 
-    // Fetch all tasks at once to get team_id
-    const placeholders = ids.map(() => '?').join(',');
-    const [tasks] = await db.execute(
+    const placeholders = normalizedIds.map(() => '?').join(',');
+    const [taskRows] = await db.execute(
       `SELECT id, team_id FROM tasks WHERE id IN (${placeholders}) AND is_deleted = FALSE`,
-      ids
+      normalizedIds
     );
-    if (tasks.length === 0) return res.status(404).json({ error: 'No valid tasks found' });
+    if (taskRows.length === 0) return res.status(404).json({ error: 'No valid tasks found' });
 
-    const validIds = tasks.map(t => t.id);
+    const teamIds = [...new Set(taskRows.map((task) => task.team_id))];
+    const accessChecks = await Promise.all(teamIds.map((teamId) => canAccessTeam(req, teamId)));
+    if (accessChecks.some((allowed) => !allowed)) {
+      return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
+    }
+
+    const validIds = taskRows.map((task) => task.id);
     const ph2 = validIds.map(() => '?').join(',');
     await db.execute(
       `UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id IN (${ph2})`,
       validIds
     );
 
-    // Broadcast per team
-    const teamSet = new Set(tasks.map(t => t.team_id).filter(Boolean));
+    const teamSet = new Set(taskRows.map((task) => task.team_id).filter(Boolean));
     teamSet.forEach(teamId => ws.broadcast(teamId, 'task_bulk_deleted', { ids: validIds }));
 
     res.json({ message: `${validIds.length} tasks deleted`, deleted: validIds });

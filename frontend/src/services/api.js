@@ -31,16 +31,22 @@ export const teams = {
 };
 
 export const tasks = {
-  getByTeam: (teamId, page = 1, limit = 1000, status = '', filters = {}) =>
+  getByTeam: (teamId, page = 1, limit = 20, filters = {}) =>
     api.get(`/tasks/team/${teamId}`, {
       params: {
         page,
         limit,
-        ...(status ? { status } : {}),
+        ...(filters.statuses?.length ? { statuses: JSON.stringify(filters.statuses) } : {}),
+        ...(filters.priorities?.length ? { priorities: JSON.stringify(filters.priorities) } : {}),
+        ...(filters.issueTypes?.length ? { issue_types: JSON.stringify(filters.issueTypes) } : {}),
+        ...(filters.assignees?.length ? { assignees: JSON.stringify(filters.assignees) } : {}),
+        ...(filters.clientNames?.length ? { clients: JSON.stringify(filters.clientNames) } : {}),
+        ...(filters.search ? { search: filters.search } : {}),
         ...(filters.createdFrom ? { created_from: filters.createdFrom } : {}),
         ...(filters.createdTo ? { created_to: filters.createdTo } : {}),
       },
     }),
+  getDetail: (taskId) => api.get(`/tasks/detail/${taskId}`),
   getMy: (page = 1, limit = 1000) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
 
   getFormOptions: () => api.get('/tasks/form-options'),
@@ -58,6 +64,7 @@ export const tasks = {
   delete: (id) => api.delete(`/tasks/${id}`),
   approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
   rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),
+  bulkDelete: (ids) => api.delete('/tasks/bulk/delete', { data: { ids } }),
   getClients: () => api.get('/tasks/clients'),
   markTaskViewed: (id) => api.patch(`/tasks/${id}/view`),
 };

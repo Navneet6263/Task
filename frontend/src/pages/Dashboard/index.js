@@ -1,171 +1,41 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { teams, tasks } from '../../services/api';
+import React, { useState } from 'react';
+import CreateTaskModal from './CreateTaskModal';
 import DashboardHero from './DashboardHero';
+import ManagerAssignModal from './ManagerAssignModal';
 import MetricCards from './MetricCards';
-import TaskWorkspace from './TaskWorkspace';
 import PriorityBreakdown from './PriorityBreakdown';
-import TeamSnapshot from './TeamSnapshot';
 import Reminders from './Reminders';
 import TaskDetailModal from './TaskDetailModal';
-import CreateTaskModal from './CreateTaskModal';
-import ManagerAssignModal from './ManagerAssignModal';
+import TaskWorkspace from './TaskWorkspace';
+import TeamSnapshot from './TeamSnapshot';
+import { useDashboardData } from './useDashboardData';
 import { useDashboardLogic } from './useDashboardLogic';
-
-const PAGE_SIZE = 12;
 
 const Dashboard = () => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
-  const [teamList, setTeamList] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState(null);
-  const [members, setMembers] = useState([]);
-  const [taskList, setTaskList] = useState([]);
-  const [view, setView] = useState('list');
-  const [page, setPage] = useState(1);
-  const [filterPriority, setFilterPriority] = useState([]);
-  const [filterAssignee, setFilterAssignee] = useState([]);
-  const [filterStatus, setFilterStatus] = useState([]);
-  const [filterType, setFilterType] = useState([]);
-  const [filterClientNames, setFilterClientNames] = useState([]);
-  const [filterSearch, setFilterSearch] = useState('');
-  const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
-  const [filterCreatedTo, setFilterCreatedTo] = useState('');
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [sheetTab, setSheetTab] = useState('details');
+  const data = useDashboardData();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showMgrModal, setShowMgrModal] = useState(false);
   const [orgUsers, setOrgUsers] = useState([]);
-
   const {
-    taskForm,
-    mgrForm,
-    setMgrForm,
-    updateTaskFormField,
-    updateMgrFormField,
-    handleReferenceImageChange,
-    handleCreateTask,
-    handleManagerAssign,
-    handleStatusChange,
-    handleDelete,
-    handleApproveDelete,
-    handleRejectDelete,
-    handlePickBug,
-    handleResolveBug,
-    handlePanelUpdate,
-    openManagerModal,
-    openTaskComposer,
-    availableTaskOptions,
-    createTaskCategories,
-    mgrTaskCategories,
-    selectedTaskCategories,
-  } = useDashboardLogic(selectedTeam, members, orgUsers, setOrgUsers, setShowTaskModal, setShowMgrModal, selectedTask, setSelectedTask, () => selectTeam(selectedTeam))
+    teamList, selectedTeam, selectTeam, members, taskList, view, setView,
+    page, setPage, totalPages, totalTasks, loading, loadError,
+    selectedTask, setSelectedTask, openTask, sheetTab, setSheetTab,
+    filterPriority, setFilterPriority, filterAssignee, setFilterAssignee,
+    filterStatus, setFilterStatus, filterType, setFilterType,
+    filterClientNames, setFilterClientNames, filterSearch, setFilterSearch,
+    filterCreatedFrom, setFilterCreatedFrom, filterCreatedTo, setFilterCreatedTo,
+    clientNameOptions, stats, priorityStats, memberSummary, maxLoad,
+    reminders, refreshWorkspace, handleBulkDelete,
+  } = data;
 
-  const dateFiltersRef = useRef({ createdFrom: '', createdTo: '' });
-  const selectedTeamRef = useRef(null);
-
-  const selectTeam = useCallback(async (team, dateFilters) => {
-    const activeDateFilters = dateFilters || dateFiltersRef.current;
-    selectedTeamRef.current = team;
-    setSelectedTeam(team);
-    setSelectedTask(null);
-    try {
-      const [taskRes, memberRes] = await Promise.all([
-        tasks.getByTeam(team.id, 1, 5000, '', activeDateFilters),
-        teams.getMembers(team.id),
-      ]);
-
-      setTaskList(Array.isArray(taskRes.data?.data) ? taskRes.data.data : []);
-      setMembers(Array.isArray(memberRes.data) ? memberRes.data : []);
-    } catch (error) {}
-  }, []);
-
-  const fetchTeams = useCallback(async () => {
-    try {
-      const response = await teams.getAll();
-      const list = Array.isArray(response.data) ? response.data : [];
-      setTeamList(list);
-      if (list.length > 0) await selectTeam(list[0]);
-    } catch (error) {}
-  }, [selectTeam]);
-
-  useEffect(() => { fetchTeams(); }, [fetchTeams]);
-
-  useEffect(() => {
-    const dateFilters = { createdFrom: filterCreatedFrom, createdTo: filterCreatedTo };
-    dateFiltersRef.current = dateFilters;
-    if (selectedTeamRef.current) selectTeam(selectedTeamRef.current, dateFilters);
-  }, [filterCreatedFrom, filterCreatedTo, selectTeam]);
-
-  const handleBulkDelete = useCallback(async (ids) => {
-    try {
-      const token = localStorage.getItem('token') || localStorage.getItem('company_token');
-      await fetch('/api/tasks/bulk', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ids }),
-      });
-      setTaskList(prev => prev.filter(t => !ids.includes(t.id)));
-      if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null);
-    } catch (_) {}
-  }, [selectedTask]);
-
-  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterClientNames, filterSearch, filterCreatedFrom, filterCreatedTo, view]);
-
-  const filtered = useMemo(() => taskList.filter((task) => {
-    const matchPriority = filterPriority.length === 0 || filterPriority.includes(task.priority);
-    const matchAssignee = filterAssignee.length === 0 || filterAssignee.includes(String(task.assigned_to));
-    const matchStatus = filterStatus.length === 0 || filterStatus.includes(task.status);
-    const matchType = filterType.length === 0 || filterType.includes(task.issue_type);
-    const matchClient = filterClientNames.length === 0 || filterClientNames.includes((task.client_name || '').trim());
-    const matchSearch = !filterSearch || (task.title || '').toLowerCase().includes(filterSearch.toLowerCase());
-    return matchPriority && matchAssignee && matchStatus && matchType && matchClient && matchSearch;
-  }), [taskList, filterPriority, filterAssignee, filterStatus, filterType, filterClientNames, filterSearch]);
-
-  const clientNameOptions = useMemo(() => (
-    [...new Set(taskList.map((task) => (task.client_name || '').trim()).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b))
-  ), [taskList]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
-
-  const stats = useMemo(() => {
-    const total = taskList.length;
-    const done = taskList.filter((task) => task.status === 'DONE').length;
-    const inProgress = taskList.filter((task) => task.status === 'IN_PROGRESS').length;
-    const pending = taskList.filter((task) => task.status === 'PENDING').length;
-    const todo = taskList.filter((task) => task.status === 'TODO').length;
-    const overdue = taskList.filter((task) => task.due_date && task.status !== 'DONE' && new Date(task.due_date) < new Date()).length;
-    const completion = total ? Math.round((done / total) * 100) : 0;
-    return { total, done, inProgress, pending, todo, overdue, completion, open: todo + inProgress + pending };
-  }, [taskList]);
-
-  const priorityStats = useMemo(() => ({
-    HIGH: taskList.filter((task) => task.priority === 'HIGH').length,
-    MEDIUM: taskList.filter((task) => task.priority === 'MEDIUM').length,
-    LOW: taskList.filter((task) => task.priority === 'LOW').length,
-  }), [taskList]);
-
-  const memberSummary = useMemo(() => {
-    const mapped = members.map((member) => {
-      const derived = taskList.filter((task) => task.assigned_to === member.id && task.status !== 'DONE').length;
-      return { ...member, load: typeof member.current_tasks === 'number' ? member.current_tasks : derived };
-    });
-    return mapped.sort((a, b) => b.load - a.load).slice(0, 6);
-  }, [members, taskList]);
-
-  const maxLoad = Math.max(1, ...memberSummary.map((member) => member.load));
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-  const reminders = useMemo(() => {
-    const list = [];
-    if (stats.overdue > 0) list.push({ tone: 'danger', title: `${stats.overdue} overdue tasks`, note: 'Check blockers and adjust deadlines.' });
-    if (stats.pending > 0) list.push({ tone: 'warning', title: `${stats.pending} pending tasks`, note: 'Dependencies may be waiting.' });
-    if (stats.open === 0 && stats.total > 0) list.push({ tone: 'success', title: 'Sprint is clean', note: 'No open tasks currently.' });
-    if (list.length === 0) list.push({ tone: 'info', title: 'Add more tasks', note: 'Use create task to plan next work.' });
-    return list.slice(0, 4);
-  }, [stats]);
+  const logic = useDashboardLogic(
+    selectedTeam, members, orgUsers, setOrgUsers, setShowTaskModal,
+    setShowMgrModal, selectedTask, setSelectedTask, refreshWorkspace
+  );
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
 
   return (
     <div className="flex flex-col gap-4 text-gray-900">
@@ -174,8 +44,14 @@ const Dashboard = () => {
         @keyframes dsv2Slide { from { opacity: 0; transform: scale(0.94) translateY(12px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       `}</style>
 
-      <DashboardHero user={user} today={today} teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam} onCreateTask={openTaskComposer} onManagerAssign={openManagerModal} />
+      <DashboardHero user={user} today={today} teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam} onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal} />
       <MetricCards stats={stats} teamList={teamList} />
+
+      {loadError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" role="alert">
+          {loadError}
+        </div>
+      )}
 
       {!selectedTeam && (
         <section className="rounded-2xl px-5 py-8 border border-dashed border-gray-300 bg-white/75 text-center">
@@ -187,43 +63,25 @@ const Dashboard = () => {
       {selectedTeam && (
         <section className="dashboard-workspace-grid grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3.5 items-start">
           <div className="flex flex-col gap-3.5 min-w-0">
+            {loading && <span className="text-xs font-semibold text-blue-600">Refreshing tasks...</span>}
             <TaskWorkspace
-              view={view}
-              setView={setView}
-              selectedTeam={selectedTeam}
-              filtered={filtered}
-              paginated={paginated}
-              members={members}
-              filterPriority={filterPriority}
-              setFilterPriority={setFilterPriority}
-              filterAssignee={filterAssignee}
-              setFilterAssignee={setFilterAssignee}
-              filterStatus={filterStatus}
-              setFilterStatus={setFilterStatus}
-              filterType={filterType}
-              setFilterType={setFilterType}
-              filterClientNames={filterClientNames}
-              setFilterClientNames={setFilterClientNames}
+              view={view} setView={setView} selectedTeam={selectedTeam}
+              filtered={taskList} paginated={taskList} members={members}
+              filterPriority={filterPriority} setFilterPriority={setFilterPriority}
+              filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
+              filterStatus={filterStatus} setFilterStatus={setFilterStatus}
+              filterType={filterType} setFilterType={setFilterType}
+              filterClientNames={filterClientNames} setFilterClientNames={setFilterClientNames}
               clientNameOptions={clientNameOptions}
-              filterSearch={filterSearch}
-              setFilterSearch={setFilterSearch}
-              filterCreatedFrom={filterCreatedFrom}
-              setFilterCreatedFrom={setFilterCreatedFrom}
-              filterCreatedTo={filterCreatedTo}
-              setFilterCreatedTo={setFilterCreatedTo}
-              selectedTask={selectedTask}
-              setSelectedTask={setSelectedTask}
-              setSheetTab={setSheetTab}
-              handleStatusChange={handleStatusChange}
-              handleDelete={handleDelete}
-              handleApproveDelete={handleApproveDelete}
-              handleRejectDelete={handleRejectDelete}
-              handlePickBug={handlePickBug}
-              handleResolveBug={handleResolveBug}
-              onBulkDelete={handleBulkDelete}
-              page={page}
-              setPage={setPage}
-              totalPages={totalPages}
+              filterSearch={filterSearch} setFilterSearch={setFilterSearch}
+              filterCreatedFrom={filterCreatedFrom} setFilterCreatedFrom={setFilterCreatedFrom}
+              filterCreatedTo={filterCreatedTo} setFilterCreatedTo={setFilterCreatedTo}
+              selectedTask={selectedTask} setSelectedTask={openTask} setSheetTab={setSheetTab}
+              handleStatusChange={logic.handleStatusChange} handleDelete={logic.handleDelete}
+              handleApproveDelete={logic.handleApproveDelete} handleRejectDelete={logic.handleRejectDelete}
+              handlePickBug={logic.handlePickBug} handleResolveBug={logic.handleResolveBug}
+              onBulkDelete={handleBulkDelete} page={page} setPage={setPage}
+              totalPages={totalPages} totalTasks={totalTasks}
             />
           </div>
 
@@ -237,43 +95,29 @@ const Dashboard = () => {
 
       {selectedTask && (
         <TaskDetailModal
-          selectedTask={selectedTask}
-          sheetTab={sheetTab}
-          setSheetTab={setSheetTab}
-          setSelectedTask={setSelectedTask}
-          handleDelete={handleDelete}
-          handleApproveDelete={handleApproveDelete}
-          handleRejectDelete={handleRejectDelete}
-          handlePanelUpdate={handlePanelUpdate}
-          members={members}
-          availableTaskOptions={availableTaskOptions}
-          selectedTaskCategories={selectedTaskCategories}
+          selectedTask={selectedTask} sheetTab={sheetTab} setSheetTab={setSheetTab}
+          setSelectedTask={setSelectedTask} handleDelete={logic.handleDelete}
+          handleApproveDelete={logic.handleApproveDelete} handleRejectDelete={logic.handleRejectDelete}
+          handlePanelUpdate={logic.handlePanelUpdate} members={members}
+          availableTaskOptions={logic.availableTaskOptions}
+          selectedTaskCategories={logic.selectedTaskCategories}
         />
       )}
 
       <ManagerAssignModal
-        showMgrModal={showMgrModal}
-        setShowMgrModal={setShowMgrModal}
-        mgrForm={mgrForm}
-        setMgrForm={setMgrForm}
-        updateMgrFormField={updateMgrFormField}
-        handleManagerAssign={handleManagerAssign}
-        orgUsers={orgUsers}
-        availableTaskOptions={availableTaskOptions}
-        mgrTaskCategories={mgrTaskCategories}
+        showMgrModal={showMgrModal} setShowMgrModal={setShowMgrModal}
+        mgrForm={logic.mgrForm} setMgrForm={logic.setMgrForm}
+        updateMgrFormField={logic.updateMgrFormField} handleManagerAssign={logic.handleManagerAssign}
+        orgUsers={orgUsers} availableTaskOptions={logic.availableTaskOptions}
+        mgrTaskCategories={logic.mgrTaskCategories}
       />
-
       <CreateTaskModal
-        showTaskModal={showTaskModal}
-        setShowTaskModal={setShowTaskModal}
-        taskForm={taskForm}
-        updateTaskFormField={updateTaskFormField}
-        handleReferenceImageChange={handleReferenceImageChange}
-        handleCreateTask={handleCreateTask}
-        selectedTeam={selectedTeam}
-        members={members}
-        availableTaskOptions={availableTaskOptions}
-        createTaskCategories={createTaskCategories}
+        showTaskModal={showTaskModal} setShowTaskModal={setShowTaskModal}
+        taskForm={logic.taskForm} updateTaskFormField={logic.updateTaskFormField}
+        handleReferenceImageChange={logic.handleReferenceImageChange}
+        handleCreateTask={logic.handleCreateTask} selectedTeam={selectedTeam}
+        members={members} availableTaskOptions={logic.availableTaskOptions}
+        createTaskCategories={logic.createTaskCategories}
       />
     </div>
   );
