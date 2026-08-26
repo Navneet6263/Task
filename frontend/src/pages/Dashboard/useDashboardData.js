@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tasks, teams } from '../../services/api';
+import { filterTasksLocally, paginateTasks, summarizeTasks } from './taskDataUtils';
 
 const EMPTY_SUMMARY = {
   total: 0, done: 0, in_progress: 0, pending: 0, todo: 0,
@@ -87,9 +88,24 @@ export const useDashboardData = () => {
       const limit = view === 'list' ? 12 : 48;
       const response = await tasks.getByTeam(selectedTeam.id, page, limit, queryFilters);
       if (requestId !== requestIdRef.current) return;
-      setTaskList(Array.isArray(response.data?.data) ? response.data.data : []);
-      setSummary({ ...EMPTY_SUMMARY, ...(response.data?.summary || {}) });
-      setPagination(response.data?.pagination || { total: 0, total_pages: 1 });
+      const serverSummary = response.data?.summary;
+      if (serverSummary && Number.isFinite(Number(serverSummary.total))) {
+        setTaskList(Array.isArray(response.data?.data) ? response.data.data : []);
+        setSummary({ ...EMPTY_SUMMARY, ...serverSummary });
+        setPagination(response.data?.pagination || { total: Number(serverSummary.total), total_pages: 1 });
+      } else {
+        const legacyResponse = await tasks.getByTeam(selectedTeam.id, 1, 5000, {
+          createdFrom: queryFilters.createdFrom,
+          createdTo: queryFilters.createdTo,
+        });
+        if (requestId !== requestIdRef.current) return;
+        const legacyTasks = Array.isArray(legacyResponse.data?.data) ? legacyResponse.data.data : [];
+        const filteredTasks = filterTasksLocally(legacyTasks, queryFilters);
+        const legacyPage = paginateTasks(filteredTasks, page, limit);
+        setTaskList(legacyPage.data);
+        setSummary(summarizeTasks(filteredTasks));
+        setPagination(legacyPage.pagination);
+      }
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
       setTaskList([]);
