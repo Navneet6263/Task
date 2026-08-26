@@ -154,7 +154,7 @@ const TaskListView = ({
         </div>
       )}
 
-      <table className="w-full min-w-[1080px] border-collapse">
+      <table className="w-full min-w-[1040px] border-collapse">
         <thead>
           <tr>
             {/* Checkbox header */}

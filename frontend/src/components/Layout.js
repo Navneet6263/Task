@@ -21,6 +21,9 @@ const Layout = () => {
   const [showNotif, setShowNotif] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('shell_sidebar_collapsed') === 'true'
+  );
   const [search, setSearch] = useState('');
   const [accessibleOrgs, setAccessibleOrgs] = useState([]);
   const [activeOrgId, setActiveOrgId] = useState(localStorage.getItem('active_org_id') || '');
@@ -245,9 +248,17 @@ const Layout = () => {
     if (sidebarOpen) setSidebarOpen(false);
   };
 
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem('shell_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
 
   return (
-    <div className={`shell-root ${sidebarOpen ? 'shell-sidebar-open' : ''}`}>
+    <div className={`shell-root ${sidebarOpen ? 'shell-sidebar-open' : ''} ${sidebarCollapsed ? 'shell-sidebar-collapsed' : ''}`}>
       <button
         type="button"
         className="shell-backdrop"
@@ -302,6 +313,17 @@ const Layout = () => {
           ))}
         </div>
       </aside>
+
+      <button
+        type="button"
+        className="shell-sidebar-collapse-btn"
+        onClick={toggleSidebarCollapsed}
+        aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-pressed={sidebarCollapsed}
+      >
+        <ChevronIcon />
+      </button>
 
 
       <div className="shell-main">

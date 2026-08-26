@@ -21,10 +21,11 @@ const Dashboard = () => {
   const [taskList, setTaskList] = useState([]);
   const [view, setView] = useState('list');
   const [page, setPage] = useState(1);
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterAssignee, setFilterAssignee] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filterPriority, setFilterPriority] = useState([]);
+  const [filterAssignee, setFilterAssignee] = useState([]);
+  const [filterStatus, setFilterStatus] = useState([]);
+  const [filterType, setFilterType] = useState([]);
+  const [filterClientNames, setFilterClientNames] = useState([]);
   const [filterSearch, setFilterSearch] = useState('');
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
   const [filterCreatedTo, setFilterCreatedTo] = useState('');
@@ -107,16 +108,22 @@ const Dashboard = () => {
     } catch (_) {}
   }, [selectedTask]);
 
-  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterSearch, filterCreatedFrom, filterCreatedTo, view]);
+  useEffect(() => { setPage(1); }, [selectedTeam?.id, filterPriority, filterAssignee, filterStatus, filterType, filterClientNames, filterSearch, filterCreatedFrom, filterCreatedTo, view]);
 
   const filtered = useMemo(() => taskList.filter((task) => {
-    const matchPriority = !filterPriority || task.priority === filterPriority;
-    const matchAssignee = !filterAssignee || task.assigned_to === Number(filterAssignee);
-    const matchStatus = !filterStatus || task.status === filterStatus;
-    const matchType = !filterType || task.issue_type === filterType;
+    const matchPriority = filterPriority.length === 0 || filterPriority.includes(task.priority);
+    const matchAssignee = filterAssignee.length === 0 || filterAssignee.includes(String(task.assigned_to));
+    const matchStatus = filterStatus.length === 0 || filterStatus.includes(task.status);
+    const matchType = filterType.length === 0 || filterType.includes(task.issue_type);
+    const matchClient = filterClientNames.length === 0 || filterClientNames.includes((task.client_name || '').trim());
     const matchSearch = !filterSearch || (task.title || '').toLowerCase().includes(filterSearch.toLowerCase());
-    return matchPriority && matchAssignee && matchStatus && matchType && matchSearch;
-  }), [taskList, filterPriority, filterAssignee, filterStatus, filterType, filterSearch]);
+    return matchPriority && matchAssignee && matchStatus && matchType && matchClient && matchSearch;
+  }), [taskList, filterPriority, filterAssignee, filterStatus, filterType, filterClientNames, filterSearch]);
+
+  const clientNameOptions = useMemo(() => (
+    [...new Set(taskList.map((task) => (task.client_name || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+  ), [taskList]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -178,7 +185,7 @@ const Dashboard = () => {
       )}
 
       {selectedTeam && (
-        <section className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3.5 items-start">
+        <section className="dashboard-workspace-grid grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3.5 items-start">
           <div className="flex flex-col gap-3.5 min-w-0">
             <TaskWorkspace
               view={view}
@@ -195,6 +202,9 @@ const Dashboard = () => {
               setFilterStatus={setFilterStatus}
               filterType={filterType}
               setFilterType={setFilterType}
+              filterClientNames={filterClientNames}
+              setFilterClientNames={setFilterClientNames}
+              clientNameOptions={clientNameOptions}
               filterSearch={filterSearch}
               setFilterSearch={setFilterSearch}
               filterCreatedFrom={filterCreatedFrom}
@@ -217,7 +227,7 @@ const Dashboard = () => {
             />
           </div>
 
-          <aside className="flex flex-col gap-3.5 sticky top-[78px] min-w-0">
+          <aside className="dashboard-insights flex flex-col gap-3.5 sticky top-[78px] min-w-0">
             <PriorityBreakdown priorityStats={priorityStats} stats={stats} />
             <TeamSnapshot memberSummary={memberSummary} members={members} maxLoad={maxLoad} />
             <Reminders reminders={reminders} />

@@ -1,7 +1,122 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import TaskListView from './TaskListView';
 import TaskBoardView from './TaskBoardView';
 import TaskTimelineView from './TaskTimelineView';
+
+const STATUS_OPTIONS = [
+  { value: 'TODO', label: '📋 To Do' },
+  { value: 'IN_PROGRESS', label: '⚙️ In Progress' },
+  { value: 'PENDING', label: '⏳ Pending' },
+  { value: 'DONE', label: '✅ Done' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'HIGH', label: '🔥 High' },
+  { value: 'MEDIUM', label: '⚡ Medium' },
+  { value: 'LOW', label: '☕ Low' },
+];
+
+const TYPE_OPTIONS = [
+  { value: 'task', label: '📌 Task' },
+  { value: 'bug', label: '🐛 Bug' },
+  { value: 'feature', label: '✨ Feature' },
+  { value: 'story', label: '📖 Story' },
+  { value: 'enhancement', label: '🚀 Enhancement' },
+];
+
+const MultiSelectFilter = ({ label, values, onChange, options, disabled = false }) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const toggleValue = (value) => {
+    onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  const selectedLabel = values.length === 1
+    ? options.find((option) => option.value === values[0])?.label || values[0] || label
+    : values.length > 1
+      ? `${values.length} selected`
+      : label;
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        className={`h-[34px] min-w-[132px] max-w-[190px] rounded-lg border bg-white/80 px-2.5 text-[11px] font-medium shadow-sm transition-all outline-none flex items-center justify-between gap-2 ${
+          values.length > 0
+            ? 'border-blue-300 text-blue-700 ring-2 ring-blue-500/10'
+            : 'border-slate-200 text-slate-700 hover:border-slate-300'
+        } ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
+        onClick={() => !disabled && setOpen((current) => !current)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        disabled={disabled}
+      >
+        <span className="truncate">{disabled ? `No ${label.replace(/^All\s+/i, '').toLowerCase()}` : selectedLabel}</span>
+        <span className="flex items-center gap-1 shrink-0">
+          {values.length > 0 && (
+            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[9px] font-extrabold grid place-items-center">
+              {values.length}
+            </span>
+          )}
+          <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-[39px] z-50 w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.18)]" role="listbox" aria-multiselectable="true">
+          <div className="max-h-[260px] overflow-y-auto p-1.5">
+            {options.map((option) => (
+              <label
+                key={option.value}
+                className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] text-slate-700 cursor-pointer hover:bg-blue-50"
+                role="option"
+                aria-selected={values.includes(option.value)}
+              >
+                <input
+                  type="checkbox"
+                  checked={values.includes(option.value)}
+                  onChange={() => toggleValue(option.value)}
+                  className="h-3.5 w-3.5 rounded accent-blue-600"
+                />
+                <span className="truncate">{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {values.length > 0 && (
+            <button
+              type="button"
+              className="w-full border-t border-slate-100 px-3 py-2 text-left text-[11px] font-bold text-red-600 hover:bg-red-50"
+              onClick={() => onChange([])}
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const TaskWorkspace = ({
   view,
@@ -18,6 +133,9 @@ const TaskWorkspace = ({
   setFilterStatus,
   filterType,
   setFilterType,
+  filterClientNames,
+  setFilterClientNames,
+  clientNameOptions,
   filterSearch,
   setFilterSearch,
   filterCreatedFrom,
@@ -38,19 +156,27 @@ const TaskWorkspace = ({
   setPage,
   totalPages,
 }) => {
-  const activeFilterCount = [filterPriority, filterAssignee, filterStatus, filterType, filterSearch, filterCreatedFrom, filterCreatedTo].filter(Boolean).length;
+  const activeFilterCount = [
+    filterPriority.length > 0,
+    filterAssignee.length > 0,
+    filterStatus.length > 0,
+    filterType.length > 0,
+    filterClientNames.length > 0,
+    filterSearch,
+    filterCreatedFrom,
+    filterCreatedTo,
+  ].filter(Boolean).length;
 
   const clearAllFilters = () => {
-    setFilterPriority('');
-    setFilterAssignee('');
-    setFilterStatus('');
-    setFilterType('');
+    setFilterPriority([]);
+    setFilterAssignee([]);
+    setFilterStatus([]);
+    setFilterType([]);
+    setFilterClientNames([]);
     setFilterSearch('');
     setFilterCreatedFrom('');
     setFilterCreatedTo('');
   };
-
-  const selectClass = "h-[34px] rounded-lg border border-slate-200 bg-white/80 text-slate-700 text-[11px] font-medium px-2.5 shadow-sm hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all outline-none cursor-pointer min-w-[120px]";
 
   return (
     <div className="relative rounded-[24px] bg-white/90 backdrop-blur-2xl border border-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] px-4 py-4 flex flex-col gap-3">
@@ -99,7 +225,7 @@ const TaskWorkspace = ({
       </header>
 
       {/* ── Row 2: Search + Filters ── */}
-      <div className="relative z-10 flex flex-wrap gap-2 items-center">
+      <div className="relative z-30 flex flex-wrap gap-2 items-center">
         {/* Search Input */}
         <div className="relative flex-1 min-w-[180px] max-w-[260px]">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,40 +253,42 @@ const TaskWorkspace = ({
 
         <div className="h-[18px] w-[1px] bg-slate-200 hidden sm:block" />
 
-        {/* Status Filter */}
-        <select className={selectClass} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All Statuses</option>
-          <option value="TODO">📋 To Do</option>
-          <option value="IN_PROGRESS">⚙️ In Progress</option>
-          <option value="PENDING">⏳ Pending</option>
-          <option value="DONE">✅ Done</option>
-        </select>
+        <MultiSelectFilter
+          label="All Statuses"
+          values={filterStatus}
+          onChange={setFilterStatus}
+          options={STATUS_OPTIONS}
+        />
 
-        {/* Priority Filter */}
-        <select className={selectClass} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-          <option value="">All Priorities</option>
-          <option value="HIGH">🔥 High</option>
-          <option value="MEDIUM">⚡ Medium</option>
-          <option value="LOW">☕ Low</option>
-        </select>
+        <MultiSelectFilter
+          label="All Priorities"
+          values={filterPriority}
+          onChange={setFilterPriority}
+          options={PRIORITY_OPTIONS}
+        />
 
-        {/* Issue Type Filter */}
-        <select className={selectClass} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-          <option value="">All Types</option>
-          <option value="task">📌 Task</option>
-          <option value="bug">🐛 Bug</option>
-          <option value="feature">✨ Feature</option>
-          <option value="story">📖 Story</option>
-          <option value="enhancement">🚀 Enhancement</option>
-        </select>
+        <MultiSelectFilter
+          label="All Types"
+          values={filterType}
+          onChange={setFilterType}
+          options={TYPE_OPTIONS}
+        />
 
-        {/* Assignee Filter */}
-        <select className={selectClass} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-          <option value="">All Members</option>
-          {members.map((member) => (
-            <option key={member.id} value={member.id}>{member.name}</option>
-          ))}
-        </select>
+        <MultiSelectFilter
+          label="All Members"
+          values={filterAssignee}
+          onChange={setFilterAssignee}
+          options={members.map((member) => ({ value: String(member.id), label: member.name }))}
+          disabled={members.length === 0}
+        />
+
+        <MultiSelectFilter
+          label="All Clients"
+          values={filterClientNames}
+          onChange={setFilterClientNames}
+          options={clientNameOptions.map((clientName) => ({ value: clientName, label: clientName }))}
+          disabled={clientNameOptions.length === 0}
+        />
 
         <div className="flex items-center gap-1.5 h-[34px] rounded-lg border border-slate-200 bg-white/80 px-2.5 shadow-sm">
           <label htmlFor="created-from" className="text-[10px] font-bold text-slate-500 whitespace-nowrap">Created from</label>

@@ -33,6 +33,40 @@
   border-right: 1px solid var(--line-soft);
   box-shadow: 20px 0 48px rgba(15, 23, 42, 0.08);
   overflow: hidden;
+  transition: transform 0.25s ease;
+}
+
+.shell-sidebar-collapse-btn {
+  position: fixed;
+  top: 50%;
+  left: 240px;
+  z-index: 40;
+  width: 40px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(47, 93, 255, 0.22);
+  border-radius: 14px;
+  color: var(--accent-blue-deep);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+  transform: translateY(-50%) rotate(180deg);
+  transition: left 0.25s ease, transform 0.25s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.shell-sidebar-collapse-btn:hover {
+  background: #eef4ff;
+  box-shadow: 0 14px 34px rgba(47, 93, 255, 0.2);
+}
+
+.shell-root.shell-sidebar-collapsed .shell-sidebar {
+  transform: translateX(-105%);
+}
+
+.shell-root.shell-sidebar-collapsed .shell-sidebar-collapse-btn {
+  left: 8px;
+  transform: translateY(-50%);
 }
 
 .shell-sidebar::before {
@@ -311,6 +345,21 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  transition: margin-left 0.25s ease;
+}
+
+.shell-root.shell-sidebar-collapsed .shell-main {
+  margin-left: 0;
+}
+
+.shell-root.shell-sidebar-collapsed .dashboard-workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-root.shell-sidebar-collapsed .dashboard-insights {
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .shell-header {
@@ -682,6 +731,10 @@
 }
 
 @media (max-width: 1120px) {
+  .shell-sidebar-collapse-btn {
+    display: none;
+  }
+
   .shell-menu-btn {
     display: inline-flex;
   }
@@ -697,6 +750,18 @@
 
   .shell-root.shell-sidebar-open .shell-sidebar {
     transform: translateX(0);
+  }
+
+  .dashboard-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-insights {
+    position: static;
+  }
+
+  .shell-root.shell-sidebar-collapsed .dashboard-insights {
+    display: flex;
   }
 
   .shell-root.shell-sidebar-open .shell-backdrop {
