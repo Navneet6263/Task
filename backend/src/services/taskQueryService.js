@@ -4,6 +4,7 @@ const STATUSES = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'];
 const ISSUE_TYPES = ['task', 'bug', 'story', 'feature', 'enhancement'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const FOCUS_MODES = ['', 'MY_DAY', 'DUE_TODAY', 'OVERDUE'];
 
 const validationError = (message) => Object.assign(new Error(message), {
   status: 422,
@@ -54,6 +55,9 @@ const parseTaskQuery = (query = {}) => {
     throw validationError('created_from must be on or before created_to');
   }
 
+  const focus = String(query.focus || '').trim().toUpperCase();
+  if (!FOCUS_MODES.includes(focus)) throw validationError('focus contains an unsupported value');
+
   return {
     page,
     limit,
@@ -66,6 +70,7 @@ const parseTaskQuery = (query = {}) => {
     search: String(query.search || '').trim().slice(0, 120),
     createdFrom,
     createdTo,
+    focus,
   };
 };
 
@@ -75,7 +80,7 @@ const addInFilter = (clauses, params, column, values) => {
   params.push(...values);
 };
 
-const buildWhere = (teamId, filters) => {
+const buildWhere = (teamId, filters, userId) => {
   const clauses = ['t.team_id = ?', 't.is_deleted = FALSE'];
   const params = [Number(teamId)];
   addInFilter(clauses, params, 't.status', filters.statuses);
@@ -96,6 +101,24 @@ const buildWhere = (teamId, filters) => {
     clauses.push('t.created_at < DATEADD(DAY, 1, CAST(? AS DATE))');
     params.push(filters.createdTo);
   }
+  if (filters.focus === 'MY_DAY') {
+    const normalizedUserId = Number(userId);
+    if (!Number.isInteger(normalizedUserId) || normalizedUserId <= 0) clauses.push('1 = 0');
+    else {
+      clauses.push('t.assigned_to = ?');
+      params.push(normalizedUserId);
+    }
+    clauses.push("t.status != 'DONE'");
+    clauses.push('t.due_date <= CAST(GETDATE() AS DATE)');
+    clauses.push('(t.snoozed_until IS NULL OR t.snoozed_until <= GETDATE())');
+  }
+  if (filters.focus === 'DUE_TODAY') {
+    clauses.push('t.due_date = CAST(GETDATE() AS DATE)');
+  }
+  if (filters.focus === 'OVERDUE') {
+    clauses.push("t.status != 'DONE'");
+    clauses.push('t.due_date < CAST(GETDATE() AS DATE)');
+  }
   return { where: clauses.join(' AND '), params };
 };
 
@@ -111,9 +134,9 @@ const normalizeSummary = (row = {}) => ({
   low: Number(row.low || 0),
 });
 
-const listTeamTasks = async (teamId, rawQuery) => {
+const listTeamTasks = async (teamId, rawQuery, userId) => {
   const filters = parseTaskQuery(rawQuery);
-  const { where, params } = buildWhere(teamId, filters);
+  const { where, params } = buildWhere(teamId, filters, userId);
   const summarySql = `SELECT COUNT(*) AS total,
     SUM(CASE WHEN t.status = 'DONE' THEN 1 ELSE 0 END) AS done,
     SUM(CASE WHEN t.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
@@ -126,7 +149,7 @@ const listTeamTasks = async (teamId, rawQuery) => {
     FROM tasks t WHERE ${where}`;
   const taskSql = `SELECT t.id, t.title, t.description, t.priority, t.status, t.assigned_to,
       t.assigned_by, t.team_id, t.start_date, t.assigned_date, t.due_date, t.client_name,
-      t.issue_type, t.manager_assigned, t.picked_by, t.delete_requested_by, t.created_at, t.version,
+      t.issue_type, t.manager_assigned, t.picked_by, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
       u1.name AS assigned_to_name, u2.name AS assigned_by_name, u2.name AS created_by_name,
       u5.name AS delete_requested_by_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,

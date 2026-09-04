@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BulkTaskActions from './BulkTaskActions';
+import SnoozeMenu from './SnoozeMenu';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
@@ -29,15 +31,13 @@ const dateTimeLabel = (value) => {
 
 const TaskListView = ({
   paginated, selectedTask, setSelectedTask, setSheetTab,
-  handleStatusChange, handleDelete, handleApproveDelete, handleRejectDelete,
+  handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete,
   handlePickBug, handleResolveBug, onBulkDelete,
 }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const navigate = useNavigate();
 
   const [selected, setSelected] = useState(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [confirmBulk, setConfirmBulk] = useState(false);
 
   const allSelected = paginated.length > 0 && paginated.every(t => selected.has(t.id));
 
@@ -57,18 +57,6 @@ const TaskListView = ({
     });
   };
 
-  const handleBulkDelete = async () => {
-    if (selected.size === 0) return;
-    setBulkBusy(true);
-    try {
-      if (onBulkDelete) await onBulkDelete([...selected]);
-      setSelected(new Set());
-      setConfirmBulk(false);
-    } finally {
-      setBulkBusy(false);
-    }
-  };
-
   const handleMailClick = (e, task) => {
     e.stopPropagation();
     localStorage.setItem('comm_task_context', JSON.stringify({
@@ -81,78 +69,7 @@ const TaskListView = ({
 
   return (
     <div className="overflow-auto">
-      {/* ── Bulk Delete Bar ── */}
-      {selected.size > 0 && (
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            background: 'linear-gradient(135deg,#fee2e2,#fef2f2)',
-            border: '1px solid #fca5a5', borderRadius: '14px',
-            padding: '10px 16px', marginBottom: '10px',
-            animation: 'dashRise 0.25s ease forwards',
-          }}
-        >
-          <span style={{ fontWeight: 700, color: '#b91c1c', fontSize: '14px' }}>
-            {selected.size} task{selected.size > 1 ? 's' : ''} selected
-          </span>
-
-          {!confirmBulk ? (
-            <button
-              type="button"
-              onClick={() => setConfirmBulk(true)}
-              style={{
-                background: '#dc2626', color: '#fff', border: 'none',
-                borderRadius: '10px', padding: '7px 18px',
-                fontWeight: 700, fontSize: '13px', cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(220,38,38,0.3)',
-              }}
-            >
-              🗑️ Delete Selected
-            </button>
-          ) : (
-            <>
-              <span style={{ fontSize: '13px', color: '#7f1d1d', fontWeight: 600 }}>
-                Are you sure you want to delete the selected tasks?
-              </span>
-              <button
-                type="button"
-                disabled={bulkBusy}
-                onClick={handleBulkDelete}
-                style={{
-                  background: '#dc2626', color: '#fff', border: 'none',
-                  borderRadius: '10px', padding: '7px 18px',
-                  fontWeight: 700, fontSize: '13px', cursor: 'pointer',
-                }}
-              >
-                {bulkBusy ? 'Deleting...' : '✅ Yes, Delete'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmBulk(false)}
-                style={{
-                  background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1',
-                  borderRadius: '10px', padding: '7px 16px',
-                  fontWeight: 600, fontSize: '13px', cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          )}
-
-          <button
-            type="button"
-            onClick={() => { setSelected(new Set()); setConfirmBulk(false); }}
-            style={{
-              marginLeft: 'auto', background: 'none', border: 'none',
-              color: '#94a3b8', fontSize: '18px', cursor: 'pointer',
-            }}
-            title="Deselect all"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      <BulkTaskActions selectedIds={[...selected]} onDelete={onBulkDelete} onClear={() => setSelected(new Set())} />
 
       <table className="w-full min-w-[1040px] border-collapse">
         <thead>
@@ -300,6 +217,8 @@ const TaskListView = ({
                       ))}
                     </select>
                   )}
+
+                  <SnoozeMenu task={task} onSnooze={handleSnooze} />
 
                   {task.delete_requested_by ? (
                     task.assigned_by === user.id ? (

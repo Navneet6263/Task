@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import SnoozeMenu from './SnoozeMenu';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
@@ -10,15 +11,32 @@ const dateLabel = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusChange, handleApproveDelete, handleRejectDelete }) => {
+const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusChange, handleSnooze, handleApproveDelete, handleRejectDelete }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
-  
+  const [pendingStatuses, setPendingStatuses] = useState({});
+  const [draggingId, setDraggingId] = useState(null);
+
+  const effectiveStatus = (task) => pendingStatuses[task.id] || task.status;
+  const moveTask = async (task, status) => {
+    if (!task || effectiveStatus(task) === status) return;
+    setPendingStatuses((current) => ({ ...current, [task.id]: status }));
+    try {
+      await handleStatusChange(task, status);
+    } finally {
+      setPendingStatuses((current) => {
+        const next = { ...current };
+        delete next[task.id];
+        return next;
+      });
+    }
+  };
+
   return (
-  <div className="grid grid-cols-4 gap-2.5">
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
     {STATUS_OPTIONS.map((status) => {
-      const columnItems = filtered.filter((task) => task.status === status);
+      const columnItems = filtered.filter((task) => effectiveStatus(task) === status);
       return (
-        <article key={status} className="rounded-xl border border-gray-200 bg-[#f7f9ff] px-2.5 py-2.5 min-h-[200px]">
+        <article key={status} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const task = filtered.find((item) => String(item.id) === String(draggingId)); setDraggingId(null); moveTask(task, status); }} className={`rounded-xl border bg-[#f7f9ff] px-2.5 py-2.5 min-h-[200px] transition-colors ${draggingId ? 'border-indigo-300' : 'border-gray-200'}`}>
           <header className="flex justify-between items-center mb-2">
             <h4 className="text-sm font-extrabold">{STATUS_LABEL[status]}</h4>
             <span className="text-[11px] text-gray-500">{columnItems.length}</span>
@@ -27,7 +45,10 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
           {columnItems.map((task) => (
             <div
               key={task.id}
-              className="relative rounded-xl border border-[#e5e9f5] bg-white px-2.5 py-2.5 mb-2 flex flex-col gap-2 cursor-pointer"
+              draggable
+              onDragStart={(event) => { setDraggingId(task.id); event.dataTransfer.effectAllowed = 'move'; }}
+              onDragEnd={() => setDraggingId(null)}
+              className={`relative rounded-xl border border-[#e5e9f5] bg-white px-2.5 py-2.5 mb-2 flex flex-col gap-2 cursor-grab transition-opacity ${String(draggingId) === String(task.id) ? 'opacity-40' : ''}`}
               onClick={() => { setSelectedTask(task); setSheetTab('details'); }}
             >
               {task.unread_comments > 0 && (
@@ -48,11 +69,16 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
                 <span className="text-[11px] text-gray-500">{dateLabel(task.due_date)}</span>
               </div>
               
-              <select className="h-[38px] rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5" value={task.status} onChange={(e) => handleStatusChange(task, e.target.value)}>
+              <select className="h-[38px] rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5" value={effectiveStatus(task)} onClick={(event) => event.stopPropagation()} onChange={(event) => moveTask(task, event.target.value)}>
                 {STATUS_OPTIONS.map((value) => (
                   <option key={value} value={value}>{STATUS_LABEL[value]}</option>
                 ))}
               </select>
+
+              <div className="flex items-center justify-between gap-2" onClick={(event) => event.stopPropagation()}>
+                <span className="text-[10px] font-semibold text-slate-400">Drag to move</span>
+                <SnoozeMenu task={task} onSnooze={handleSnooze} />
+              </div>
 
               {task.delete_requested_by ? (
                 task.assigned_by === user.id ? (

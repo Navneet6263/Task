@@ -28,3 +28,15 @@ test('legacy fallback paginates without changing the total', () => {
   expect(result.data.map((task) => task.id)).toEqual([3]);
   expect(result.pagination).toMatchObject({ total: 3, page: 2, total_pages: 2 });
 });
+
+test('My Day keeps due work assigned to the current user and ignores snoozed tasks', () => {
+  const result = filterTasksLocally([
+    ...tasks,
+    { id: 4, title: 'Snoozed item', status: 'TODO', priority: 'LOW', issue_type: 'task', assigned_to: 4, due_date: '2020-01-01', snoozed_until: '2099-01-01' },
+  ], {
+    statuses: [], priorities: [], issueTypes: [], assignees: [], clientNames: [],
+    search: '', createdFrom: '', createdTo: '', focus: 'MY_DAY', currentUserId: 4,
+  });
+
+  expect(result.map((task) => task.id)).toEqual([1]);
+});

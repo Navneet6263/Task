@@ -44,6 +44,7 @@ export const tasks = {
         ...(filters.search ? { search: filters.search } : {}),
         ...(filters.createdFrom ? { created_from: filters.createdFrom } : {}),
         ...(filters.createdTo ? { created_to: filters.createdTo } : {}),
+        ...(filters.focus ? { focus: filters.focus } : {}),
       },
     }),
   getDetail: (taskId) => api.get(`/tasks/detail/${taskId}`),
@@ -67,6 +68,7 @@ export const tasks = {
   bulkDelete: (ids) => api.delete('/tasks/bulk/delete', { data: { ids } }),
   getClients: () => api.get('/tasks/clients'),
   markTaskViewed: (id) => api.patch(`/tasks/${id}/view`),
+  snooze: (id, until) => api.patch(`/task-productivity/${id}/snooze`, { until }),
 };
 
 export const logs = {

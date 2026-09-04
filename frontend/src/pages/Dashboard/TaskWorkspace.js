@@ -3,6 +3,8 @@ import TaskBoardView from './TaskBoardView';
 import TaskListView from './TaskListView';
 import TaskTimelineView from './TaskTimelineView';
 import TaskFilterBar from './TaskFilters/TaskFilterBar';
+import FocusViews from './TaskFilters/FocusViews';
+import SavedViewsBar from './TaskFilters/SavedViewsBar';
 
 const visiblePages = (page, totalPages) => {
   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
@@ -21,6 +23,7 @@ const TaskWorkspace = (props) => {
     setSheetTab, handleStatusChange, handleDelete, handleApproveDelete,
     handleRejectDelete, handlePickBug, handleResolveBug, onBulkDelete,
     page, setPage, totalPages,
+    focusMode, setFocusMode, userId, handleSnooze,
   } = props;
 
   const activeFilterCount = [
@@ -94,13 +97,15 @@ const TaskWorkspace = (props) => {
       </header>
 
       <TaskFilterBar filters={filters} setters={setters} members={members} clientNameOptions={clientNameOptions} onClear={clearFilters} />
+      <FocusViews value={focusMode} onChange={setFocusMode} />
+      <SavedViewsBar teamId={selectedTeam.id} userId={userId} view={view} setView={setView} focusMode={focusMode} setFocusMode={setFocusMode} filters={filters} setters={setters} />
 
       <div className="relative z-10 flex-1 flex flex-col">
         {view === 'list' && (
-          <TaskListView paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
+          <TaskListView paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
         )}
         {view === 'board' && (
-          <TaskBoardView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} />
+          <TaskBoardView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} />
         )}
         {view === 'timeline' && (
           <TaskTimelineView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} />

@@ -17,6 +17,7 @@ const useDebouncedValue = (value, delay = 300) => {
 };
 
 export const useDashboardData = () => {
+  const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const [teamList, setTeamList] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [members, setMembers] = useState([]);
@@ -38,6 +39,7 @@ export const useDashboardData = () => {
   const [filterSearch, setFilterSearch] = useState('');
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
   const [filterCreatedTo, setFilterCreatedTo] = useState('');
+  const [focusMode, setFocusMode] = useState('');
   const requestIdRef = useRef(0);
   const debouncedSearch = useDebouncedValue(filterSearch);
 
@@ -77,7 +79,9 @@ export const useDashboardData = () => {
     search: debouncedSearch,
     createdFrom: filterCreatedFrom,
     createdTo: filterCreatedTo,
-  }), [debouncedSearch, filterAssignee, filterClientNames, filterCreatedFrom, filterCreatedTo, filterPriority, filterStatus, filterType]);
+    focus: focusMode,
+    currentUserId: currentUser.id,
+  }), [currentUser.id, debouncedSearch, filterAssignee, filterClientNames, filterCreatedFrom, filterCreatedTo, filterPriority, filterStatus, filterType, focusMode]);
 
   const loadTasks = useCallback(async () => {
     if (!selectedTeam?.id) return;
@@ -180,6 +184,7 @@ export const useDashboardData = () => {
     filterStatus, setFilterStatus, filterType, setFilterType,
     filterClientNames, setFilterClientNames, filterSearch, setFilterSearch,
     filterCreatedFrom, setFilterCreatedFrom, filterCreatedTo, setFilterCreatedTo,
+    focusMode, setFocusMode,
     clientNameOptions, stats, priorityStats, memberSummary,
     maxLoad: Math.max(1, ...memberSummary.map((member) => member.load)),
     reminders, refreshWorkspace, handleBulkDelete,

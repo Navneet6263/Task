@@ -1,8 +1,17 @@
 export const filterTasksLocally = (taskList, filters) => {
   const search = String(filters.search || '').toLowerCase();
+  const today = new Date().toISOString().slice(0, 10);
   return taskList.filter((task) => {
     const searchable = `${task.title || ''} ${task.description || ''}`.toLowerCase();
     const createdDate = String(task.created_at || '').slice(0, 10);
+    const dueDate = String(task.due_date || '').slice(0, 10);
+    const isOpen = task.status !== 'DONE';
+    const isAwake = !task.snoozed_until || new Date(task.snoozed_until) <= new Date();
+    const matchesFocus = !filters.focus || (
+      (filters.focus === 'MY_DAY' && String(task.assigned_to) === String(filters.currentUserId) && isOpen && dueDate && dueDate <= today && isAwake) ||
+      (filters.focus === 'DUE_TODAY' && dueDate === today) ||
+      (filters.focus === 'OVERDUE' && isOpen && dueDate && dueDate < today)
+    );
     return (
       (!filters.statuses.length || filters.statuses.includes(task.status)) &&
       (!filters.priorities.length || filters.priorities.includes(task.priority)) &&
@@ -12,6 +21,7 @@ export const filterTasksLocally = (taskList, filters) => {
       (!search || searchable.includes(search)) &&
       (!filters.createdFrom || createdDate >= filters.createdFrom) &&
       (!filters.createdTo || createdDate <= filters.createdTo)
+      && matchesFocus
     );
   });
 };

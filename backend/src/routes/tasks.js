@@ -368,7 +368,7 @@ router.get('/clients', authenticate, async (req, res) => {
 router.get('/team/:teamId', authenticate, async (req, res) => {
   try {
     if (!await requireTeamAccess(req, res, req.params.teamId)) return;
-    res.json(await listTeamTasks(req.params.teamId, req.query));
+    res.json(await listTeamTasks(req.params.teamId, req.query, req.userId));
   } catch (error) {
     res.status(error.status || 400).json({
       error: error.message,

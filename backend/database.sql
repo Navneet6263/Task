@@ -145,6 +145,7 @@ BEGIN
     start_date DATE NULL,
     assigned_date DATE NULL,
     due_date DATE NULL,
+    snoozed_until DATETIME2 NULL,
     reference_image NVARCHAR(MAX) NULL,
     reported_by INT NULL,
     picked_by INT NULL,

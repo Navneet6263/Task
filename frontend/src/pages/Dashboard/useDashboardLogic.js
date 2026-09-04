@@ -152,6 +152,15 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
     } catch (error) {}
   };
 
+  const handleSnooze = async (task, until) => {
+    try {
+      await tasks.snooze(task.id, until);
+      await refresh();
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to snooze task');
+    }
+  };
+
   const handleDelete = async (taskId) => {
     if (!window.confirm('Delete this task?')) return;
     try {
@@ -221,5 +230,5 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
 
   const selectedTaskCategories = useMemo(() => filterCategoryOptions(availableTaskOptions.categories, selectedTask?.task_type), [availableTaskOptions.categories, selectedTask?.task_type]);
 
-  return { taskForm, setTaskForm: setTaskFormState, taskFormOptions, mgrForm, setMgrForm, updateTaskFormField, updateMgrFormField, handleReferenceImageChange, handleCreateTask, handleManagerAssign, handleStatusChange, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug, handlePanelUpdate, openManagerModal, openTaskComposer, availableTaskOptions, createTaskCategories, mgrTaskCategories, selectedTaskCategories };
+  return { taskForm, setTaskForm: setTaskFormState, taskFormOptions, mgrForm, setMgrForm, updateTaskFormField, updateMgrFormField, handleReferenceImageChange, handleCreateTask, handleManagerAssign, handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug, handlePanelUpdate, openManagerModal, openTaskComposer, availableTaskOptions, createTaskCategories, mgrTaskCategories, selectedTaskCategories };
 };

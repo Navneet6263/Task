@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import axios from 'axios';
 import { API_BASE_URL, WS_BASE_URL } from '../services/runtimeConfig';
+import MessageTaskModal from './chat/MessageTaskModal';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -62,6 +63,7 @@ const TeamChat = ({
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
+  const [taskSourceMessage, setTaskSourceMessage] = useState(null);
   const [unread, setUnread] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [canReview, setCanReview] = useState(false);
@@ -1119,6 +1121,7 @@ const TeamChat = ({
                           <div className="tchat-message-meta">
                             <time>{msg.failed ? 'Failed' : msg.pending ? 'Sending...' : timeLabel(msg.created_at)}</time>
                             <button type="button" className="tchat-link-button" onClick={() => setReplyTo(msg)}>Reply</button>
+                            <button type="button" className="tchat-link-button" onClick={() => setTaskSourceMessage(msg)}>Create task</button>
                           </div>
                         </div>
                       </div>
@@ -1385,6 +1388,7 @@ const TeamChat = ({
           )}
         </>
       )}
+      <MessageTaskModal message={taskSourceMessage} team={activeTeam} thread={activeThread} members={teamMembers} onClose={() => setTaskSourceMessage(null)} />
     </div>
   );
 

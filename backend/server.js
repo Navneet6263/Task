@@ -70,6 +70,7 @@ app.use('/api/super-admin', require('./src/routes/superAdmin'));
 app.use('/api/sa', require('./src/routes/superAdminAuth').router);
 app.use('/api/teams', require('./src/routes/teams'));
 app.use('/api/tasks', require('./src/routes/tasks'));
+app.use('/api/task-productivity', require('./src/routes/taskProductivity'));
 app.use('/api/logs', require('./src/routes/logs'));
 app.use('/api/users', require('./src/routes/users'));
 app.use('/api/admin', require('./src/routes/admin'));
@@ -123,17 +124,11 @@ const { startBot } = require('./src/telegram/bot');
 
 const startServer = async () => {
   try {
+    console.log('Bootstrapping database schema and indexes...');
+    await ensureCollaborationSchema();
+    console.log('Database schema and indexes verified successfully.');
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     startBot();
-
-    console.log('Bootstrapping database schema and indexes...');
-    ensureCollaborationSchema()
-      .then(() => {
-        console.log('Database schema and indexes verified successfully.');
-      })
-      .catch((error) => {
-        console.error('Failed to bootstrap collaboration schema:', error.message);
-      });
   } catch (error) {
     console.error('Failed to start server:', error.message);
     process.exit(1);

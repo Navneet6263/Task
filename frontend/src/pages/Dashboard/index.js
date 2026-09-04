@@ -25,6 +25,7 @@ const Dashboard = () => {
     filterStatus, setFilterStatus, filterType, setFilterType,
     filterClientNames, setFilterClientNames, filterSearch, setFilterSearch,
     filterCreatedFrom, setFilterCreatedFrom, filterCreatedTo, setFilterCreatedTo,
+    focusMode, setFocusMode,
     clientNameOptions, stats, priorityStats, memberSummary, maxLoad,
     reminders, refreshWorkspace, handleBulkDelete,
   } = data;
@@ -76,8 +77,10 @@ const Dashboard = () => {
               filterSearch={filterSearch} setFilterSearch={setFilterSearch}
               filterCreatedFrom={filterCreatedFrom} setFilterCreatedFrom={setFilterCreatedFrom}
               filterCreatedTo={filterCreatedTo} setFilterCreatedTo={setFilterCreatedTo}
+              focusMode={focusMode} setFocusMode={setFocusMode} userId={user.id}
               selectedTask={selectedTask} setSelectedTask={openTask} setSheetTab={setSheetTab}
               handleStatusChange={logic.handleStatusChange} handleDelete={logic.handleDelete}
+              handleSnooze={logic.handleSnooze}
               handleApproveDelete={logic.handleApproveDelete} handleRejectDelete={logic.handleRejectDelete}
               handlePickBug={logic.handlePickBug} handleResolveBug={logic.handleResolveBug}
               onBulkDelete={handleBulkDelete} page={page} setPage={setPage}
