@@ -9,8 +9,8 @@ const { errorHandler, notFound } = require('./src/middleware/errorHandler');
 const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
 
 const app = express();
-// Configure only the actual trusted proxy hop count in deployment.
-if (process.env.TRUST_PROXY_HOPS) app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS));
+// Trust Nginx reverse proxy (1 hop). Required for express-rate-limit to work correctly.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
 const server = http.createServer(app);
 
 const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
