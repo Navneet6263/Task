@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { localDate } from '../../services/localDate';
 import { tasks } from '../../services/api';
+import { notify } from '../../services/feedback';
+import { readPreference, writePreference } from '../../services/preferences';
 
 const DEFAULT_TASK_FORM_OPTIONS = {
   task_types: [
@@ -31,7 +34,7 @@ const DEFAULT_TASK_FORM_OPTIONS = {
 const MAX_REFERENCE_IMAGE_BYTES = 450 * 1024;
 
 const buildInitialTaskForm = () => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDate();
   return {
     title: '', description: '', priority: 'MEDIUM', assigned_to: '',
     assigned_date: today, start_date: today, due_date: '',
@@ -95,24 +98,28 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please select a valid image file'); return; }
-    if (file.size > MAX_REFERENCE_IMAGE_BYTES) { alert('Please upload an image under 450KB'); return; }
+    if (!file.type.startsWith('image/')) { notify('Please select a valid image file'); return; }
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) { notify('Please upload an image under 450KB'); return; }
     const reader = new FileReader();
     reader.onload = () => { updateTaskFormField('reference_image', typeof reader.result === 'string' ? reader.result : ''); };
-    reader.onerror = () => alert('Failed to read the selected image');
+    reader.onerror = () => notify('Failed to read the selected image');
     reader.readAsDataURL(file);
   };
 
   const handleCreateTask = async (event) => {
     event.preventDefault();
     if (!selectedTeam) return;
+    const createAnother = event.nativeEvent?.submitter?.value === 'create-another';
     try {
-      await tasks.create({ ...taskForm, title: taskForm.title.trim(), description: taskForm.description.trim(), team_id: selectedTeam.id, assigned_to: taskForm.assigned_to || null, task_type: taskForm.task_type || null, product: taskForm.product || null, category: taskForm.category || null, assigned_date: taskForm.assigned_date || null, start_date: taskForm.start_date || null, due_date: taskForm.due_date || null, reference_image: taskForm.reference_image || null });
-      setShowTaskModal(false);
-      setTaskFormState(buildInitialTaskForm());
+      const created = await tasks.create({ ...taskForm, title: taskForm.title.trim(), description: taskForm.description.trim(), team_id: selectedTeam.id, assigned_to: taskForm.assigned_to || null, task_type: taskForm.task_type || null, product: taskForm.product || null, category: taskForm.category || null, assigned_date: taskForm.assigned_date || null, start_date: taskForm.start_date || null, due_date: taskForm.due_date || null, reference_image: taskForm.reference_image || null });
+      notify(`Task #${created.data.id} created`, 'success');
+      if (!createAnother) setShowTaskModal(false);
+      const defaults = createAnother ? { assigned_to: taskForm.assigned_to, client_name: taskForm.client_name, issue_type: taskForm.issue_type, priority: taskForm.priority } : {};
+      writePreference(`draft:${selectedTeam.id}`, defaults);
+      setTaskFormState({ ...buildInitialTaskForm(), ...defaults });
       await refresh();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create task');
+      notify(error.response?.data?.error || 'Failed to create task');
     }
   };
 
@@ -124,7 +131,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       setMgrForm(initialMgrForm);
       await refresh();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to assign');
+      notify(error.response?.data?.error || 'Failed to assign');
     }
   };
 
@@ -133,23 +140,23 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       try {
         const response = await tasks.getOrgUsers();
         setOrgUsers(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {}
+      } catch (error) { notify(error.response?.data?.error || 'Action failed. Please retry.'); }
     }
     setShowMgrModal(true);
   };
 
   const openTaskComposer = async () => {
     if (!selectedTeam) return;
-    setTaskFormState(buildInitialTaskForm());
-    await fetchTaskFormOptions();
+    setTaskFormState({ ...buildInitialTaskForm(), ...readPreference(`draft:${selectedTeam.id}`, {}) });
     setShowTaskModal(true);
+    fetchTaskFormOptions();
   };
 
   const handleStatusChange = async (task, status) => {
     try {
-      await tasks.update(task.id, { ...task, status });
+      await tasks.update(task.id, { status, version: task.version });
       await refresh();
-    } catch (error) {}
+    } catch (error) { notify(error.response?.data?.error || 'Could not update task. Please retry.'); }
   };
 
   const handleSnooze = async (task, until) => {
@@ -157,7 +164,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       await tasks.snooze(task.id, until);
       await refresh();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to snooze task');
+      notify(error.response?.data?.error || 'Failed to snooze task');
     }
   };
 
@@ -166,11 +173,11 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
     try {
       const res = await tasks.delete(taskId);
       if (res.data?.message === 'Delete request sent to the task creator') {
-        alert('Delete request sent to the task creator.');
+        notify('Delete request sent to the task creator.');
       }
       setSelectedTask(null);
       await refresh();
-    } catch (error) {}
+    } catch (error) { notify(error.response?.data?.error || 'Action failed. Please retry.'); }
   };
 
   const handleApproveDelete = async (taskId) => {
@@ -179,7 +186,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       await tasks.approveDelete(taskId);
       setSelectedTask(null);
       await refresh();
-    } catch (error) {}
+    } catch (error) { notify(error.response?.data?.error || 'Action failed. Please retry.'); }
   };
 
   const handleRejectDelete = async (taskId) => {
@@ -190,7 +197,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
         setSelectedTask(prev => ({ ...prev, delete_requested_by: null, delete_requested_by_name: null }));
       }
       await refresh();
-    } catch (error) {}
+    } catch (error) { notify(error.response?.data?.error || 'Action failed. Please retry.'); }
   };
 
   const handlePickBug = async (taskId) => {
@@ -198,7 +205,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       await tasks.pickBug(taskId);
       await refresh();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to pick bug');
+      notify(error.response?.data?.error || 'Failed to pick bug');
     }
   };
 
@@ -207,7 +214,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       await tasks.resolveBug(taskId);
       await refresh();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to resolve bug');
+      notify(error.response?.data?.error || 'Failed to resolve bug');
     }
   };
 
@@ -220,7 +227,7 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
       await tasks.update(selectedTask.id, { ...nextTask, assigned_to: nextTask.assigned_to || null });
       setSelectedTask(nextTask);
       await refresh();
-    } catch (error) {}
+    } catch (error) { notify(error.response?.data?.error || 'Action failed. Please retry.'); }
   };
 
   const availableTaskOptions = useMemo(() => ({ task_types: taskFormOptions.task_types?.length ? taskFormOptions.task_types : DEFAULT_TASK_FORM_OPTIONS.task_types, products: taskFormOptions.products?.length ? taskFormOptions.products : DEFAULT_TASK_FORM_OPTIONS.products, categories: taskFormOptions.categories?.length ? taskFormOptions.categories : DEFAULT_TASK_FORM_OPTIONS.categories }), [taskFormOptions]);

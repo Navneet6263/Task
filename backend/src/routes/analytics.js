@@ -1,218 +1,60 @@
 const express = require('express');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { requireTeamAccess } = require('../utils/teamAccess');
+const { teamReport } = require('../services/teamReport');
 const router = express.Router();
 
-// Workload AI - suggest best assignee for a task
+router.get('/report/:teamId', authenticate, async (req, res) => {
+  try {
+    if (!await requireTeamAccess(req, res, req.params.teamId)) return;
+    res.json(await teamReport(req.params.teamId, req.query));
+  } catch (error) { res.status(error.status || 500).json({ error: error.message }); }
+});
+
+// Compatibility endpoints; counts are capacity hints, never a diagnosis or employee rating.
+const workload = member => ({ ...member, active_tasks: member.active, workload_score: member.active,
+  energy_score: Math.max(0, 100 - member.active * 10), energy_level: 'Task-count estimate', available: true });
 router.get('/suggest-assignee', authenticate, async (req, res) => {
   try {
-    const { teamId, priority } = req.query;
-    if (!teamId) return res.status(422).json({ error: 'teamId required', code: 'VALIDATION_ERROR' });
-
-    const [members] = await db.execute(
-      `SELECT u.id, u.name,
-        COUNT(CASE WHEN t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as active_tasks,
-        COUNT(CASE WHEN t.priority = 'HIGH' AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as high_priority,
-        COUNT(CASE WHEN t.due_date < CURRENT_TIMESTAMP AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as overdue,
-        AVG(CASE WHEN t.status = 'DONE' THEN DATEDIFF(HOUR, t.created_at, t.updated_at) END) as avg_completion_hours
-       FROM team_members tm
-       JOIN users u ON tm.user_id = u.id
-       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ? AND t.is_deleted = FALSE
-       WHERE tm.team_id = ? AND u.is_deleted = FALSE
-       GROUP BY u.id, u.name`,
-      [teamId, teamId]
-    );
-
-    const scored = members.map(m => {
-      const score =
-        (m.active_tasks * 10) +
-        (m.high_priority * 20) +
-        (m.overdue * 30) -
-        ((m.avg_completion_hours ? Math.max(0, 100 - m.avg_completion_hours) : 0) * 0.5);
-
-      const energy = Math.max(0, 100 - (m.high_priority * 25) - (m.active_tasks * 10) - (m.overdue * 20));
-
-      return {
-        id: m.id,
-        name: m.name,
-        active_tasks: m.active_tasks,
-        high_priority: m.high_priority,
-        overdue: m.overdue,
-        workload_score: Math.round(score),
-        energy_score: Math.round(energy),
-        energy_level: energy >= 80 ? 'Available' : energy >= 50 ? 'Moderate' : energy >= 25 ? 'High Load' : 'Burnout Alert',
-        available: energy > 0
-      };
-    });
-
-    scored.sort((a, b) => a.workload_score - b.workload_score);
-    const suggested = scored.find(m => m.available) || scored[0];
-
-    res.json({ suggested, all: scored });
-  } catch (error) {
-    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
-  }
+    if (!await requireTeamAccess(req, res, req.query.teamId)) return;
+    const report = await teamReport(req.query.teamId);
+    const all = report.members.map(workload).sort((a, b) => a.active - b.active);
+    res.json({ all, suggested: all[0] || null, explanation: 'Lowest active task count; check task complexity and availability before assigning.' });
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
-// Energy Score for a team
 router.get('/energy/:teamId', authenticate, async (req, res) => {
   try {
-    const [members] = await db.execute(
-      `SELECT u.id, u.name,
-        COUNT(CASE WHEN t.priority = 'HIGH' AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as high,
-        COUNT(CASE WHEN t.priority = 'MEDIUM' AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as medium,
-        COUNT(CASE WHEN t.priority = 'LOW' AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as low_p,
-        COUNT(CASE WHEN t.due_date < CURRENT_TIMESTAMP AND t.status != 'DONE' AND t.is_deleted = FALSE THEN 1 END) as overdue
-       FROM team_members tm
-       JOIN users u ON tm.user_id = u.id
-       LEFT JOIN tasks t ON t.assigned_to = u.id AND t.team_id = ? AND t.is_deleted = FALSE
-       WHERE tm.team_id = ? AND u.is_deleted = FALSE
-       GROUP BY u.id, u.name`,
-      [req.params.teamId, req.params.teamId]
-    );
-
-    const result = members.map(m => {
-      const score = Math.max(0, 100 - (m.high * 25) - (m.medium * 10) - (m.low_p * 5) - (m.overdue * 20));
-      return {
-        id: m.id,
-        name: m.name,
-        energy_score: score,
-        level: score >= 80 ? 'Available' : score >= 50 ? 'Moderate' : score >= 25 ? 'High Load' : 'Burnout Alert',
-        color: score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : score >= 25 ? '#f97316' : '#ef4444'
-      };
-    });
-
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
-  }
+    if (!await requireTeamAccess(req, res, req.params.teamId)) return;
+    const report = await teamReport(req.params.teamId);
+    res.json(report.members.map(member => ({ ...workload(member), level: 'Task-count estimate', color: '#2563eb' })));
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
-// Performance Index for a user
-router.get('/performance/:userId', authenticate, async (req, res) => {
-  try {
-    const [[stats]] = await db.execute(
-      `SELECT
-        COUNT(*) as total,
-        COUNT(CASE WHEN status = 'DONE' THEN 1 END) as completed,
-        COUNT(CASE WHEN status = 'DONE' AND updated_at <= due_date THEN 1 END) as on_time,
-        COUNT(CASE WHEN priority = 'HIGH' THEN 1 END) as total_high,
-        COUNT(CASE WHEN priority = 'HIGH' AND status = 'DONE' THEN 1 END) as completed_high,
-        COUNT(CASE WHEN due_date < CURRENT_TIMESTAMP AND status != 'DONE' AND is_deleted = FALSE THEN 1 END) as overdue
-       FROM tasks
-       WHERE assigned_to = ? AND is_deleted = FALSE`,
-      [req.params.userId]
-    );
-
-    const onTimeRate = stats.completed > 0 ? (stats.on_time / stats.completed) : 0;
-    const highPriorityRate = stats.total_high > 0 ? (stats.completed_high / stats.total_high) : 0;
-    const overdueWeight = stats.total > 0 ? (stats.overdue / stats.total) : 0;
-
-    const index = Math.round(
-      (onTimeRate * 50) + (highPriorityRate * 30) - (overdueWeight * 20)
-    );
-
-    const score = Math.max(0, Math.min(100, index));
-    const grade = score >= 90 ? 'Exceptional' : score >= 75 ? 'Good' : score >= 60 ? 'Average' : 'Needs Improvement';
-
-    res.json({ ...stats, performance_index: score, grade });
-  } catch (error) {
-    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
-  }
-});
-
-// Behavioral Insights for a team
 router.get('/behavioral/:teamId', authenticate, async (req, res) => {
   try {
-    const teamId = req.params.teamId;
-
-    // Accept delay: avg hours from task created → first status change (IN_PROGRESS)
-    // Using a subquery approach compatible with SQL Server
-    const [acceptDelay] = await db.execute(
-      `SELECT u.id, u.name,
-        AVG(CAST(DATEDIFF(HOUR, t.created_at, t.updated_at) AS FLOAT)) as avg_accept_delay_hours
-       FROM tasks t
-       JOIN users u ON t.assigned_to = u.id
-       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
-       WHERE t.team_id = ? AND t.is_deleted = FALSE AND t.status != 'TODO'
-       GROUP BY u.id, u.name`,
-      [teamId, teamId]
-    );
-
-    // After hours activity: tasks updated outside 8am–8pm
-    const [afterHours] = await db.execute(
-      `SELECT u.id, u.name,
-        COUNT(CASE WHEN DATEPART(HOUR, t.updated_at) >= 20 OR DATEPART(HOUR, t.updated_at) < 8 THEN 1 END) as after_hours_count
-       FROM tasks t
-       JOIN users u ON t.assigned_to = u.id
-       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
-       WHERE t.team_id = ? AND t.is_deleted = FALSE
-       GROUP BY u.id, u.name`,
-      [teamId, teamId]
-    );
-
-    // Bottleneck: tasks stuck in IN_PROGRESS > 3 days
-    const [bottlenecks] = await db.execute(
-      `SELECT u.id, u.name, COUNT(*) as stuck_tasks
-       FROM tasks t
-       JOIN users u ON t.assigned_to = u.id
-       WHERE t.team_id = ? AND t.status = 'IN_PROGRESS'
-         AND t.updated_at < DATEADD(DAY, -3, GETDATE())
-         AND t.is_deleted = FALSE
-       GROUP BY u.id, u.name`,
-      [teamId]
-    );
-
-    // Fast delivery: completed before deadline
-    const [fastDelivery] = await db.execute(
-      `SELECT u.id, u.name,
-        COUNT(CASE WHEN t.status = 'DONE' THEN 1 END) as total_done,
-        COUNT(CASE WHEN t.status = 'DONE' AND t.updated_at <= t.due_date THEN 1 END) as before_deadline
-       FROM tasks t
-       JOIN users u ON t.assigned_to = u.id
-       JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
-       WHERE t.team_id = ? AND t.is_deleted = FALSE
-       GROUP BY u.id, u.name`,
-      [teamId, teamId]
-    );
-
-    res.json({ accept_delay: acceptDelay, after_hours: afterHours, bottlenecks, fast_delivery: fastDelivery });
-  } catch (error) {
-    console.error('[analytics/behavioral]', error.message);
-    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
-  }
+    if (!await requireTeamAccess(req, res, req.params.teamId)) return;
+    const report = await teamReport(req.params.teamId);
+    res.json({ accept_delay: [], after_hours: [], bottlenecks: report.members.map(member => ({ ...member, stuck_tasks: member.blocked })),
+      fast_delivery: report.members.map(member => ({ ...member, total_done: member.completed, before_deadline: member.on_time })) });
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
-
-// System health for admin
+router.get('/performance/:userId', authenticate, async (req, res) => {
+  try {
+    if (Number(req.params.userId) !== Number(req.userId)) return res.status(403).json({ error: 'Use the authorized team report for member statistics' });
+    const [[row]] = await db.execute("SELECT COUNT(*) AS total, COUNT(CASE WHEN status = 'DONE' THEN 1 END) AS completed FROM tasks WHERE assigned_to = ? AND org_id = ? AND is_deleted = FALSE", [req.userId, req.orgId]);
+    res.json({ ...row, performance_index: row.total ? Math.round(100 * row.completed / row.total) : 0, grade: 'Completion rate, not an employee rating' });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
 router.get('/health', authenticate, async (req, res) => {
   try {
-    if (req.userRole !== 'admin') return res.status(403).json({ error: 'Admin only', code: 'FORBIDDEN' });
-
-    const [[{ total_users }]] = await db.execute('SELECT COUNT(*) as total_users FROM users WHERE is_deleted = FALSE');
-    const [[{ total_teams }]] = await db.execute('SELECT COUNT(*) as total_teams FROM teams WHERE is_deleted = FALSE');
-    const [[{ total_tasks }]] = await db.execute('SELECT COUNT(*) as total_tasks FROM tasks WHERE is_deleted = FALSE');
-    const [[{ total_logs }]] = await db.execute('SELECT COUNT(*) as total_logs FROM audit_logs');
-    const [[{ failed_logins }]] = await db.execute(
-      'SELECT COUNT(*) as failed_logins FROM login_attempts WHERE success = FALSE AND attempted_at > DATEADD(HOUR, -24, GETDATE())'
-    );
-
-    // Task growth last 7 days
-    const [taskGrowth] = await db.execute(
-      `SELECT CAST(created_at AS DATE) as date, COUNT(*) as count
-       FROM tasks WHERE created_at > DATEADD(DAY, -7, GETDATE())
-       GROUP BY CAST(created_at AS DATE) ORDER BY date ASC`
-    );
-
-    // Active users last 30 min
-    const [[{ active_users }]] = await db.execute(
-      'SELECT COUNT(*) as active_users FROM users WHERE last_active > DATEADD(MINUTE, -30, GETDATE())'
-    );
-
-    res.json({ total_users, total_teams, total_tasks, total_logs, failed_logins, active_users, task_growth: taskGrowth });
-  } catch (error) {
-    res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
-  }
+    if (req.userRole !== 'admin' || !req.orgId) return res.status(403).json({ error: 'Organization admin access required' });
+    const [[users], [teams], [tasks], [logs]] = await Promise.all([
+      db.execute('SELECT COUNT(*) AS total_users, COUNT(CASE WHEN last_active > DATEADD(MINUTE, -30, GETDATE()) THEN 1 END) AS active_users FROM users WHERE org_id = ? AND is_deleted = FALSE', [req.orgId]),
+      db.execute('SELECT COUNT(*) AS total_teams FROM teams WHERE org_id = ? AND is_deleted = FALSE', [req.orgId]),
+      db.execute('SELECT COUNT(*) AS total_tasks FROM tasks WHERE org_id = ? AND is_deleted = FALSE', [req.orgId]),
+      db.execute('SELECT COUNT(*) AS total_logs FROM audit_logs al JOIN teams t ON t.id = al.team_id WHERE t.org_id = ?', [req.orgId]),
+    ]);
+    res.json({ ...users[0], ...teams[0], ...tasks[0], ...logs[0], failed_logins: null, task_growth: [] });
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
-
 module.exports = router;

@@ -1,11 +1,14 @@
 const express = require('express');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { requireTaskAccess } = require('../utils/taskAccess');
+const { notifyTaskFollowers } = require('../services/taskNotifications');
 const router = express.Router();
 
 // GET /api/comments/task/:taskId — fetch all non-deleted comments for a task
 router.get('/task/:taskId', authenticate, async (req, res) => {
   try {
+    if (!await requireTaskAccess(req, res, req.params.taskId)) return;
     const [rows] = await db.execute(
       `SELECT
          tc.id,
@@ -35,6 +38,9 @@ router.post('/', authenticate, async (req, res) => {
     if (!task_id || !comment || !String(comment).trim()) {
       return res.status(400).json({ error: 'task_id and comment are required' });
     }
+    if (String(comment).length > 5000) return res.status(422).json({ error: 'Comment must be under 5000 characters' });
+    const task = await requireTaskAccess(req, res, task_id);
+    if (!task) return;
 
     const [result] = await db.execute(
       'INSERT INTO task_comments (task_id, user_id, comment) VALUES (?, ?, ?)',
@@ -57,6 +63,8 @@ router.post('/', authenticate, async (req, res) => {
       [result.insertId]
     );
 
+    const mentioned = Array.isArray(req.body.mentioned_user_ids) ? req.body.mentioned_user_ids.slice(0, 20) : [];
+    await notifyTaskFollowers(task, req.userId, `New comment on ${task.title}`, mentioned).catch(error => console.error('Comment saved; notification delivery failed:', error.message));
     res.status(201).json(rows[0]);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -73,10 +81,11 @@ router.put('/:id', authenticate, async (req, res) => {
 
     // Verify ownership
     const [existing] = await db.execute(
-      'SELECT id, user_id FROM task_comments WHERE id = ? AND is_deleted = FALSE',
+      'SELECT id, task_id, user_id FROM task_comments WHERE id = ? AND is_deleted = FALSE',
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Comment not found' });
+    if (!await requireTaskAccess(req, res, existing[0].task_id)) return;
     if (existing[0].user_id !== req.userId) {
       return res.status(403).json({ error: 'You can only edit your own comments' });
     }
@@ -112,10 +121,11 @@ router.put('/:id', authenticate, async (req, res) => {
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     const [existing] = await db.execute(
-      'SELECT id, user_id FROM task_comments WHERE id = ? AND is_deleted = FALSE',
+      'SELECT id, task_id, user_id FROM task_comments WHERE id = ? AND is_deleted = FALSE',
       [req.params.id]
     );
     if (!existing.length) return res.status(404).json({ error: 'Comment not found' });
+    if (!await requireTaskAccess(req, res, existing[0].task_id)) return;
     if (existing[0].user_id !== req.userId) {
       return res.status(403).json({ error: 'You can only delete your own comments' });
     }

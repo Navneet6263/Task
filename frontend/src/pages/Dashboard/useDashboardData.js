@@ -1,31 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tasks, teams } from '../../services/api';
 import { filterTasksLocally, paginateTasks, summarizeTasks } from './taskDataUtils';
+import { readPreference, writePreference } from '../../services/preferences';
+import { useLocation } from 'react-router-dom';
 
 const EMPTY_SUMMARY = {
   total: 0, done: 0, in_progress: 0, pending: 0, todo: 0,
   overdue: 0, high: 0, medium: 0, low: 0,
 };
 
-const useDebouncedValue = (value, delay = 300) => {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [delay, value]);
-  return debounced;
-};
-
 export const useDashboardData = () => {
+  const location = useLocation();
   const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const [teamList, setTeamList] = useState([]);
+  const [teamRetry, setTeamRetry] = useState(0);
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [members, setMembers] = useState([]);
   const [taskList, setTaskList] = useState([]);
   const [clientNameOptions, setClientNameOptions] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [teamSummary, setTeamSummary] = useState(EMPTY_SUMMARY);
+  const [boardPages, setBoardPages] = useState({});
+  const [boardBusy, setBoardBusy] = useState('');
   const [pagination, setPagination] = useState({ total: 0, total_pages: 1 });
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(() => readPreference('view', 'list'));
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -40,12 +38,16 @@ export const useDashboardData = () => {
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
   const [filterCreatedTo, setFilterCreatedTo] = useState('');
   const [focusMode, setFocusMode] = useState('');
+  const [sort, setSort] = useState(() => readPreference('task-sort', 'newest'));
   const requestIdRef = useRef(0);
-  const debouncedSearch = useDebouncedValue(filterSearch);
+  const controllerRef = useRef(null);
+  const scopeRef = useRef('');
+  const debouncedSearch = filterSearch;
 
   const selectTeam = useCallback((team) => {
     setSelectedTeam(team);
-    setSelectedTask(null);
+    setTaskList([]); setSummary(EMPTY_SUMMARY); setTeamSummary(EMPTY_SUMMARY); setMembers([]);
+    writePreference('team', team.id);
     setPage(1);
   }, []);
 
@@ -53,12 +55,15 @@ export const useDashboardData = () => {
     teams.getAll().then((response) => {
       const list = Array.isArray(response.data) ? response.data : [];
       setTeamList(list);
-      if (list.length > 0) selectTeam(list[0]);
+      if (list.length > 0) selectTeam(list.find(team => team.id === readPreference('team', null)) || list[0]);
     }).catch(() => setLoadError('Unable to load teams.'));
     tasks.getClients().then((response) => {
       setClientNameOptions(Array.isArray(response.data) ? response.data : []);
     }).catch(() => {});
-  }, [selectTeam]);
+  }, [selectTeam, teamRetry]);
+  useEffect(() => {
+    setClientNameOptions(prev => [...new Set([...prev, ...taskList.map(task => task.client_name).filter(Boolean)])].sort());
+  }, [taskList]);
 
   const loadMembers = useCallback(async () => {
     if (!selectedTeam?.id) return;
@@ -80,8 +85,9 @@ export const useDashboardData = () => {
     createdFrom: filterCreatedFrom,
     createdTo: filterCreatedTo,
     focus: focusMode,
+    sort,
     currentUserId: currentUser.id,
-  }), [currentUser.id, debouncedSearch, filterAssignee, filterClientNames, filterCreatedFrom, filterCreatedTo, filterPriority, filterStatus, filterType, focusMode]);
+  }), [currentUser.id, debouncedSearch, filterAssignee, filterClientNames, filterCreatedFrom, filterCreatedTo, filterPriority, filterStatus, filterType, focusMode, sort]);
 
   const loadTasks = useCallback(async () => {
     if (!selectedTeam?.id) return;
@@ -89,13 +95,22 @@ export const useDashboardData = () => {
     setLoading(true);
     setLoadError('');
     try {
-      const limit = view === 'list' ? 12 : 48;
-      const response = await tasks.getByTeam(selectedTeam.id, page, limit, queryFilters);
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const scope = JSON.stringify([selectedTeam.id, queryFilters, view]);
+      const scopeChanged = scopeRef.current !== scope;
+      scopeRef.current = scope;
+      if (scopeChanged && page !== 1) { setPage(1); return; }
+      const limit = view === 'timeline' ? 48 : 12;
+      const response = await tasks.getByTeam(selectedTeam.id, page, limit, { ...queryFilters, board: view === 'board' }, controller.signal);
       if (requestId !== requestIdRef.current) return;
       const serverSummary = response.data?.summary;
       if (serverSummary && Number.isFinite(Number(serverSummary.total))) {
         setTaskList(Array.isArray(response.data?.data) ? response.data.data : []);
         setSummary({ ...EMPTY_SUMMARY, ...serverSummary });
+        setTeamSummary({ ...EMPTY_SUMMARY, ...(response.data.team_summary || serverSummary) });
+        setBoardPages({});
         setPagination(response.data?.pagination || { total: Number(serverSummary.total), total_pages: 1 });
       } else {
         const legacyResponse = await tasks.getByTeam(selectedTeam.id, 1, 5000, {
@@ -108,26 +123,43 @@ export const useDashboardData = () => {
         const legacyPage = paginateTasks(filteredTasks, page, limit);
         setTaskList(legacyPage.data);
         setSummary(summarizeTasks(filteredTasks));
+        setTeamSummary(summarizeTasks(legacyTasks));
         setPagination(legacyPage.pagination);
       }
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
-      setTaskList([]);
+      if (error.code === 'ERR_CANCELED') return;
       setLoadError(error.response?.data?.error || 'Unable to load tasks.');
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
   }, [page, queryFilters, selectedTeam?.id, view]);
 
-  useEffect(() => { loadTasks(); }, [loadTasks]);
-  useEffect(() => { setPage(1); }, [selectedTeam?.id, queryFilters, view]);
+  useEffect(() => { loadTasks(); return () => { controllerRef.current?.abort(); requestIdRef.current += 1; }; }, [loadTasks]);
+  useEffect(() => { writePreference('view', view); }, [view]);
+  useEffect(() => { writePreference('task-sort', sort); }, [sort]);
   useEffect(() => {
     if (page > pagination.total_pages) setPage(Math.max(1, pagination.total_pages));
   }, [page, pagination.total_pages]);
 
   const refreshWorkspace = useCallback(async () => {
-    await Promise.all([loadTasks(), loadMembers()]);
-  }, [loadMembers, loadTasks]);
+    if (!selectedTeam?.id) { setTeamRetry(value => value + 1); return; }
+    await loadTasks();
+  }, [loadTasks, selectedTeam?.id]);
+
+  const loadBoardColumn = async status => {
+    if (boardBusy) return;
+    setBoardBusy(status);
+    const requestId = requestIdRef.current;
+    try {
+      const next = (boardPages[status] || 1) + 1;
+      const response = await tasks.getByTeam(selectedTeam.id, next, 12, { ...queryFilters, statuses: [status] });
+      if (requestId !== requestIdRef.current) return;
+      setTaskList(prev => [...prev, ...response.data.data.filter(task => !prev.some(item => item.id === task.id))]);
+      setBoardPages(prev => ({ ...prev, [status]: next }));
+    } catch { setLoadError('Could not load more tasks. Please retry.'); }
+    finally { setBoardBusy(''); }
+  };
 
   const openTask = useCallback(async (task) => {
     if (!task?.id) return;
@@ -139,6 +171,11 @@ export const useDashboardData = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const taskId = new URLSearchParams(location.search).get('task');
+    if (taskId) { openTask({ id: taskId }); setSheetTab('details'); }
+  }, [location.search, openTask]);
+
   const handleBulkDelete = useCallback(async (ids) => {
     await tasks.bulkDelete(ids);
     if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null);
@@ -146,18 +183,18 @@ export const useDashboardData = () => {
   }, [refreshWorkspace, selectedTask]);
 
   const stats = useMemo(() => {
-    const total = Number(summary.total || 0);
-    const done = Number(summary.done || 0);
-    const todo = Number(summary.todo || 0);
-    const inProgress = Number(summary.in_progress || 0);
-    const pending = Number(summary.pending || 0);
+    const total = Number(teamSummary.total || 0);
+    const done = Number(teamSummary.done || 0);
+    const todo = Number(teamSummary.todo || 0);
+    const inProgress = Number(teamSummary.in_progress || 0);
+    const pending = Number(teamSummary.pending || 0);
     return {
       total, done, todo, inProgress, pending,
-      overdue: Number(summary.overdue || 0),
+      overdue: Number(teamSummary.overdue || 0),
       completion: total ? Math.round((done / total) * 100) : 0,
       open: todo + inProgress + pending,
     };
-  }, [summary]);
+  }, [teamSummary]);
   const priorityStats = useMemo(() => ({
     HIGH: Number(summary.high || 0),
     MEDIUM: Number(summary.medium || 0),
@@ -188,5 +225,7 @@ export const useDashboardData = () => {
     clientNameOptions, stats, priorityStats, memberSummary,
     maxLoad: Math.max(1, ...memberSummary.map((member) => member.load)),
     reminders, refreshWorkspace, handleBulkDelete,
+    summary, loadBoardColumn, boardBusy,
+    sort, setSort,
   };
 };

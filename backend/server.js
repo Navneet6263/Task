@@ -2,15 +2,15 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const cron = require('node-cron');
-const db = require('./src/config/database');
 const ws = require('./src/websocket');
 const { ensureCollaborationSchema } = require('./src/bootstrap/collaborationSchema');
+const { ensureWorkspaceSchema } = require('./src/bootstrap/workspaceSchema');
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
 const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
-const { fetchEmailsAndCreateTasks } = require('./src/utils/emailToTask');
 
 const app = express();
+// Configure only the actual trusted proxy hop count in deployment.
+if (process.env.TRUST_PROXY_HOPS) app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS));
 const server = http.createServer(app);
 
 const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
@@ -43,13 +43,11 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+// Matches the existing 450 KB reference-image UI (base64 expands the payload).
+app.use(express.json({ limit: '1mb' }));
 
 // Request logger — shows every request in CMD
-app.use((req, res, next) => {
-  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.path}`);
-  next();
-});
+app.use(require('./src/middleware/requestTiming'));
 
 // Init WebSocket
 ws.init(server);
@@ -70,7 +68,11 @@ app.use('/api/super-admin', require('./src/routes/superAdmin'));
 app.use('/api/sa', require('./src/routes/superAdminAuth').router);
 app.use('/api/teams', require('./src/routes/teams'));
 app.use('/api/tasks', require('./src/routes/tasks'));
+app.use('/api/workspace', require('./src/routes/workspace'));
+app.use('/api/updates', require('./src/routes/updates'));
 app.use('/api/task-productivity', require('./src/routes/taskProductivity'));
+app.use('/api/task-workflow', require('./src/routes/taskWorkflow'));
+app.use('/api/task-recurrence', require('./src/routes/taskRecurrence'));
 app.use('/api/logs', require('./src/routes/logs'));
 app.use('/api/users', require('./src/routes/users'));
 app.use('/api/admin', require('./src/routes/admin'));
@@ -80,40 +82,6 @@ app.use('/api/notifications', require('./src/routes/notifications'));
 app.use('/api/chat', require('./src/routes/chat'));
 app.use('/api/comments', require('./src/routes/comments'));
 app.use('/api/communications', require('./src/routes/communications'));
-
-// Cron: overdue alert every hour
-cron.schedule('0 * * * *', async () => {
-  try {
-    const [overdue] = await db.execute(
-      `SELECT t.id, t.title, t.team_id, t.assigned_to
-       FROM tasks t
-       WHERE t.due_date < CAST(GETDATE() AS DATE) AND t.status != 'DONE' AND t.is_deleted = FALSE
-         AND NOT EXISTS (
-           SELECT 1 FROM audit_logs al
-           WHERE al.task_id = t.id AND al.activity = 'Overdue Alert'
-             AND al.created_at > DATEADD(HOUR, -24, GETDATE())
-         )`
-    );
-    for (const task of overdue) {
-      await db.execute(
-        'INSERT INTO audit_logs (user_id, team_id, task_id, activity, task_details, description, automated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [task.assigned_to, task.team_id, task.id, 'Overdue Alert', task.title, `Task overdue: ${task.title}`, 'System (AI)']
-      );
-      await db.execute(
-        'INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)',
-        [task.assigned_to, 'overdue', `Task overdue: ${task.title}`, task.id]
-      );
-
-      ws.broadcast(task.team_id, 'overdue_alert', { taskId: task.id, title: task.title });
-    }
-    if (overdue.length) console.log(`[CRON] ${overdue.length} overdue alerts sent`);
-  } catch (e) { console.error('[CRON] overdue error:', e.message); }
-});
-
-// Cron: Email → Task inbox check every 2 minutes
-cron.schedule('*/2 * * * *', () => {
-  fetchEmailsAndCreateTasks().catch((e) => console.error('[CRON] email→task error:', e.message));
-});
 
 app.use(notFound);
 app.use(errorHandler);
@@ -125,10 +93,11 @@ const { startBot } = require('./src/telegram/bot');
 const startServer = async () => {
   try {
     console.log('Bootstrapping database schema and indexes...');
-    await ensureCollaborationSchema();
+    if (process.env.RUN_MIGRATIONS_ON_START !== 'false') { await ensureCollaborationSchema(); await ensureWorkspaceSchema(); }
     console.log('Database schema and indexes verified successfully.');
     server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-    startBot();
+    if (process.env.ENABLE_BACKGROUND_JOBS !== 'false') require('./src/jobs/backgroundJobs').startBackgroundJobs();
+    if (process.env.ENABLE_TELEGRAM_BOT !== 'false') startBot();
   } catch (error) {
     console.error('Failed to start server:', error.message);
     process.exit(1);

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BulkTaskActions from './BulkTaskActions';
 import SnoozeMenu from './SnoozeMenu';
+import { tasks } from '../../services/api';
+import { readPreference, writePreference } from '../../services/preferences';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
@@ -32,12 +34,15 @@ const dateTimeLabel = (value) => {
 const TaskListView = ({
   paginated, selectedTask, setSelectedTask, setSheetTab,
   handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete,
-  handlePickBug, handleResolveBug, onBulkDelete,
+  handlePickBug, handleResolveBug, onBulkDelete, members, onUpdated,
 }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const navigate = useNavigate();
 
   const [selected, setSelected] = useState(new Set());
+  const [showCreated, setShowCreated] = useState(() => readPreference('columns-created', false));
+  const pageIds = paginated.map(task => task.id).join(',');
+  useEffect(() => { setSelected(new Set()); }, [pageIds]);
 
   const allSelected = paginated.length > 0 && paginated.every(t => selected.has(t.id));
 
@@ -57,7 +62,9 @@ const TaskListView = ({
     });
   };
 
-  const handleMailClick = (e, task) => {
+  const handleMailClick = async (e, task) => {
+    e.stopPropagation();
+    try { task = (await tasks.getDetail(task.id)).data; } catch { alert('Unable to load full task details. Please retry.'); return; }
     e.stopPropagation();
     localStorage.setItem('comm_task_context', JSON.stringify({
       id: task.id, title: task.title, description: task.description,
@@ -69,9 +76,10 @@ const TaskListView = ({
 
   return (
     <div className="overflow-auto">
-      <BulkTaskActions selectedIds={[...selected]} onDelete={onBulkDelete} onClear={() => setSelected(new Set())} />
+      <BulkTaskActions rows={paginated} members={members} onUpdated={onUpdated} selectedIds={[...selected]} onDelete={onBulkDelete} onClear={() => setSelected(new Set())} />
 
-      <table className="w-full min-w-[1040px] border-collapse">
+      <label className="mb-2 flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" checked={showCreated} onChange={e => { setShowCreated(e.target.checked); writePreference('columns-created', e.target.checked); }} />Show creator and created date columns</label>
+      <table data-created={showCreated} className="task-list-table w-full min-w-[760px] border-collapse">
         <thead>
           <tr>
             {/* Checkbox header */}
@@ -129,6 +137,7 @@ const TaskListView = ({
                   {task.manager_assigned && <span className="text-[10px] font-extrabold rounded-full px-2 py-0.5 bg-amber-100 text-amber-800">MANAGER</span>}
                   <strong className="font-bold relative flex items-center gap-1.5">
                     {task.title}
+                    {task.blocked_reason && <span title={task.blocked_reason} className="rounded bg-amber-100 px-1.5 text-xs text-amber-800">Blocked</span>}
                     {task.unread_comments > 0 && (
                       <span className="w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-[0_2px_6px_rgba(239,68,68,0.35)] shrink-0">
                         {task.unread_comments}

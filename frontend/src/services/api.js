@@ -1,8 +1,15 @@
 import axios from 'axios';
 import { API_BASE_URL } from './runtimeConfig';
+import { cachedGet, clearQueryCache } from './queryCache';
 
 const api = axios.create({
-  baseURL: API_BASE_URL
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+});
+
+api.interceptors.response.use(response => {
+  if (!['get', 'head'].includes(response.config.method)) clearQueryCache();
+  return response;
 });
 
 api.interceptors.request.use((config) => {
@@ -23,19 +30,30 @@ export const auth = {
 
 
 export const teams = {
-  getAll: () => api.get('/teams'),
+  getAll: async () => {
+    const rows = [];
+    for (let page = 1; ; page += 1) {
+      const response = await cachedGet(api, `/teams?page=${page}&limit=100`);
+      const batch = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      rows.push(...batch);
+      if (batch.length < 100) return { ...response, data: rows };
+    }
+  },
   create: (data) => api.post('/teams', data),
-  getMembers: (teamId) => api.get(`/teams/${teamId}/members`),
+  getMembers: (teamId) => cachedGet(api, `/teams/${teamId}/members`),
   addMember: (teamId, data) => api.post(`/teams/${teamId}/members`, data),
   removeMember: (teamId, userId) => api.delete(`/teams/${teamId}/members/${userId}`),
 };
 
 export const tasks = {
-  getByTeam: (teamId, page = 1, limit = 20, filters = {}) =>
+  getByTeam: (teamId, page = 1, limit = 20, filters = {}, signal) =>
     api.get(`/tasks/team/${teamId}`, {
+      signal,
       params: {
         page,
         limit,
+        ...(filters.board ? { board: true } : {}),
+        ...(filters.sort ? { sort: filters.sort } : {}),
         ...(filters.statuses?.length ? { statuses: JSON.stringify(filters.statuses) } : {}),
         ...(filters.priorities?.length ? { priorities: JSON.stringify(filters.priorities) } : {}),
         ...(filters.issueTypes?.length ? { issue_types: JSON.stringify(filters.issueTypes) } : {}),
@@ -48,9 +66,9 @@ export const tasks = {
       },
     }),
   getDetail: (taskId) => api.get(`/tasks/detail/${taskId}`),
-  getMy: (page = 1, limit = 1000) => api.get(`/tasks/my?page=${page}&limit=${limit}`),
+  getMy: (page = 1, limit = 24, status = '') => api.get('/tasks/my', { params: { page, limit, status } }),
 
-  getFormOptions: () => api.get('/tasks/form-options'),
+  getFormOptions: () => cachedGet(api, '/tasks/form-options', 300000),
   createFormOption: (data) => api.post('/tasks/form-options', data),
   updateFormOption: (id, data) => api.put(`/tasks/form-options/${id}`, data),
   deleteFormOption: (id) => api.delete(`/tasks/form-options/${id}`),
@@ -66,8 +84,8 @@ export const tasks = {
   approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
   rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),
   bulkDelete: (ids) => api.delete('/tasks/bulk/delete', { data: { ids } }),
-  getClients: () => api.get('/tasks/clients'),
-  markTaskViewed: (id) => api.patch(`/tasks/${id}/view`),
+  getClients: () => cachedGet(api, '/tasks/clients'),
+  markTaskViewed: (id, lastCommentId = 0) => api.patch(`/tasks/${id}/view`, { last_comment_id: lastCommentId }),
   snooze: (id, until) => api.patch(`/task-productivity/${id}/snooze`, { until }),
 };
 
@@ -99,6 +117,7 @@ export const companyAdmin = {
 };
 
 export const analytics = {
+  report: (teamId, params = {}, signal) => api.get(`/analytics/report/${teamId}`, { params, signal }),
   suggestAssignee: (teamId, priority) => api.get(`/analytics/suggest-assignee?teamId=${teamId}&priority=${priority}`),
   energy: (teamId) => api.get(`/analytics/energy/${teamId}`),
   performance: (userId) => api.get(`/analytics/performance/${userId}`),
@@ -106,7 +125,8 @@ export const analytics = {
 };
 
 export const notifications = {
-  getAll: () => api.get('/notifications'),
+  getAll: (params = {}) => api.get('/notifications', { params }),
+  count: () => api.get('/notifications/unread-count'),
   readAll: () => api.patch('/notifications/read-all'),
   read: (id) => api.patch(`/notifications/${id}/read`),
 };

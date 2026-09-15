@@ -42,7 +42,8 @@ const parseIdList = (value, fieldName) => parseList(value, fieldName).map((item)
 const parseDate = (value, fieldName) => {
   if (!value) return '';
   const normalized = String(value).trim().slice(0, 10);
-  if (!DATE_PATTERN.test(normalized)) throw validationError(`${fieldName} must be a valid date`);
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+  if (!DATE_PATTERN.test(normalized) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) throw validationError(`${fieldName} must be a valid date`);
   return normalized;
 };
 
@@ -71,6 +72,7 @@ const parseTaskQuery = (query = {}) => {
     createdFrom,
     createdTo,
     focus,
+    sort: ['newest', 'oldest', 'due', 'priority', 'title'].includes(query.sort) ? query.sort : 'newest',
   };
 };
 
@@ -80,9 +82,14 @@ const addInFilter = (clauses, params, column, values) => {
   params.push(...values);
 };
 
-const buildWhere = (teamId, filters, userId) => {
-  const clauses = ['t.team_id = ?', 't.is_deleted = FALSE'];
-  const params = [Number(teamId)];
+const buildWhere = (teamId, filters, userId, orgId) => {
+  const clauses = ['t.is_deleted = FALSE'];
+  const params = [];
+  if (teamId) { clauses.push('t.team_id = ?'); params.push(Number(teamId)); }
+  else {
+    clauses.push('t.assigned_to = ?', 't.org_id = ?', 'EXISTS (SELECT 1 FROM team_members tm JOIN teams te ON te.id = tm.team_id WHERE tm.team_id = t.team_id AND tm.user_id = ? AND te.is_deleted = FALSE)');
+    params.push(Number(userId), orgId || 0, Number(userId));
+  }
   addInFilter(clauses, params, 't.status', filters.statuses);
   addInFilter(clauses, params, 't.priority', filters.priorities);
   addInFilter(clauses, params, 't.issue_type', filters.issueTypes);
@@ -109,7 +116,7 @@ const buildWhere = (teamId, filters, userId) => {
       params.push(normalizedUserId);
     }
     clauses.push("t.status != 'DONE'");
-    clauses.push('t.due_date <= CAST(GETDATE() AS DATE)');
+    clauses.push("(t.due_date <= CAST(GETDATE() AS DATE) OR t.due_date IS NULL OR t.status = 'IN_PROGRESS')");
     clauses.push('(t.snoozed_until IS NULL OR t.snoozed_until <= GETDATE())');
   }
   if (filters.focus === 'DUE_TODAY') {
@@ -134,9 +141,11 @@ const normalizeSummary = (row = {}) => ({
   low: Number(row.low || 0),
 });
 
-const listTeamTasks = async (teamId, rawQuery, userId) => {
+const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
   const filters = parseTaskQuery(rawQuery);
-  const { where, params } = buildWhere(teamId, filters, userId);
+  const { where, params } = buildWhere(teamId, filters, userId, orgId);
+  const unfiltered = buildWhere(teamId, parseTaskQuery({}), userId, orgId);
+  const orders = { newest: 't.created_at DESC, t.id DESC', oldest: 't.created_at ASC, t.id ASC', due: 'CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END, t.due_date ASC, t.id DESC', priority: "CASE t.priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, t.id DESC", title: 't.title ASC, t.id ASC' };
   const summarySql = `SELECT COUNT(*) AS total,
     SUM(CASE WHEN t.status = 'DONE' THEN 1 ELSE 0 END) AS done,
     SUM(CASE WHEN t.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
@@ -147,29 +156,39 @@ const listTeamTasks = async (teamId, rawQuery, userId) => {
     SUM(CASE WHEN t.priority = 'MEDIUM' THEN 1 ELSE 0 END) AS medium,
     SUM(CASE WHEN t.priority = 'LOW' THEN 1 ELSE 0 END) AS low
     FROM tasks t WHERE ${where}`;
-  const taskSql = `SELECT t.id, t.title, t.description, t.priority, t.status, t.assigned_to,
+  const taskSql = `SELECT t.id, t.title, LEFT(t.description, 220) AS description, t.priority, t.status, t.assigned_to,
       t.assigned_by, t.team_id, t.start_date, t.assigned_date, t.due_date, t.client_name,
-      t.issue_type, t.manager_assigned, t.picked_by, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
+      t.issue_type, t.manager_assigned, t.priority_locked, t.picked_by, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
+      t.blocked_reason, t.review_status, te.name AS team_name,
       u1.name AS assigned_to_name, u2.name AS assigned_by_name, u2.name AS created_by_name,
       u5.name AS delete_requested_by_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
-      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to
-        AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) AS unread_comments
+      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != ?
+        AND tc.is_deleted = FALSE AND tc.id > COALESCE(tr.last_comment_id, 0)) AS unread_comments
     FROM tasks t
+    LEFT JOIN teams te ON te.id = t.team_id
+    LEFT JOIN task_reads tr ON tr.task_id = t.id AND tr.user_id = ?
     LEFT JOIN users u1 ON t.assigned_to = u1.id
     LEFT JOIN users u2 ON t.assigned_by = u2.id
     LEFT JOIN users u5 ON t.delete_requested_by = u5.id
     WHERE ${where}
-    ORDER BY t.created_at DESC LIMIT ? OFFSET ?`;
+    ORDER BY ${orders[filters.sort]} LIMIT ? OFFSET ?`;
 
-  const [[summaryRow], [rows]] = await Promise.all([
-    db.execute(summarySql, params),
-    db.execute(taskSql, [...params, filters.limit, filters.offset]),
+  const isBoard = rawQuery.board === 'true';
+  const boardSql = `WITH ranked AS (${taskSql.slice(0, taskSql.lastIndexOf('ORDER BY'))
+    .replace('SELECT t.id,', `SELECT ROW_NUMBER() OVER (PARTITION BY t.status ORDER BY ${orders[filters.sort]}) AS column_row, t.id,`)})
+    SELECT * FROM ranked WHERE column_row <= ? ORDER BY status, column_row`;
+  const summaryPromise = db.execute(summarySql, params);
+  const [[summaryRow], [rows], [teamRows]] = await Promise.all([
+    summaryPromise,
+    db.execute(isBoard ? boardSql : taskSql, [userId, userId, ...params, filters.limit, ...(isBoard ? [] : [filters.offset])]),
+    where === unfiltered.where ? summaryPromise : db.execute(summarySql.replace(`WHERE ${where}`, `WHERE ${unfiltered.where}`), unfiltered.params),
   ]);
   const summary = normalizeSummary(summaryRow?.[0]);
   return {
     data: rows,
     summary,
+    team_summary: normalizeSummary(teamRows?.[0]),
     pagination: {
       total: summary.total,
       page: filters.page,
@@ -179,7 +198,7 @@ const listTeamTasks = async (teamId, rawQuery, userId) => {
   };
 };
 
-const getTaskDetail = async (taskId) => {
+const getTaskDetail = async (taskId, userId = 0) => {
   const normalizedId = Number(taskId);
   if (!Number.isInteger(normalizedId) || normalizedId <= 0) return null;
   const [[task]] = await db.execute(
@@ -189,16 +208,17 @@ const getTaskDetail = async (taskId) => {
       u3.name AS reported_by_name, u4.name AS picked_by_name,
       u5.name AS delete_requested_by_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
-      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != t.assigned_to
-        AND tc.is_deleted = FALSE AND (t.assignee_last_viewed_at IS NULL OR tc.created_at > t.assignee_last_viewed_at)) AS unread_comments
+      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != ?
+        AND tc.is_deleted = FALSE AND tc.id > COALESCE(tr.last_comment_id, 0)) AS unread_comments
      FROM tasks t
+     LEFT JOIN task_reads tr ON tr.task_id = t.id AND tr.user_id = ?
      LEFT JOIN users u1 ON t.assigned_to = u1.id
      LEFT JOIN users u2 ON t.assigned_by = u2.id
      LEFT JOIN users u3 ON t.reported_by = u3.id
      LEFT JOIN users u4 ON t.picked_by = u4.id
      LEFT JOIN users u5 ON t.delete_requested_by = u5.id
      WHERE t.id = ? AND t.is_deleted = FALSE`,
-    [normalizedId]
+    [userId, userId, normalizedId]
   );
   return task || null;
 };

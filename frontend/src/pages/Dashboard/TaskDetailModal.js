@@ -1,207 +1,34 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import TaskComments from '../../components/TaskComments';
-import { tasks } from '../../services/api';
-
-const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
-const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
-
-const statusProgress = (s) => s === 'DONE' ? 100 : s === 'IN_PROGRESS' ? 62 : s === 'PENDING' ? 30 : 14;
-const dateLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
-const dateTimeLabel = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }); };
-const toInputDate = (v) => v ? String(v).split('T')[0] : '';
-const val = (v) => v || '—';
-
-/* ── Small reusable atoms ───────────────────────────────────── */
-const Row = ({ label, children }) => (
-  <div className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0 gap-3">
-    <span className="text-sm text-gray-500 shrink-0">{label}</span>
-    <span className="text-sm text-gray-900 font-semibold text-right">{children}</span>
-  </div>
-);
-
-const Sec = ({ title, children }) => (
-  <div className="bg-white rounded-2xl border border-gray-200 px-4 py-4">
-    <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-400 mb-3">{title}</h4>
-    {children}
-  </div>
-);
-
-const Label = ({ text }) => <span className="text-xs font-bold text-gray-600">{text}</span>;
-const cls = 'h-[38px] rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5 w-full focus:border-blue-400 outline-none';
-const Sel = ({ label, value, onChange, children }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <select className={cls} value={value} onChange={onChange}>{children}</select>
-  </label>
-);
-const Inp = ({ label, ...p }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <input className={cls} {...p} />
-  </label>
-);
-const Txt = ({ label, ...p }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <textarea className="rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5 py-2 w-full min-h-[72px] resize-y focus:border-blue-400 outline-none" {...p} />
-  </label>
-);
-
-/* ── Issue-specific detail sections ────────────────────────── */
-const BugDetailSec = ({ t }) => (
-  <Sec title="Bug Details">
-    <Row label="Severity">{val(t.severity)}</Row>
-    <Row label="Bug Type">{val(t.bug_type)}</Row>
-    <Row label="Environment">{val(t.environment)}</Row>
-    <Row label="Affected Module">{val(t.affected_module)}</Row>
-    {t.steps_to_reproduce && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Steps to Reproduce</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.steps_to_reproduce}</p></div>}
-  </Sec>
-);
-
-const FeatureDetailSec = ({ t }) => (
-  <Sec title="Feature Details">
-    <Row label="Feature Area">{val(t.feature_area)}</Row>
-    <Row label="Story Points">{val(t.story_points)}</Row>
-    <Row label="MoSCoW Priority">{val(t.feature_priority)}</Row>
-    {t.acceptance_criteria && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Acceptance Criteria</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.acceptance_criteria}</p></div>}
-  </Sec>
-);
-
-const EnhDetailSec = ({ t }) => (
-  <Sec title="Enhancement Details">
-    <Row label="Enhancement Type">{val(t.enhancement_type)}</Row>
-    <Row label="Impact Level">{val(t.impact_level)}</Row>
-    <Row label="Effort Estimate">{val(t.effort_estimate)}</Row>
-    {t.improvement_detail && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">What to Improve</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.improvement_detail}</p></div>}
-  </Sec>
-);
-
-const StoryDetailSec = ({ t }) => (
-  <Sec title="Story Details">
-    <Row label="Story Role">{val(t.story_role)}</Row>
-    <Row label="Story Points">{val(t.story_points)}</Row>
-    <Row label="Epic / Theme">{val(t.epic)}</Row>
-    <Row label="User Persona">{val(t.persona)}</Row>
-    {t.story_notes && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Notes</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.story_notes}</p></div>}
-  </Sec>
-);
-
-const TaskClassSec = ({ t }) => (
-  <Sec title="Classification">
-    <Row label="Task Type">{val(t.task_type)}</Row>
-    <Row label="Product">{val(t.product)}</Row>
-    <Row label="Category">{val(t.category)}</Row>
-  </Sec>
-);
-
-/* ── Issue-specific edit panels ────────────────────────────── */
-const BugEditFields = ({ t, up }) => (
-  <>
-    <Sel label="Severity" value={t.severity || ''} onChange={e => up('severity', e.target.value)}>
-      {['CRITICAL','HIGH','MEDIUM','LOW'].map(v => <option key={v} value={v}>{v}</option>)}
-    </Sel>
-    <Sel label="Bug Type" value={t.bug_type || ''} onChange={e => up('bug_type', e.target.value)}>
-      <option value="">Select type</option>
-      {[['UI','UI Issue'],['FUNCTIONAL','Functional'],['PERFORMANCE','Performance'],['SECURITY','Security'],['DATA','Data Issue']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <Sel label="Environment" value={t.environment || ''} onChange={e => up('environment', e.target.value)}>
-      <option value="">Select env</option>
-      {[['PRODUCTION','Production'],['STAGING','Staging'],['DEV','Development'],['QA','QA']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <div className="col-span-3"><Inp label="Affected Module" value={t.affected_module || ''} onChange={e => up('affected_module', e.target.value)} placeholder="e.g. Login, Dashboard" /></div>
-    <div className="col-span-3"><Txt label="Steps to Reproduce" value={t.steps_to_reproduce || ''} onChange={e => up('steps_to_reproduce', e.target.value)} placeholder={"1. Go to...\n2. Click...\n\nExpected: ...\nActual: ..."} /></div>
-  </>
-);
-
-const FeatureEditFields = ({ t, up }) => (
-  <>
-    <Sel label="Feature Area" value={t.feature_area || ''} onChange={e => up('feature_area', e.target.value)}>
-      <option value="">Select area</option>
-      {[['AUTH','Authentication'],['DASHBOARD','Dashboard'],['REPORTS','Reports'],['PAYMENTS','Payments'],['API','API'],['UI_UX','UI/UX'],['OTHER','Other']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <Sel label="Story Points" value={t.story_points || ''} onChange={e => up('story_points', e.target.value)}>
-      <option value="">Estimate</option>
-      {['1','2','3','5','8','13'].map(v => <option key={v} value={v}>{v} pts</option>)}
-    </Sel>
-    <Sel label="MoSCoW Priority" value={t.feature_priority || ''} onChange={e => up('feature_priority', e.target.value)}>
-      <option value="">Select</option>
-      {[['MUST_HAVE','Must Have'],['SHOULD_HAVE','Should Have'],['NICE_TO_HAVE','Nice to Have']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <div className="col-span-3"><Txt label="Acceptance Criteria" value={t.acceptance_criteria || ''} onChange={e => up('acceptance_criteria', e.target.value)} placeholder={"• User can...\n• System should..."} /></div>
-  </>
-);
-
-const EnhEditFields = ({ t, up }) => (
-  <>
-    <Sel label="Enhancement Type" value={t.enhancement_type || ''} onChange={e => up('enhancement_type', e.target.value)}>
-      <option value="">Select type</option>
-      {[['PERFORMANCE','Performance'],['UX','UX Improvement'],['ACCESSIBILITY','Accessibility'],['REFACTOR','Refactor'],['SECURITY','Security']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <Sel label="Impact Level" value={t.impact_level || ''} onChange={e => up('impact_level', e.target.value)}>
-      <option value="">Select</option>
-      {[['HIGH','High'],['MEDIUM','Medium'],['LOW','Low']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <Sel label="Effort Estimate" value={t.effort_estimate || ''} onChange={e => up('effort_estimate', e.target.value)}>
-      <option value="">Select</option>
-      {[['XS','XS – <2hrs'],['S','S – Half day'],['M','M – 1-2 days'],['L','L – 3-5 days'],['XL','XL – 1+ week']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <div className="col-span-3"><Txt label="What to Improve" value={t.improvement_detail || ''} onChange={e => up('improvement_detail', e.target.value)} placeholder="Describe current vs improved state..." /></div>
-  </>
-);
-
-const StoryEditFields = ({ t, up }) => (
-  <>
-    <Sel label="Story Role" value={t.story_role || ''} onChange={e => up('story_role', e.target.value)}>
-      <option value="">Select role</option>
-      {[['CONTENT_WRITER','Content Writer'],['SEO','SEO Specialist'],['DEVELOPER','Developer'],['DESIGNER','Designer'],['MARKETING','Marketing'],['QA','QA Tester']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-    </Sel>
-    <Sel label="Story Points" value={t.story_points || ''} onChange={e => up('story_points', e.target.value)}>
-      <option value="">Estimate</option>
-      {['1','2','3','5','8'].map(v => <option key={v} value={v}>{v} pts</option>)}
-    </Sel>
-    <Inp label="Epic / Theme" value={t.epic || ''} onChange={e => up('epic', e.target.value)} placeholder="e.g. SEO Q3 Sprint" />
-    <div className="col-span-3"><Inp label="User Persona" value={t.persona || ''} onChange={e => up('persona', e.target.value)} placeholder="e.g. First-time visitor" /></div>
-    <div className="col-span-3"><Txt label="Notes" value={t.story_notes || ''} onChange={e => up('story_notes', e.target.value)} placeholder="Story details, content guidelines..." /></div>
-  </>
-);
-
-const TaskEditFields = ({ t, up, opts, cats }) => (
-  <>
-    <Sel label="Task Type" value={t.task_type || ''} onChange={e => up('task_type', e.target.value)}>
-      <option value="">Select type</option>
-      {opts.task_types.map(o => <option key={o.id || o.label} value={o.label}>{o.label}</option>)}
-    </Sel>
-    <Sel label="Product / Module" value={t.product || ''} onChange={e => up('product', e.target.value)}>
-      <option value="">Select product</option>
-      {opts.products.map(o => <option key={o.id || o.label} value={o.label}>{o.label}</option>)}
-    </Sel>
-    <Sel label="Category" value={t.category || ''} onChange={e => up('category', e.target.value)}>
-      <option value="">Select category</option>
-      {cats.map(o => <option key={o.id || `${o.label}-${o.parent_value || ''}`} value={o.label}>{o.label}</option>)}
-    </Sel>
-  </>
-);
+import useDialog from '../../components/useDialog';
+import useTaskDraft from './useTaskDraft';
+import TaskWorkflowPanel from './TaskWorkflowPanel';
+import useTaskMetadata from './useTaskMetadata';
+import { notify } from '../../services/feedback';
+import { STATUS_OPTIONS, STATUS_LABEL, dateLabel, dateTimeLabel, toInputDate, val, Row, Sec, Sel, Inp, Txt,
+  BugDetailSec, FeatureDetailSec, EnhDetailSec, StoryDetailSec, TaskClassSec, BugEditFields, FeatureEditFields, EnhEditFields, StoryEditFields, TaskEditFields } from './TaskDetailFields';
 
 /* ── Main component ─────────────────────────────────────────── */
-const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTask, handleDelete, handleApproveDelete, handleRejectDelete, handlePanelUpdate, members, availableTaskOptions, selectedTaskCategories }) => {
+const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelectedTask, handleDelete, handleApproveDelete, handleRejectDelete, onSaved }) => {
+  const metadata = useTaskMetadata(task);
+  const members = metadata.members, availableTaskOptions = metadata.options;
+  const editor = useTaskDraft(task, setSelectedTask, onSaved);
+  const t = editor.draft;
   const type = t.issue_type || 'task';
-  const up = (field, value) => handlePanelUpdate(field, value);
+  const up = editor.update;
+  const dialogRef = useDialog(true, editor.close);
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
 
-  useEffect(() => {
-    if (t && Number(t.assigned_to) === Number(user.id)) {
-      tasks.markTaskViewed(t.id).catch(() => {});
-      t.unread_comments = 0;
-    }
-  }, [t, user.id]);
-
   return (
-    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={() => setSelectedTask(null)}>
-        <aside className="relative grid grid-cols-[360px_1fr] w-[min(1080px,98vw)] h-[min(88vh,780px)] rounded-3xl bg-white shadow-[0_32px_80px_rgba(15,23,42,0.32)] overflow-hidden animate-[dsv2Slide_0.22s_cubic-bezier(.22,.68,0,1.2)]" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-[rgba(15,23,42,0.45)] grid place-items-center z-[90] p-4" onClick={editor.close}>
+        <aside ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Task ${t.id}`} tabIndex={-1} className="task-detail-dialog relative grid grid-cols-[360px_1fr] w-[min(1080px,98vw)] h-[min(88vh,780px)] rounded-3xl bg-white shadow-[0_32px_80px_rgba(15,23,42,0.32)] overflow-hidden animate-[dsv2Slide_0.22s_cubic-bezier(.22,.68,0,1.2)]" onClick={e => e.stopPropagation()}>
 
           {/* ── Close button — absolute top-right corner ── */}
           <button
             className="absolute top-4 right-4 z-50 bg-white/90 backdrop-blur border border-slate-200 text-slate-500 w-9 h-9 rounded-full text-[15px] cursor-pointer flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-md transition-all duration-200"
             type="button"
-            onClick={() => setSelectedTask(null)}
+            onClick={editor.close}
             title="Close"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -225,8 +52,6 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
           <p className="text-sm text-[#94a3b8] leading-relaxed">{t.description || 'No description provided.'}</p>
 
           <div className="flex flex-col gap-1.5">
-            <div className="flex justify-between text-[11px] text-[#94a3b8] font-semibold"><span>Progress</span><span>{statusProgress(t.status)}%</span></div>
-            <div className="h-2 rounded-full bg-white/[0.12] overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#60a5fa] to-[#34d399] transition-all duration-400" style={{ width: `${statusProgress(t.status)}%` }} /></div>
             <span className={`inline-flex text-[11px] font-extrabold rounded-full px-2.5 py-1 w-fit ${t.status === 'DONE' ? 'bg-green-100/15 text-[#6ee7b7]' : t.status === 'IN_PROGRESS' ? 'bg-sky-100/15 text-[#7dd3fc]' : t.status === 'PENDING' ? 'bg-amber-100/15 text-[#fde68a]' : 'bg-blue-100/15 text-[#93c5fd]'}`}>{STATUS_LABEL[t.status] || t.status}</span>
           </div>
 
@@ -279,6 +104,14 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
             ))}
           </div>
 
+          <div className="border-b bg-white px-6 py-3 flex flex-wrap items-center gap-2">
+            <span role="status" className="text-sm text-slate-600">{editor.saving ? 'Saving...' : editor.dirty ? 'Unsaved changes' : editor.message || 'Up to date'}</span>
+            <button type="button" disabled={!editor.dirty || editor.saving} onClick={editor.save} className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-40">Save changes</button>
+            <button type="button" disabled={editor.saving} onClick={editor.reload} className="rounded-lg border px-3 py-2 text-sm">Reload latest</button>
+            <button type="button" onClick={async () => { const link = `${window.location.origin}/dashboard?task=${t.id}`; try { if (!navigator.clipboard) throw new Error('Clipboard unavailable'); await navigator.clipboard.writeText(link); notify('Task link copied', 'success'); } catch { window.prompt('Copy this task link', link); } }} className="rounded-lg border px-3 py-2 text-sm">Copy link</button>
+            {editor.error && <p role="alert" className="w-full text-sm text-red-700">{editor.error}</p>}
+            {metadata.error && <p role="alert" className="w-full text-sm text-red-700">{metadata.error}</p>}
+          </div>
           <div className="flex-1 overflow-y-auto px-6 py-6">
 
             {/* DETAILS TAB */}
@@ -292,6 +125,8 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
                   <Row label="Created By">{val(t.created_by_name || t.assigned_by_name)}</Row>
                   {t.client_name && <Row label="Client Name">{t.client_name}</Row>}
                 </Sec>
+
+                <TaskWorkflowPanel key={`${task.id}:${task.version}`} task={task} members={members} disabled={editor.dirty || editor.saving} onUpdate={updated => { setSelectedTask(updated); onSaved?.(); }} />
 
                 <Sec title="Timeline">
                   <Row label="Created At">{dateTimeLabel(t.created_at)}</Row>
@@ -310,7 +145,9 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
 
             {/* EDIT TAB */}
             {sheetTab === 'edit' && (
-              <div className="flex flex-col gap-3.5">
+              <fieldset disabled={editor.saving} className="flex flex-col gap-3.5">
+                <Inp label="Title" value={t.title || ''} onChange={e => up('title', e.target.value)} />
+                <Txt label="Description" value={t.description || ''} onChange={e => up('description', e.target.value)} />
                 <div className="grid grid-cols-2 gap-3">
                   <Sel label="Status" value={t.status} onChange={e => up('status', e.target.value)}>
                     {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
@@ -335,7 +172,7 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
                   {type === 'feature'     && <FeatureEditFields   t={t} up={up} />}
                   {type === 'enhancement' && <EnhEditFields       t={t} up={up} />}
                   {type === 'story'       && <StoryEditFields     t={t} up={up} />}
-                  {(type === 'task' || !type) && <TaskEditFields  t={t} up={up} opts={availableTaskOptions} cats={selectedTaskCategories} />}
+                  {(type === 'task' || !type) && <TaskEditFields  t={t} up={up} opts={availableTaskOptions} cats={(availableTaskOptions.categories || []).filter(option => !option.parent_value || option.parent_value === t.task_type)} />}
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -343,11 +180,11 @@ const TaskDetailModal = ({ selectedTask: t, sheetTab, setSheetTab, setSelectedTa
                   <Inp label="Start Date" type="date" value={toInputDate(t.start_date)} onChange={e => up('start_date', e.target.value)} />
                   <Inp label="End Date" type="date" value={toInputDate(t.due_date)} onChange={e => up('due_date', e.target.value)} />
                 </div>
-              </div>
+              </fieldset>
             )}
 
             {sheetTab === 'comments' && (
-              <div className="min-h-[200px]"><TaskComments taskId={t.id} /></div>
+              <div className="min-h-[200px]"><TaskComments taskId={t.id} members={members} /></div>
             )}
           </div>
         </div>

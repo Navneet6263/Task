@@ -1,29 +1,31 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { logs } from '../services/api';
+import { readPreference, writePreference } from '../services/preferences';
 import './PmsHub.css';
 
 const PmsHub = () => {
   const [logList, setLogList] = useState([]);
-  const [focus, setFocus] = useState({ f1: '', f2: '', f3: '' });
+  const [focus, setFocus] = useState(() => readPreference('focus-plan', { f1: '', f2: '', f3: '' }));
   const [kpiResult, setKpiResult] = useState('');
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1), [pages, setPages] = useState(1);
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
-      const response = await logs.getMy();
-      setLogList(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {}
-  };
+      const response = await logs.getMy(page);
+      setPages(response.data.pagination?.total_pages || 1); setError('');
+      setLogList(Array.isArray(response.data?.data) ? response.data.data : Array.isArray(response.data) ? response.data : []);
+    } catch (error) { setError('Could not load activity. Please retry.'); }
+  }, [page]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const completed = useMemo(
     () => logList.filter((entry) => entry.activity === 'Task Completed').length,
     [logList]
   );
 
-  const score = Math.min(100, 60 + completed * 2);
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -33,9 +35,9 @@ const PmsHub = () => {
   const handleKpiPredict = (event) => {
     event.preventDefault();
     const areas = [focus.f1, focus.f2, focus.f3].filter(Boolean);
-    const predicted = Math.min(100, 60 + completed * 2 + areas.length * 5);
+    const stored = writePreference('focus-plan', focus);
     setKpiResult(
-      `Focus areas: ${areas.length > 0 ? areas.join(', ') : 'none selected'} | Predicted KPI: ${predicted}/100 | Completed tasks: ${completed}`
+      `${stored ? 'Plan saved on this browser' : 'Storage unavailable; plan not saved'}: ${areas.length > 0 ? areas.join(', ') : 'none selected'}`
     );
   };
 
@@ -43,13 +45,13 @@ const PmsHub = () => {
     <div className="pms-page">
       <header className="pms-head">
         <h1>PMS Hub</h1>
-        <p>Personal performance insights and month end task evidence. {today}</p>
+        <p>Personal focus plan and activity evidence. {today}</p>
       </header>
 
       <section className="pms-top">
         <article className="pms-focus-card">
           <h2>Monthly Focus Planner</h2>
-          <p>Define top focus themes and estimate KPI confidence.</p>
+          <p>Choose three focus themes. Your plan is private to this account on this browser.</p>
 
           <form onSubmit={handleKpiPredict}>
             <input placeholder="Focus Area 1" value={focus.f1} onChange={(event) => setFocus({ ...focus, f1: event.target.value })} />
@@ -58,20 +60,21 @@ const PmsHub = () => {
 
             {kpiResult && <div className="pms-result">{kpiResult}</div>}
 
-            <button type="submit">Predict KPI</button>
+            <button type="submit">Save focus plan</button>
           </form>
         </article>
 
         <article className="pms-score-card">
-          <p>Performance Score</p>
-          <h3>{score}/100</h3>
-          <span>{completed} completed tasks mapped</span>
+          <p>Completion events on this page</p>
+          <h3>{completed}</h3>
+          <span>Activity events, not a performance rating</span>
         </article>
       </section>
 
+      {error && <p role="alert">{error} <button onClick={fetchLogs}>Retry</button></p>}
       <section className="pms-card">
         <div className="pms-card-head">
-          <h2>Month End Activity Report</h2>
+          <h2>Activity history</h2>
           <span>{logList.length} records</span>
         </div>
 
@@ -99,7 +102,7 @@ const PmsHub = () => {
                   <td>{log.automated_by || '-'}</td>
                   <td>
                     <span className={`pms-status ${log.activity === 'Task Completed' ? 'done' : 'progress'}`}>
-                      {log.activity === 'Task Completed' ? 'Completed' : 'In Progress'}
+                      {log.activity === 'Task Completed' ? 'Completed event' : 'Recorded event'}
                     </span>
                   </td>
                 </tr>
@@ -115,6 +118,7 @@ const PmsHub = () => {
           </table>
         </div>
       </section>
+      <div className="flex justify-center gap-3"><button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {pages}</span><button disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button></div>
     </div>
   );
 };

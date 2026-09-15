@@ -5,32 +5,7 @@ const router = express.Router();
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
-const canAccessTeam = async (req, teamId) => {
-  if (req.userRole === 'company_admin') {
-    const [[team]] = await db.execute(
-      `SELECT t.id
-       FROM teams t
-       JOIN organizations o ON o.id = t.org_id
-       WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
-      [teamId, req.companyAdminId]
-    );
-    return Boolean(team);
-  }
-
-  if (req.userRole === 'admin') {
-    const [[team]] = await db.execute(
-      'SELECT id FROM teams WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
-      [teamId, req.orgId]
-    );
-    return Boolean(team);
-  }
-
-  const [membership] = await db.execute(
-    'SELECT id FROM team_members WHERE team_id = ? AND user_id = ?',
-    [teamId, req.userId]
-  );
-  return membership.length > 0;
-};
+const { canAccessTeam } = require('../utils/teamAccess');
 
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -53,13 +28,13 @@ router.get('/', authenticate, async (req, res) => {
         (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
        FROM teams t LEFT JOIN users u ON t.created_by = u.id
        WHERE t.is_deleted = FALSE AND t.org_id IN (${placeholders})
-       ORDER BY t.created_at DESC LIMIT ? OFFSET ?`;
+       ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?`;
       params = [...orgIds, limit, offset];
     } else if (req.userRole === 'admin') {
       query = `SELECT t.*, u.name as creator_name,
         (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
        FROM teams t LEFT JOIN users u ON t.created_by = u.id
-       WHERE t.is_deleted = FALSE AND t.org_id = ? ORDER BY t.created_at DESC LIMIT ? OFFSET ?`;
+       WHERE t.is_deleted = FALSE AND t.org_id = ? ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?`;
       params = [req.orgId, limit, offset];
     } else {
       query = `SELECT t.*, u.name as creator_name,
@@ -67,7 +42,7 @@ router.get('/', authenticate, async (req, res) => {
        FROM teams t
        JOIN team_members tm ON t.id = tm.team_id
        LEFT JOIN users u ON t.created_by = u.id
-       WHERE tm.user_id = ? AND t.is_deleted = FALSE AND t.org_id = ? ORDER BY t.created_at DESC LIMIT ? OFFSET ?`;
+       WHERE tm.user_id = ? AND t.is_deleted = FALSE AND t.org_id = ? ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?`;
       params = [req.userId, req.orgId, limit, offset];
     }
     const [teams] = await db.execute(query, params);

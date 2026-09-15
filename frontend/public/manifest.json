@@ -1,0 +1,12 @@
+{
+  "short_name": "GreenTask",
+  "name": "GreenTask Workspace",
+  "icons": [
+    { "src": "brand/greentask-mark-192.png?v=blue-2", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "brand/greentask-mark-512.png?v=blue-2", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#3b94ef",
+  "background_color": "#f0f7ff"
+}

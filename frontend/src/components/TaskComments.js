@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { comments as commentsApi } from '../services/api';
+import { comments as commentsApi, tasks } from '../services/api';
 import './TaskComments.css';
 
 /* ─── avatar palette ─────────────────────────────────────────────── */
@@ -35,7 +35,7 @@ const timeAgo = (isoString) => {
 };
 
 /* ─── main component ────────────────────────────────────────────── */
-const TaskComments = ({ taskId }) => {
+const TaskComments = ({ taskId, members = [] }) => {
   const currentUser = JSON.parse(
     localStorage.getItem('user') || localStorage.getItem('company_user') || '{}'
   );
@@ -45,6 +45,7 @@ const TaskComments = ({ taskId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newText, setNewText] = useState('');
+  const [mentions, setMentions] = useState([]);
   const [sending, setSending] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
@@ -59,6 +60,8 @@ const TaskComments = ({ taskId }) => {
       setLoading(true);
       const res = await commentsApi.getByTask(taskId);
       setCommentList(Array.isArray(res.data) ? res.data : []);
+      setError('');
+      await tasks.markTaskViewed(taskId, Math.max(0, ...(Array.isArray(res.data) ? res.data : []).map(comment => Number(comment.id))));
     } catch (err) {
       setError('Could not load comments.');
     } finally {
@@ -84,9 +87,10 @@ const TaskComments = ({ taskId }) => {
     setSending(true);
     setError('');
     try {
-      const res = await commentsApi.create({ task_id: taskId, comment: text });
+      const res = await commentsApi.create({ task_id: taskId, comment: text, mentioned_user_ids: mentions });
       setCommentList((prev) => [...prev, res.data]);
       setNewText('');
+      setMentions([]);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to post comment.');
     } finally {
@@ -258,7 +262,9 @@ const TaskComments = ({ taskId }) => {
 
       {/* ── composer ── */}
       <div className="tc-composer">
+        <details><summary className="cursor-pointer text-sm text-blue-700">Mention teammates ({mentions.length})</summary><select multiple aria-label="Mention teammates" className="w-full rounded-lg border p-2 text-sm" value={mentions} onChange={e => setMentions([...e.target.selectedOptions].map(option => option.value))}>{members.filter(member => Number(member.id) !== Number(currentUserId)).map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></details>
         <textarea
+          maxLength={5000}
           ref={textareaRef}
           className="tc-textarea"
           placeholder="Add a comment… (Enter to send, Shift+Enter for new line)"

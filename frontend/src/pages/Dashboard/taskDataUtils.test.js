@@ -38,5 +38,5 @@ test('My Day keeps due work assigned to the current user and ignores snoozed tas
     search: '', createdFrom: '', createdTo: '', focus: 'MY_DAY', currentUserId: 4,
   });
 
-  expect(result.map((task) => task.id)).toEqual([1]);
+  expect(result.map((task) => task.id)).toEqual([1, 3]);
 });

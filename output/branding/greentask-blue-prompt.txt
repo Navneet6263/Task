@@ -1,0 +1,11 @@
+Tool: built-in image_gen, edit mode.
+Source: greentask-leaf-master.png (preserved green original).
+Final master: greentask-leaf-blue-master.png.
+Prompt:
+Use case: precise-object-edit. Input Image 1 is the approved GreenTask leaf/check logo and is the EDIT TARGET. Change ONLY the coloured leaf areas from green to LIGHT BLUE. Preserve exactly the same leaf silhouette, lower-left stem, upper-right point, broad white check shape, curved lower facet, proportions, placement, framing and transparent background. Main surface: fresh clean sky blue / azure (#48B4F2 blending subtly toward #3B94EF), with medium blue (#2563EB) lower facet to keep the mark legible at favicon sizes. Absolutely NO green, mint, turquoise or teal pixels. Keep the existing check pure opaque white. The result should feel lively and clear, not washed out or grey, not navy-dominant. Same single symbol on a genuinely transparent RGBA background. Do not add text, wordmarks, boxes, backgrounds, shadows, glow, texture or new objects. Output only the recoloured icon, not a presentation sheet.
+
+Runtime exports: frontend/public/brand/*.png and frontend/public/favicon.ico.
+Follow-up edit prompt: Remove only the rendered checkerboard background and replace with actual transparent alpha-zero pixels. Preserve the blue leaf geometry, colours and opaque white check exactly; no backdrop, text or shadows.
+Final successful edit prompt (green original as reference): Recolor this transparent logo from green to bright light sky blue with a royal blue lower facet. Keep the identical leaf and white check, same size and position. Preserve the source's transparent background. Output a transparent PNG icon with alpha. No checkerboard or other background. No text.
+Wordmark colours: Green #2563eb, Task #1686cf; name stays GreenTask.
+Dashboard, sidebar, header layout and task logic remain unchanged.

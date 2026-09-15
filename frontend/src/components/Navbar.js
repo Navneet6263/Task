@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import BrandLogo from './BrandLogo';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ const Navbar = () => {
 
   return (
     <nav style={styles.nav}>
-      <h1 style={styles.logo}>Task Manager</h1>
+      <BrandLogo />
       <div style={styles.right}>
         <span style={styles.username}>{user.name}</span>
         <button onClick={handleLogout} className="btn btn-secondary">

@@ -1,0 +1,8 @@
+Tool: built-in image_gen (edit mode).
+Approved reference: GreenTask concept 01 / Leaf Check.
+Final prompt:
+Use case: precise-object-edit / logo-brand. Image 1 is the APPROVED GreenTask Leaf Check concept, edit target. Extract and refine ONLY the main leaf/check symbol as a final standalone production app icon on a genuinely TRANSPARENT background with preserved alpha. Keep the exact recognizable approved silhouette: broad leaf pointing upper-right, short stem lower-left, bold white check aligned within leaf. Keep the approved proportions, orientation and simple curved lower facet. Main leaf emerald green, lower-right facet dark forest green blending very subtly into a light azure-blue accent along the lower-right rim, only about 15 percent blue. The check must be solid opaque white, clean and smooth. Icon occupies about 88 percent of a square canvas, centered with equal safe transparent padding. Razor-clean flat vector-like edges suitable for favicon downscaling, no texture or noise. NO wordmark, NO letters, NO title, NO browser samples, NO app-icon background tile, NO presentation board, NO shadows, NO glow, NO extra objects. Produce ONE symbol only. Preserve leaf/check concept, do not redesign.
+
+The generated master is greentask-leaf-master.png in this folder.
+Runtime wordmark: BrandLogo.js/CSS, green text with soft blue Task accent.
+Mechanical PNG/ICO exports: frontend/scripts/export-brand.ps1.

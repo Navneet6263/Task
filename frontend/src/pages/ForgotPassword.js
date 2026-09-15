@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AuthShowcase from '../components/AuthShowcase';
+import BrandLogo from '../components/BrandLogo';
 import { auth } from '../services/api';
 import './Login.css';
 
@@ -83,11 +84,7 @@ const ForgotPassword = () => {
         <section className="auth-page__panel">
           <div className="auth-page__topbar">
             <button type="button" className="auth-page__brand" onClick={() => navigate('/login')}>
-              <span>GT</span>
-              <div>
-                <strong>GreenTask</strong>
-                <small>Password recovery</small>
-              </div>
+              <BrandLogo subtitle="Password recovery" />
             </button>
 
             <button type="button" className="auth-page__ghost-link" onClick={() => navigate('/login')}>

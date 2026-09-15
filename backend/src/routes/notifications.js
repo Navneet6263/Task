@@ -3,10 +3,17 @@ const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
+router.get('/unread-count', authenticate, async (req, res) => {
+  try {
+    const [[row]] = await db.execute('SELECT COUNT(*) AS unread FROM notifications WHERE user_id = ? AND is_read = FALSE', [req.userId]);
+    res.json(row);
+  } catch (error) { res.status(500).json({ error: 'Unable to load unread count' }); }
+});
+
 router.get('/', authenticate, async (req, res) => {
   try {
     const [rows] = await db.execute(
-      'SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 30',
+      `SELECT * FROM notifications WHERE user_id = ? ${req.query.unread === 'true' ? 'AND is_read = FALSE' : ''} ORDER BY created_at DESC, id DESC LIMIT 30`,
       [req.userId]
     );
     res.json(rows);

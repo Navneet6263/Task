@@ -1,6 +1,7 @@
+import { localDate } from '../../services/localDate';
 export const filterTasksLocally = (taskList, filters) => {
   const search = String(filters.search || '').toLowerCase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   return taskList.filter((task) => {
     const searchable = `${task.title || ''} ${task.description || ''}`.toLowerCase();
     const createdDate = String(task.created_at || '').slice(0, 10);
@@ -8,7 +9,7 @@ export const filterTasksLocally = (taskList, filters) => {
     const isOpen = task.status !== 'DONE';
     const isAwake = !task.snoozed_until || new Date(task.snoozed_until) <= new Date();
     const matchesFocus = !filters.focus || (
-      (filters.focus === 'MY_DAY' && String(task.assigned_to) === String(filters.currentUserId) && isOpen && dueDate && dueDate <= today && isAwake) ||
+      (filters.focus === 'MY_DAY' && String(task.assigned_to) === String(filters.currentUserId) && isOpen && (!dueDate || dueDate <= today || task.status === 'IN_PROGRESS') && isAwake) ||
       (filters.focus === 'DUE_TODAY' && dueDate === today) ||
       (filters.focus === 'OVERDUE' && isOpen && dueDate && dueDate < today)
     );
@@ -36,7 +37,7 @@ export const summarizeTasks = (taskList) => {
     in_progress: count((task) => task.status === 'IN_PROGRESS'),
     pending: count((task) => task.status === 'PENDING'),
     todo: count((task) => task.status === 'TODO'),
-    overdue: count((task) => task.due_date && task.status !== 'DONE' && new Date(task.due_date) < today),
+    overdue: count((task) => task.due_date && task.status !== 'DONE' && String(task.due_date).slice(0, 10) < localDate(today)),
     high: count((task) => task.priority === 'HIGH'),
     medium: count((task) => task.priority === 'MEDIUM'),
     low: count((task) => task.priority === 'LOW'),

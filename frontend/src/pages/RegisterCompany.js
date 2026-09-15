@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthShowcase from '../components/AuthShowcase';
+import BrandLogo from '../components/BrandLogo';
 import { API_BASE_URL } from '../services/runtimeConfig';
 import './RegisterCompany.css';
 
@@ -174,11 +175,7 @@ const RegisterCompany = () => {
         <section className="company-auth__panel">
           <div className="company-auth__topbar">
             <button type="button" className="company-auth__brand" onClick={() => navigate('/login')}>
-              <span>NT</span>
-              <div>
-                <strong>Nav Task</strong>
-                <small>Company onboarding</small>
-              </div>
+              <BrandLogo subtitle="Company onboarding" />
             </button>
 
             <Link to="/login" className="company-auth__ghost-link">
@@ -262,7 +259,7 @@ const RegisterCompany = () => {
                     className="company-auth__input company-auth__textarea"
                     value={form.company_description}
                     onChange={(event) => updateField('company_description', event.target.value)}
-                    placeholder="What does your company do and how will teams use Nav Task?"
+                    placeholder="What does your company do and how will teams use GreenTask?"
                     required
                   />
                 </div>

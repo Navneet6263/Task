@@ -4,6 +4,7 @@ import axios from 'axios';
 import { auth } from '../services/api';
 import { SA_BASE_URL } from '../services/runtimeConfig';
 import AuthShowcase from '../components/AuthShowcase';
+import BrandLogo from '../components/BrandLogo';
 import './Login.css';
 
 const sa = axios.create({ baseURL: SA_BASE_URL });
@@ -235,11 +236,7 @@ const Login = () => {
         <section className="auth-page__panel">
           <div className="auth-page__topbar">
             <button type="button" className="auth-page__brand" onClick={() => navigate('/login')}>
-              <span>NT</span>
-              <div>
-                <strong>Nav Task</strong>
-                <small>Task operations platform</small>
-              </div>
+              <BrandLogo subtitle="Task operations platform" />
             </button>
 
             <button type="button" className="auth-page__ghost-link" onClick={() => navigate('/register-company')}>
@@ -384,7 +381,7 @@ const Login = () => {
                     type="email"
                     value={saEmail}
                     onChange={setSaEmail}
-                    placeholder="superadmin@navtask.com"
+                    placeholder="Your admin email address"
                     required
                   />
                   <button type="submit" className="auth-page__submit" disabled={saBusy}>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { logs, teams } from '../services/api';
+import { actorKey, buildActorOptions } from './auditActors';
 import './AuditLogs.css';
 
 const activityTone = {
@@ -53,17 +54,7 @@ const AuditLogs = () => {
         setLogList(resData.data || []);
         setPagination(resData.pagination || { total: 0, page: pageNum, limit: pageSize, total_pages: 1 });
         if (resData.stats) setStats(resData.stats);
-        if (resData.actors) {
-          const formattedActors = (resData.actors || []).map((a) => {
-            const key = a.user_id ? `u-${a.user_id}` : a.user_name ? `n-${String(a.user_name).toLowerCase()}` : `a-${String(a.automated_by || 'system').toLowerCase()}`;
-            return {
-              key,
-              name: a.user_name || 'System',
-              subtitle: a.automated_by || 'Automation',
-            };
-          });
-          setActorOptions(formattedActors);
-        }
+        setActorOptions(buildActorOptions(resData.actors || []));
       } else if (Array.isArray(resData)) {
         // Fallback for array format
         setLogList(resData);
@@ -369,12 +360,6 @@ const AuditLogs = () => {
       </section>
     </div>
   );
-};
-
-const actorKey = (log) => {
-  if (log.user_id) return `u-${log.user_id}`;
-  if (log.user_name) return `n-${String(log.user_name).toLowerCase()}`;
-  return `a-${String(log.automated_by || 'system').toLowerCase()}`;
 };
 
 const initials = (name) => {

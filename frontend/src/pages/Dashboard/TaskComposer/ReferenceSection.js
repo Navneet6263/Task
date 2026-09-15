@@ -1,9 +1,10 @@
 import React from 'react';
 
 const ReferenceSection = ({ taskForm, updateTaskFormField, handleReferenceImageChange }) => (
-  <section className="rounded-2xl border border-[#dbe7ff] bg-white shadow-[0_8px_24px_rgba(148,163,184,0.10)] px-5 py-5 flex flex-col gap-4">
+  <section className="rounded-2xl border border-emerald-100 border-t-[3px] border-t-emerald-500 bg-white shadow-[0_10px_26px_rgba(16,185,129,0.07)] px-5 py-5 flex flex-col gap-4">
     <div>
-      <h4 className="text-[15px] font-bold text-gray-900 tracking-tight">Reference & Attachments</h4>
+      <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-indigo-600">04 · Reference</p>
+      <h4 className="mt-1 text-[16px] font-extrabold text-gray-900 tracking-tight">Reference & Attachments</h4>
       <p className="mt-0.5 text-xs text-gray-500">Add a screenshot or mockup so the assignee understands quickly.</p>
     </div>
 

@@ -1,4 +1,6 @@
 import React from 'react';
+import MyDayPlan from './MyDayPlan';
+import ActiveFilterSummary from './TaskFilters/ActiveFilterSummary';
 import TaskBoardView from './TaskBoardView';
 import TaskListView from './TaskListView';
 import TaskTimelineView from './TaskTimelineView';
@@ -87,31 +89,40 @@ const TaskWorkspace = (props) => {
           </div>
         </div>
 
+        <div className="flex items-center gap-2">
+          <select aria-label="Task sort order" value={props.sort || 'newest'} onChange={e => props.setSort(e.target.value)} className="rounded-lg border bg-white p-2 text-xs">
+            <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title A–Z</option>
+          </select>
         <div className="flex p-1 rounded-xl bg-slate-100/80 border border-slate-200/50 shadow-inner">
           {['list', 'board', 'timeline'].map((type) => (
             <button key={type} type="button" className={`px-3 py-1.5 rounded-md text-[12px] font-bold capitalize transition-all ${view === type ? 'bg-white text-blue-700 shadow-[0_2px_12px_rgba(30,64,175,0.12)]' : 'text-slate-500 hover:bg-slate-200/50'}`} onClick={() => setView(type)}>
               {type}
             </button>
           ))}
-        </div>
+        </div></div>
       </header>
 
-      <TaskFilterBar filters={filters} setters={setters} members={members} clientNameOptions={clientNameOptions} onClear={clearFilters} />
-      <FocusViews value={focusMode} onChange={setFocusMode} />
-      <SavedViewsBar teamId={selectedTeam.id} userId={userId} view={view} setView={setView} focusMode={focusMode} setFocusMode={setFocusMode} filters={filters} setters={setters} />
+      <div className="relative z-40 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/75 px-3 py-2.5">
+        <FocusViews value={focusMode} onChange={setFocusMode} />
+        <span className="hidden h-5 w-px bg-slate-200 xl:block" />
+        <SavedViewsBar members={members} clientNameOptions={clientNameOptions} teamId={selectedTeam.id} userId={userId} view={view} setView={setView} focusMode={focusMode} setFocusMode={setFocusMode} filters={filters} setters={setters} />
+        <TaskFilterBar filters={filters} setters={setters} members={members} clientNameOptions={clientNameOptions} onClear={clearFilters} />
+      </div>
 
+      {focusMode === 'MY_DAY' && <MyDayPlan key={selectedTeam.id} teamId={selectedTeam.id} tasks={filtered} onOpen={setSelectedTask} />}
+      <ActiveFilterSummary filters={filters} setters={setters} members={members} onClear={clearFilters} />
       <div className="relative z-10 flex-1 flex flex-col">
         {view === 'list' && (
-          <TaskListView paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
+          <TaskListView members={members} onUpdated={props.onUpdated} paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
         )}
         {view === 'board' && (
-          <TaskBoardView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} />
+          <TaskBoardView summary={props.summary} loadMore={props.loadBoardColumn} boardBusy={props.boardBusy} filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} />
         )}
         {view === 'timeline' && (
           <TaskTimelineView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} />
         )}
 
-        {totalPages > 1 && (
+        {view !== 'board' && totalPages > 1 && (
           <footer className="flex gap-1.5 justify-center mt-4 mb-1">
             <button type="button" className="px-3 h-[34px] rounded-lg border border-slate-200 bg-white text-slate-600 text-[11px] font-bold disabled:opacity-40" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Previous</button>
             {visiblePages(page, totalPages).map((value) => (

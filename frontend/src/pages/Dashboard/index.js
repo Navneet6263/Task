@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showMgrModal, setShowMgrModal] = useState(false);
   const [orgUsers, setOrgUsers] = useState([]);
+  const [showInsights, setShowInsights] = useState(false);
   const {
     teamList, selectedTeam, selectTeam, members, taskList, view, setView,
     page, setPage, totalPages, totalTasks, loading, loadError,
@@ -46,11 +47,12 @@ const Dashboard = () => {
       `}</style>
 
       <DashboardHero user={user} today={today} teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam} onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal} />
+      <div className="flex justify-between items-center text-sm text-slate-500"><span>Team totals · filters below only change your task results</span><button type="button" onClick={() => setShowInsights(!showInsights)} className="rounded-lg border bg-white px-3 py-2">{showInsights ? 'Hide insights' : 'Show insights'}</button></div>
       <MetricCards stats={stats} teamList={teamList} />
 
       {loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" role="alert">
-          {loadError}
+          {loadError} <button type="button" onClick={refreshWorkspace} className="ml-3 underline">Retry</button>
         </div>
       )}
 
@@ -62,11 +64,11 @@ const Dashboard = () => {
       )}
 
       {selectedTeam && (
-        <section className="dashboard-workspace-grid grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3.5 items-start">
+        <section className={`dashboard-workspace-grid grid ${showInsights ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
           <div className="flex flex-col gap-3.5 min-w-0">
             {loading && <span className="text-xs font-semibold text-blue-600">Refreshing tasks...</span>}
             <TaskWorkspace
-              view={view} setView={setView} selectedTeam={selectedTeam}
+              sort={data.sort} setSort={data.setSort} onUpdated={refreshWorkspace} view={view} setView={setView} selectedTeam={selectedTeam}
               filtered={taskList} paginated={taskList} members={members}
               filterPriority={filterPriority} setFilterPriority={setFilterPriority}
               filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
@@ -84,15 +86,15 @@ const Dashboard = () => {
               handleApproveDelete={logic.handleApproveDelete} handleRejectDelete={logic.handleRejectDelete}
               handlePickBug={logic.handlePickBug} handleResolveBug={logic.handleResolveBug}
               onBulkDelete={handleBulkDelete} page={page} setPage={setPage}
-              totalPages={totalPages} totalTasks={totalTasks}
+              totalPages={totalPages} totalTasks={totalTasks} summary={data.summary} loadBoardColumn={data.loadBoardColumn} boardBusy={data.boardBusy}
             />
           </div>
 
-          <aside className="dashboard-insights flex flex-col gap-3.5 sticky top-[78px] min-w-0">
+          {showInsights && <aside className="dashboard-insights flex flex-col gap-3.5 sticky top-[78px] min-w-0">
             <PriorityBreakdown priorityStats={priorityStats} stats={stats} />
             <TeamSnapshot memberSummary={memberSummary} members={members} maxLoad={maxLoad} />
             <Reminders reminders={reminders} />
-          </aside>
+          </aside>}
         </section>
       )}
 
@@ -104,6 +106,7 @@ const Dashboard = () => {
           handlePanelUpdate={logic.handlePanelUpdate} members={members}
           availableTaskOptions={logic.availableTaskOptions}
           selectedTaskCategories={logic.selectedTaskCategories}
+          onSaved={refreshWorkspace}
         />
       )}
 

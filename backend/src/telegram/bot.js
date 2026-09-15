@@ -82,7 +82,7 @@ const handleStart = async (chatId) => {
     return bot.sendMessage(chatId, `Welcome back, ${session.name}! 👋`, getMenu(session.role));
   }
   chatState[chatId] = { step: 'awaiting_employee_id' };
-  bot.sendMessage(chatId, '👋 Welcome to Task Manager Bot!\n\nPlease enter your *Employee ID* to login:', {
+  bot.sendMessage(chatId, '👋 Welcome to GreenTask Bot!\n\nPlease enter your *Employee ID* to login:', {
     parse_mode: 'Markdown',
     reply_markup: { remove_keyboard: true },
   });

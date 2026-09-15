@@ -1,6 +1,7 @@
 node_modules/
 .env
 *.md
+!TEST_FLOW.md
 build/
 .DS_Store
 *.log

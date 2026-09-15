@@ -1,0 +1,25 @@
+/* Keep dashboard colours local: they must not depend on visiting Audit Logs. */
+.dashboard-metric-card {
+  background: linear-gradient(180deg, var(--metric-tint), rgba(255, 255, 255, 0.96));
+  border-color: var(--metric-border);
+}
+
+.dashboard-metric-blue {
+  --metric-tint: #dbeafe;
+  --metric-border: #bfdbfe;
+}
+
+.dashboard-metric-amber {
+  --metric-tint: #fef3c7;
+  --metric-border: #fde68a;
+}
+
+.dashboard-metric-green {
+  --metric-tint: #dcfce7;
+  --metric-border: #bbf7d0;
+}
+
+.dashboard-metric-coral {
+  --metric-tint: #fee2e2;
+  --metric-border: #fecaca;
+}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { SA_BASE_URL } from '../services/runtimeConfig';
+import BrandLogo from '../components/BrandLogo';
 import './SuperAdminLogin.css';
 
 const sa = axios.create({ baseURL: SA_BASE_URL });
@@ -62,9 +63,9 @@ const SuperAdminLogin = () => {
 
       <div className="sa-auth__card">
         <div className="sa-auth__brand">
-          <span className="sa-auth__badge">SA</span>
+          <BrandLogo iconOnly />
           <div>
-            <p className="sa-auth__kicker">CONTROL CENTER</p>
+            <p className="sa-auth__kicker">GREENTASK CONTROL CENTER</p>
             <h1>Super Admin Login</h1>
           </div>
         </div>
@@ -81,7 +82,7 @@ const SuperAdminLogin = () => {
             <input
               className="sa-auth__input"
               type="email"
-              placeholder="superadmin@navtask.com"
+              placeholder="Your admin email address"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required

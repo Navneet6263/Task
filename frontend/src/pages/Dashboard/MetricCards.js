@@ -1,4 +1,5 @@
 import React from 'react';
+import './MetricCards.css';
 
 const MetricCards = ({ stats, teamList }) => {
   const metrics = [
@@ -16,11 +17,11 @@ const MetricCards = ({ stats, teamList }) => {
   };
 
   return (
-    <section className="grid grid-cols-4 gap-3">
+    <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {metrics.map((card, index) => (
         <article
           key={card.label}
-          className={`rounded-2xl px-3.5 py-3.5 border border-[#e8edf8] bg-[rgba(255,255,255,0.9)] shadow-[0_10px_24px_rgba(15,23,42,0.08)] flex justify-between gap-3 items-center opacity-0 translate-y-2.5 animate-[dashRise_0.45s_ease_forwards] tone-${card.tone}`}
+          className={`dashboard-metric-card rounded-2xl px-3.5 py-3.5 border shadow-[0_10px_24px_rgba(15,23,42,0.08)] flex justify-between gap-3 items-center opacity-0 translate-y-2.5 animate-[dashRise_0.45s_ease_forwards] dashboard-metric-${card.tone}`}
           style={{ animationDelay: `${index * 80}ms` }}
         >
           <div>
@@ -28,7 +29,7 @@ const MetricCards = ({ stats, teamList }) => {
             <h3 className="text-[clamp(20px,2.2vw,30px)] my-1 font-display font-bold">{card.value}</h3>
             <span className="text-[11px] text-[#64748b]">{card.note}</span>
           </div>
-          <div 
+          {index > 0 && <div
             className="w-[74px] h-[74px] rounded-full relative grid place-items-center dash-ring"
             style={{
               background: `conic-gradient(${getRingColor(card.tone)} ${card.progress}%, #e8ecf7 0)`,
@@ -38,7 +39,7 @@ const MetricCards = ({ stats, teamList }) => {
           >
             <div className="absolute inset-[7px] rounded-full bg-white" />
             <strong className="relative z-10 text-xs text-[#334155] font-bold">{card.progress}%</strong>
-          </div>
+          </div>}
         </article>
       ))}
     </section>

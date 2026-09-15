@@ -11,7 +11,7 @@ const dateLabel = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusChange, handleSnooze, handleApproveDelete, handleRejectDelete }) => {
+const TaskBoardView = ({ summary, loadMore, boardBusy, filtered, setSelectedTask, setSheetTab, handleStatusChange, handleSnooze, handleApproveDelete, handleRejectDelete }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const [pendingStatuses, setPendingStatuses] = useState({});
   const [draggingId, setDraggingId] = useState(null);
@@ -39,9 +39,10 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
         <article key={status} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const task = filtered.find((item) => String(item.id) === String(draggingId)); setDraggingId(null); moveTask(task, status); }} className={`rounded-xl border bg-[#f7f9ff] px-2.5 py-2.5 min-h-[200px] transition-colors ${draggingId ? 'border-indigo-300' : 'border-gray-200'}`}>
           <header className="flex justify-between items-center mb-2">
             <h4 className="text-sm font-extrabold">{STATUS_LABEL[status]}</h4>
-            <span className="text-[11px] text-gray-500">{columnItems.length}</span>
+            <span className="text-xs text-gray-500">{summary ? Number(summary[{ TODO: 'todo', IN_PROGRESS: 'in_progress', PENDING: 'pending', DONE: 'done' }[status]] || 0) : columnItems.length}</span>
           </header>
           
+          {summary && <p className="mb-2 text-xs text-slate-500">{columnItems.length} loaded</p>}
           {columnItems.map((task) => (
             <div
               key={task.id}
@@ -93,6 +94,7 @@ const TaskBoardView = ({ filtered, setSelectedTask, setSheetTab, handleStatusCha
             </div>
           ))}
           
+          {loadMore && columnItems.length < Number(summary?.[{ TODO: 'todo', IN_PROGRESS: 'in_progress', PENDING: 'pending', DONE: 'done' }[status]] || 0) && <button type="button" disabled={Boolean(boardBusy)} onClick={() => loadMore(status)} className="w-full rounded-lg border p-2 text-sm text-blue-700">{boardBusy === status ? 'Loading...' : 'Load more'}</button>}
           {columnItems.length === 0 && <div className="text-xs text-center text-gray-500 py-5">No tasks</div>}
         </article>
       );

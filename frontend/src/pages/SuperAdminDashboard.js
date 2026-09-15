@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { SA_BASE_URL } from '../services/runtimeConfig';
+import BrandLogo from '../components/BrandLogo';
 import './SuperAdminDashboard.css';
 
 const sa = () =>
@@ -173,11 +174,7 @@ const SuperAdminDashboard = () => {
       <aside className="sa-sidebar">
         <div className="sa-sidebar-top">
           <div className="sa-brand">
-            <div className="sa-brand-mark">SA</div>
-            <div>
-              <p>Control Console</p>
-              <h2>Super Admin</h2>
-            </div>
+            <BrandLogo inverse subtitle="Super Admin · Control Console" />
           </div>
 
           <div className="sa-profile">

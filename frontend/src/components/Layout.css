@@ -1,5 +1,6 @@
 .shell-root {
-  display: flex;
+  --shell-header-height: 88px;
+  display: block;
   min-height: 100vh;
   color: var(--ink-900);
   position: relative;
@@ -7,7 +8,7 @@
 
 .shell-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--shell-header-height) 0 0;
   background: rgba(15, 23, 42, 0.48);
   border: none;
   opacity: 0;
@@ -19,7 +20,7 @@
 .shell-sidebar {
   width: 260px;
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: var(--shell-header-height) auto 0 0;
   z-index: 35;
   display: flex;
   flex-direction: column;
@@ -38,7 +39,7 @@
 
 .shell-sidebar-collapse-btn {
   position: fixed;
-  top: 50%;
+  top: calc(50% + var(--shell-header-height) / 2);
   left: 240px;
   z-index: 40;
   width: 40px;
@@ -97,12 +98,26 @@
 .shell-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 22px;
-  border: 1px solid var(--line-soft);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: var(--shadow-soft);
+  gap: 8px;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.shell-header-brand {
+  display: flex;
+  flex: 0 0 238px;
+}
+
+.shell-header-brand .greentask-brand__mark {
+  width: 56px;
+  height: 56px;
+}
+
+.shell-header-brand .greentask-brand__name {
+  font-size: 28px;
 }
 
 .shell-brand-mark {
@@ -341,6 +356,7 @@
 
 .shell-main {
   margin-left: 260px;
+  min-height: calc(100dvh - var(--shell-header-height));
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -365,15 +381,48 @@
 .shell-header {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 45;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 14px 22px;
-  background: rgba(248, 250, 255, 0.76);
-  border-bottom: 1px solid rgba(216, 224, 242, 0.75);
-  backdrop-filter: blur(16px);
+  min-height: 88px;
+  background: #eef5ff;
+  border-bottom: 1px solid rgba(173, 199, 240, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 4px 18px rgba(45, 91, 160, 0.04);
+}
+
+@media (min-width: 1121px) {
+  .shell-root:not(.shell-sidebar-collapsed) .shell-header::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 259px;
+    width: 1px;
+    background: rgba(148, 177, 220, 0.38);
+    pointer-events: none;
+  }
+}
+
+@supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+  .shell-header {
+    background: linear-gradient(110deg, rgba(235, 244, 255, 0.88),
+      rgba(249, 252, 255, 0.82) 55%, rgba(231, 242, 255, 0.86));
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+    backdrop-filter: blur(16px) saturate(120%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .shell-header {
+    background: #eef5ff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 .shell-header-left {
@@ -382,6 +431,11 @@
   gap: 12px;
   min-width: 0;
   flex: 1;
+}
+
+.shell-header .shell-search {
+  min-width: 160px;
+  max-width: 420px;
 }
 
 .shell-menu-btn {
@@ -434,6 +488,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
 }
 
 .shell-date-chip {
@@ -731,6 +786,22 @@
 }
 
 @media (max-width: 1120px) {
+  .shell-header-brand {
+    flex-basis: auto;
+  }
+
+  .shell-header {
+    flex-wrap: wrap;
+  }
+
+  .shell-header-left {
+    flex-basis: 100%;
+  }
+
+  .shell-header-right {
+    margin-left: auto;
+  }
+
   .shell-sidebar-collapse-btn {
     display: none;
   }
@@ -799,9 +870,27 @@
 
   .shell-header-left {
     gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .shell-header .shell-search {
+    flex-basis: 100%;
+    min-width: 0;
+    max-width: none;
+    order: 1;
+  }
+
+  .shell-header-brand .greentask-brand__mark {
+    width: 48px;
+    height: 48px;
+  }
+
+  .shell-header-brand .greentask-brand__name {
+    font-size: 25px;
   }
 
   .shell-search {
+    min-width: 0;
     height: 40px;
     border-radius: 12px;
   }

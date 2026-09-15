@@ -1,21 +1,24 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
+import AppErrorBoundary from './components/AppErrorBoundary';
+import './workspace.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard/index';
-import MyTasks from './pages/MyTasks';
-import TeamManagement from './pages/TeamManagement';
-import AuditLogs from './pages/AuditLogs';
-import PmsHub from './pages/PmsHub';
-import Settings from './pages/Settings';
-import AdminPanel from './pages/AdminPanel';
-import Reports from './pages/Reports';
-import RegisterCompany from './pages/RegisterCompany';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import ForgotPassword from './pages/ForgotPassword';
-import LiveReviewRoom from './pages/LiveReviewRoom';
-import TeamWorkspaceRoom from './pages/TeamWorkspaceRoom';
 import Layout from './components/Layout';
-import Communications from './pages/Communications';
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard/index'));
+const MyTasks = lazy(() => import('./pages/MyTasks'));
+const TeamManagement = lazy(() => import('./pages/TeamManagement'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const PmsHub = lazy(() => import('./pages/PmsHub'));
+const Settings = lazy(() => import('./pages/Settings'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const Reports = lazy(() => import('./pages/Reports'));
+const RegisterCompany = lazy(() => import('./pages/RegisterCompany'));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const LiveReviewRoom = lazy(() => import('./pages/LiveReviewRoom'));
+const TeamWorkspaceRoom = lazy(() => import('./pages/TeamWorkspaceRoom'));
+const Communications = lazy(() => import('./pages/Communications'));
+const UpdatesPage = lazy(() => import('./pages/Updates'));
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token') || localStorage.getItem('company_token');
@@ -29,13 +32,14 @@ const SuperAdminRoute = ({ children }) => {
 
 function App() {
   return (
-    <Router>
-      <Routes>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <AppErrorBoundary><Suspense fallback={<div role="status" className="p-6 text-slate-500">Loading screen...</div>}><Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/register-company" element={<RegisterCompany />} />
         <Route path="/live-review" element={<PrivateRoute><LiveReviewRoom /></PrivateRoute>} />
         <Route path="/team-workspace" element={<PrivateRoute><TeamWorkspaceRoom /></PrivateRoute>} />
+        <Route path="/updates" element={<PrivateRoute><UpdatesPage /></PrivateRoute>} />
         <Route path="/sa-login" element={<Navigate to="/login?mode=system-admin" replace />} />
         <Route path="/sa-dashboard" element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
@@ -50,7 +54,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="communications" element={<Communications />} />
         </Route>
-      </Routes>
+      </Routes></Suspense></AppErrorBoundary>
     </Router>
   );
 }

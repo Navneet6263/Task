@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import axios from 'axios';
-import { API_BASE_URL, WS_BASE_URL } from '../services/runtimeConfig';
+import sharedApi, { teams as teamsApi } from '../services/api';
+import { WS_BASE_URL } from '../services/runtimeConfig';
 import MessageTaskModal from './chat/MessageTaskModal';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
 
-const BASE = API_BASE_URL;
 const token = () => localStorage.getItem('token') || localStorage.getItem('company_token');
-const api = () => axios.create({ baseURL: BASE, headers: { Authorization: `Bearer ${token()}` } });
+const api = () => sharedApi;
 const me = () => {
   const stored = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   try {
@@ -61,6 +60,7 @@ const TeamChat = ({
   const [threadTitle, setThreadTitle] = useState('');
   const [showThreadForm, setShowThreadForm] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [hasOlder, setHasOlder] = useState(false), [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [taskSourceMessage, setTaskSourceMessage] = useState(null);
@@ -188,7 +188,7 @@ const TeamChat = ({
     }
 
     try {
-      const ws = new WebSocket(`${WS_BASE_URL}?token=${authToken}`);
+      const ws = new WebSocket(`${WS_BASE_URL}?token=${authToken}&orgId=${localStorage.getItem('active_org_id') || ''}`);
       internalWsRef.current = ws;
 
       ws.onopen = () => {
@@ -223,7 +223,7 @@ const TeamChat = ({
 
   const fetchTeams = async () => {
     try {
-      const res = await api().get('/teams');
+      const res = await teamsApi.getAll();
       const list = Array.isArray(res.data) ? res.data : [];
       setTeams(list);
       fetchTeamLiveStates(list);
@@ -294,12 +294,33 @@ const TeamChat = ({
     } catch {}
   };
 
+  const loadOlderMessages = async () => {
+    const teamId = activeTeamRef.current, threadId = activeThreadRef.current;
+    if (loadingOlder || !teamId || !threadId) return;
+    const ids = messages.map(item => Number(item.id)).filter(Number.isSafeInteger);
+    if (!ids.length) return;
+    setLoadingOlder(true);
+    const viewport = messagesViewportRef.current;
+    const height = viewport?.scrollHeight || 0;
+    try {
+      const response = await api().get(`/chat/${teamId}`, { params: { thread_id: threadId, before: Math.min(...ids) } });
+      if (teamId !== activeTeamRef.current || threadId !== activeThreadRef.current) return;
+      shouldStickToBottomRef.current = false;
+      setMessages(prev => dedupeMessages([...(response.data.messages || []), ...prev]));
+      setHasOlder(response.data.messages?.length >= 150);
+      requestAnimationFrame(() => { if (viewport) viewport.scrollTop += viewport.scrollHeight - height; });
+    } catch { setStatus('Could not load older messages. Please retry.'); }
+    finally { setLoadingOlder(false); }
+  };
+
   const fetchMessages = async (teamId, threadId) => {
     try {
       const res = await api().get(`/chat/${teamId}`, { params: { thread_id: threadId } });
+      if (Number(activeTeamRef.current) !== Number(teamId) || Number(activeThreadRef.current) !== Number(threadId)) return;
       setMessages(dedupeMessages(Array.isArray(res.data?.messages) ? res.data.messages : []));
-      await markThreadRead(teamId, threadId);
-    } catch { setMessages([]); }
+      setHasOlder(res.data?.messages?.length >= 150);
+      if (openRef.current && !document.hidden) await markThreadRead(teamId, threadId);
+    } catch { setStatus('Could not load messages. Reopen this conversation to retry.'); }
   };
 
   const fetchLive = async (teamId) => {
@@ -720,7 +741,7 @@ const TeamChat = ({
     fetchTeams();
     fetchUnread();
     if (!wsRef) connectInternalSocket();
-    const interval = setInterval(fetchUnread, 15000);
+    const interval = !wsRef ? setInterval(() => { if (!document.hidden) fetchUnread(); }, 60000) : null;
     return () => {
       clearInterval(interval);
       if (!wsRef) {
@@ -730,7 +751,7 @@ const TeamChat = ({
   }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { joinRooms(); const interval = setInterval(() => joinRooms(), 8000); return () => clearInterval(interval); }, [teams, effectiveSocketVersion]);
+  useEffect(() => { joinRooms(); }, [teams, effectiveSocketVersion]);
   useEffect(() => {
     activeTeamRef.current = activeTeam?.id || null;
     if (activeTeam) {
@@ -740,7 +761,7 @@ const TeamChat = ({
       setHistoryLoaded(false);
     }
   }, [activeTeam]);
-  useEffect(() => { activeThreadRef.current = activeThread?.id || null; if (activeTeam && activeThread) fetchMessages(activeTeam.id, activeThread.id); }, [activeTeam, activeThread]);
+  useEffect(() => { activeThreadRef.current = activeThread?.id || null; if (activeTeam && activeThread) fetchMessages(activeTeam.id, activeThread.id); }, [activeTeam?.id, activeThread?.id]);
   useEffect(() => { liveSessionRef.current = liveSession; }, [liveSession]);
   useEffect(() => { openRef.current = open; }, [open]);
   useEffect(() => { teamsRef.current = teams; }, [teams]);
@@ -812,7 +833,7 @@ const TeamChat = ({
           updateThreadPreview(item);
           if (Number(item.team_id) === Number(activeTeamRef.current) && Number(item.thread_id) === Number(activeThreadRef.current)) {
             setMessages((prev) => upsertMessage(prev, { ...item, optimistic: false, pending: false, failed: false }));
-            api().post(`/chat/${item.team_id}/read`, { thread_id: item.thread_id }).catch(() => {});
+            if (openRef.current && !document.hidden) api().post(`/chat/${item.team_id}/read`, { thread_id: item.thread_id }).catch(() => {});
           } else {
             setUnread((prev) => ({ ...prev, [item.team_id]: Number(prev[item.team_id] || 0) + 1 }));
           }
@@ -1105,6 +1126,7 @@ const TeamChat = ({
                   </div>
 
                   <div className="tchat-messages" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
+                    {hasOlder && <button type="button" className="tchat-link-button" disabled={loadingOlder} onClick={loadOlderMessages}>{loadingOlder ? 'Loading...' : 'Load older messages'}</button>}
                     {messages.length === 0 && <p className="tchat-empty">No discussion yet.</p>}
                     {messages.map((msg) => (
                       <div key={msg.id} className={`tchat-msg ${Number(msg.user_id) === Number(user.id) ? 'is-me' : ''}`}>

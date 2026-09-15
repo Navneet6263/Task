@@ -205,10 +205,17 @@ const getPool = async () => {
 };
 
 const run = async (rawQuery, params = []) => {
+  const started = process.hrtime.bigint();
   const pool = await getPool();
+  const poolMs = Number(process.hrtime.bigint() - started) / 1e6;
   const request = buildRequest(pool, Array.isArray(params) ? params : []);
   const { query } = normalizeQuery(rawQuery);
   const result = await request.query(query);
+  const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
+  if (durationMs >= Number(process.env.SLOW_SQL_MS || 300)) {
+    const fingerprint = require('node:crypto').createHash('sha256').update(String(rawQuery)).digest('hex').slice(0, 12);
+    console.warn(JSON.stringify({ event: 'slow_sql', fingerprint, durationMs: Math.round(durationMs), poolConnectMs: Math.round(poolMs) }));
+  }
   return toMysqlStyleResult(rawQuery, result);
 };
 

@@ -284,7 +284,7 @@ const createOrGetDirectThread = async (teamId, userId, targetUserId) => {
   return getThreadById(teamId, result.insertId, userId);
 };
 
-const getMessages = async (teamId, thread) => {
+const getMessages = async (teamId, thread, before = 0) => {
   const whereClause = thread?.is_default
     ? 'AND (m.thread_id = ? OR m.thread_id IS NULL)'
     : 'AND m.thread_id = ?';
@@ -309,12 +309,13 @@ const getMessages = async (teamId, thread) => {
       LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
       WHERE m.team_id = ?
       ${whereClause}
-      ORDER BY m.created_at ASC
+      ${before > 0 ? 'AND m.id < ?' : ''}
+      ORDER BY m.id DESC
       LIMIT ${TEAM_MESSAGE_LIMIT}`,
-    [teamId, thread.id]
+    [teamId, thread.id, ...(before > 0 ? [before] : [])]
   );
 
-  return messages;
+  return messages.reverse();
 };
 
 const createSessionEvent = async (sessionId, actorId, eventType, details = null) => {
@@ -795,7 +796,9 @@ router.get('/:teamId', authenticate, async (req, res) => {
     const thread = await resolveThread(teamId, Number(req.query.thread_id || 0), req.userId);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
 
-    const messages = await getMessages(teamId, thread);
+    const before = Number(req.query.before || 0);
+    if (!Number.isSafeInteger(before) || before < 0) return res.status(422).json({ error: 'Invalid history cursor' });
+    const messages = await getMessages(teamId, thread, before);
     res.json({ thread, messages });
   } catch (error) {
     res.status(400).json({ error: error.message });
