@@ -142,4 +142,29 @@ export const communications = {
   send: (data) => api.post('/communications/send', data),
 };
 
+// Add-on module; the server refuses every call unless the active organization has it enabled.
+export const timesheet = {
+  status: () => cachedGet(api, '/timesheet/status', 300000),
+  config: () => api.get('/timesheet/config'),
+  entries: (params) => api.get('/timesheet/entries', { params }),
+  entry: (id) => api.get(`/timesheet/entries/${id}`),
+  create: (data) => api.post('/timesheet/entries', data),
+  update: (id, data) => api.put(`/timesheet/entries/${id}`, data),
+  submit: (id) => api.post(`/timesheet/entries/${id}/submit`),
+  remove: (id) => api.delete(`/timesheet/entries/${id}`),
+  addLog: (id, data) => api.post(`/timesheet/entries/${id}/logs`, data),
+  removeLog: (id, logId) => api.delete(`/timesheet/entries/${id}/logs/${logId}`),
+  requestUnlock: (id, reason) => api.post(`/timesheet/entries/${id}/unlock-requests`, { reason }),
+  unlockRequests: (status = 'PENDING') => api.get('/timesheet/unlock-requests', { params: { status } }),
+  decideUnlock: (id, decision) => api.patch(`/timesheet/unlock-requests/${id}`, { decision }),
+  clients: () => api.get('/timesheet/clients'),
+  createClient: (name) => api.post('/timesheet/clients', { name }),
+  updateClient: (id, data) => api.put(`/timesheet/clients/${id}`, data),
+  options: () => api.get('/timesheet/options'),
+  addOption: (data) => api.post('/timesheet/options', data),
+  setOptionActive: (id, isActive) => api.patch(`/timesheet/options/${id}`, { is_active: isActive }),
+  saveSettings: (data) => api.put('/timesheet/settings', data),
+  report: (params) => api.get('/timesheet/reports', { params }),
+};
+
 export default api;

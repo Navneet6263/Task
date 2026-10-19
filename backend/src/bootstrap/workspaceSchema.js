@@ -36,6 +36,7 @@ const ensureWorkspaceSchema = async () => {
     GROUP BY t.id, t.assigned_to, t.assignee_last_viewed_at;`);
   await ensureRecurringSchema();
   await require('./updatesSchema').ensureUpdatesSchema();
+  await require('./timesheetSchema').ensureTimesheetSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };

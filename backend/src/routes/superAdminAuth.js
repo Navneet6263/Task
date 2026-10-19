@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
+const { KNOWN_MODULES, getModulesForOrgs, setModuleEnabled } = require('../services/orgModules');
 const router = express.Router();
 
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'superadmin@navtask.com';
@@ -103,8 +104,28 @@ router.get('/company-admins/:id', verifySA, async (req, res) => {
         (SELECT COUNT(*) FROM users WHERE org_id=o.id AND role='person') as staff_count
        FROM organizations o WHERE o.company_admin_id = ?`, [req.params.id]
     );
+    // Separate query so the existing detail view still loads if the modules table is missing.
+    let modules = {};
+    try { modules = await getModulesForOrgs(orgs.map((org) => org.id)); } catch (error) { console.error('[sa] modules lookup failed', error.message); }
     delete ca.password;
-    res.json({ ...ca, organizations: orgs });
+    res.json({ ...ca, organizations: orgs.map((org) => ({ ...org, modules: modules[org.id] || {} })) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Turn a paid add-on module on or off for one organization.
+router.patch('/organizations/:id/modules/:moduleKey', verifySA, async (req, res) => {
+  try {
+    const orgId = Number(req.params.id);
+    const { moduleKey } = req.params;
+    if (!Number.isSafeInteger(orgId) || orgId < 1) return res.status(422).json({ error: 'Invalid organization' });
+    if (!KNOWN_MODULES.includes(moduleKey)) return res.status(422).json({ error: 'Unknown module' });
+    if (typeof req.body.enabled !== 'boolean') return res.status(422).json({ error: 'enabled must be true or false' });
+    const [[org]] = await db.execute('SELECT id, name FROM organizations WHERE id = ?', [orgId]);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+    await setModuleEnabled(orgId, moduleKey, req.body.enabled, req.saEmail);
+    await saLog(req.saEmail, req.saName, req.body.enabled ? 'ENABLE_MODULE' : 'DISABLE_MODULE', 'organization', orgId,
+      `${req.body.enabled ? 'Enabled' : 'Disabled'} ${moduleKey} for ${org.name}`, req.ip);
+    res.json({ org_id: orgId, module: moduleKey, enabled: req.body.enabled });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

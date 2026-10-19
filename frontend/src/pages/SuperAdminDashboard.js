@@ -120,6 +120,15 @@ const SuperAdminDashboard = () => {
     } catch (error) {}
   };
 
+  const handleToggleModule = async (org, moduleKey, enabled) => {
+    try {
+      await sa().patch(`/organizations/${org.id}/modules/${moduleKey}`, { enabled });
+      await Promise.all([fetchDetail(detail.id), fetchLogs(logActor)]);
+    } catch (error) {
+      alert(error.response?.data?.error || `Could not change the ${moduleKey} module for ${org.name}`);
+    }
+  };
+
   const handleAddSubUser = async (event) => {
     event.preventDefault();
     try {
@@ -443,20 +452,36 @@ const SuperAdminDashboard = () => {
                         <th>Code</th>
                         <th>Managers</th>
                         <th>Staff</th>
+                        <th>Timesheet module</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(detail.organizations || []).map((org) => (
-                        <tr key={org.id}>
-                          <td>{org.name}</td>
-                          <td>{org.company_code || '-'}</td>
-                          <td>{org.manager_count || 0}</td>
-                          <td>{org.staff_count || 0}</td>
-                        </tr>
-                      ))}
+                      {(detail.organizations || []).map((org) => {
+                        const enabled = Boolean(org.modules?.timesheet);
+                        return (
+                          <tr key={org.id}>
+                            <td>{org.name}</td>
+                            <td>{org.company_code || '-'}</td>
+                            <td>{org.manager_count || 0}</td>
+                            <td>{org.staff_count || 0}</td>
+                            <td>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={enabled}
+                                aria-label={`Timesheet module for ${org.name}`}
+                                className={enabled ? 'sa-approve-btn' : 'sa-reject-btn'}
+                                onClick={() => handleToggleModule(org, 'timesheet', !enabled)}
+                              >
+                                {enabled ? 'On' : 'Off'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {(detail.organizations || []).length === 0 && (
                         <tr>
-                          <td colSpan={4} className="sa-empty">
+                          <td colSpan={5} className="sa-empty">
                             No organizations available.
                           </td>
                         </tr>

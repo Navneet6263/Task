@@ -103,6 +103,13 @@ const AdminIcon = () => (
   </svg>
 );
 
+const ClockIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="9" />
+    <polyline points="12 7 12 12 15.5 14" />
+  </svg>
+);
+
 const MenuIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <line x1="3" y1="6" x2="21" y2="6" />
@@ -132,4 +139,4 @@ const ChevronIcon = () => (
 );
 
 
-export { formatNotificationTime, parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };
+export { formatNotificationTime, parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };

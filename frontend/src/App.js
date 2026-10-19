@@ -19,6 +19,7 @@ const LiveReviewRoom = lazy(() => import('./pages/LiveReviewRoom'));
 const TeamWorkspaceRoom = lazy(() => import('./pages/TeamWorkspaceRoom'));
 const Communications = lazy(() => import('./pages/Communications'));
 const UpdatesPage = lazy(() => import('./pages/Updates'));
+const Timesheet = lazy(() => import('./pages/Timesheet'));
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token') || localStorage.getItem('company_token');
@@ -53,6 +54,7 @@ function App() {
           <Route path="admin" element={<AdminPanel />} />
           <Route path="settings" element={<Settings />} />
           <Route path="communications" element={<Communications />} />
+          <Route path="timesheet" element={<Timesheet />} />
         </Route>
       </Routes></Suspense></AppErrorBoundary>
     </Router>

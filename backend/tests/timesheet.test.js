@@ -1,0 +1,166 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const db = require('../src/config/database');
+const router = require('../src/routes/timesheet');
+const rules = require('../src/services/timesheetRules');
+
+const validEntry = {
+  client_id: 5, job_type: 'Payroll', work_type: 'Review', date_worked: '2026-10-10', agent_id: 99, period_type: 'Monthly',
+  period_ended: '2026-09-30', registration_status: 'Registered', count_type: 'Payslips', count_number: 18, hours: 2.5,
+};
+const optionRows = [
+  ['job_type', 'Payroll'], ['work_type', 'Review'], ['period_type', 'Monthly'], ['registration_status', 'Registered'], ['count_type', 'Payslips'],
+].map(([option_group, label], index) => ({ id: index + 1, option_group, label, sort_order: 1, is_active: true }));
+
+async function client(t, identity = { id: 10, role: 'person', org_id: 1 }) {
+  process.env.JWT_SECRET = 'timesheet-test-only';
+  const app = express(); app.use(express.json()); app.use(router);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const token = jwt.sign(identity, process.env.JWT_SECRET);
+  return (path, method = 'GET', body) => fetch(`http://127.0.0.1:${server.address().port}${path}`, {
+    method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+function mockDb(t, handle, { role = 'person', enabled = true } = {}) {
+  const calls = [];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role }]];
+    if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: enabled }]];
+    if (sql.startsWith('INSERT INTO timesheet_audit')) return [{}];
+    return handle(sql, params);
+  });
+  return calls;
+}
+
+/* Rules */
+test('entries lock the day after the edit window and reopen during an approved unlock', () => {
+  const entry = { status: 'SUBMITTED', submitted_on: '2026-10-10', unlocked_until: null };
+  assert.equal(rules.lockState(entry, 7, '2026-10-17').locked, false);
+  assert.equal(rules.lockState(entry, 7, '2026-10-18').locked, true);
+  assert.equal(rules.lockState({ ...entry, unlocked_until: '2026-10-20' }, 7, '2026-10-20').locked, false);
+  assert.equal(rules.lockState({ ...entry, unlocked_until: '2026-10-20' }, 7, '2026-10-21').locked, true);
+  assert.equal(rules.lockState({ status: 'DRAFT', submitted_on: null }, 7, '2030-01-01').locked, false);
+});
+
+test('only admins bypass the lock; employees edit only their own open entries', () => {
+  const entry = { created_by: 3, agent_id: 4, status: 'SUBMITTED' };
+  const open = { locked: false }, locked = { locked: true };
+  assert.equal(rules.canEditEntry('admin', 1, entry, locked), true);
+  assert.equal(rules.canEditEntry('manager', 2, entry, locked), false);
+  assert.equal(rules.canEditEntry('manager', 2, entry, open), true);
+  assert.equal(rules.canEditEntry('person', 4, entry, open), true);
+  assert.equal(rules.canEditEntry('person', 9, entry, open), false);
+  assert.equal(rules.canRequestUnlock('person', 3, entry, locked), true);
+  assert.equal(rules.canRequestUnlock('admin', 1, entry, locked), false);
+  assert.equal(rules.canViewEntry('person', 9, { ...entry, status: 'DRAFT' }), false);
+});
+
+test('submit requires every field and valid hours; drafts need only a client', () => {
+  assert.equal(rules.validateEntry(validEntry, 'submit', '2026-10-19').hours, 2.5);
+  assert.throws(() => rules.validateEntry({ ...validEntry, hours: 30 }, 'submit', '2026-10-19'), (e) => e.status === 422 && Boolean(e.fields.hours));
+  assert.throws(() => rules.validateEntry({ ...validEntry, date_worked: '2026-10-20' }, 'submit', '2026-10-19'), (e) => Boolean(e.fields.date_worked));
+  assert.throws(() => rules.validateEntry({ ...validEntry, count_number: 1.5 }, 'submit', '2026-10-19'), (e) => Boolean(e.fields.count_number));
+  assert.throws(() => rules.validateEntry({ client_id: 5 }, 'submit', '2026-10-19'), (e) => Object.keys(e.fields).length >= 9);
+  assert.equal(rules.validateEntry({ client_id: 5 }, 'draft', '2026-10-19').job_type, null);
+});
+
+test('report summary adds hours per person and per entry', () => {
+  const rows = [
+    { entry_id: 1, client_id: 5, client_name: 'A', user_id: 3, user_name: 'Rahul', hours: 3.5 },
+    { entry_id: 1, client_id: 5, client_name: 'A', user_id: 4, user_name: 'Priya', hours: 1.25 },
+    { entry_id: 2, client_id: 5, client_name: 'A', user_id: 3, user_name: 'Rahul', hours: 1 },
+  ];
+  const summary = rules.summarizeReport(rows);
+  assert.equal(summary.total_hours, 5.75);
+  assert.deepEqual(summary.by_person.map((p) => [p.name, p.hours]), [['Rahul', 4.5], ['Priya', 1.25]]);
+  assert.equal(summary.by_client[0].entries[0].hours, 4.75);
+});
+
+/* Routes: organization isolation and roles */
+test('organizations without the module are refused on every route', async (t) => {
+  const calls = mockDb(t, () => { throw Error('Unexpected query'); }, { enabled: false, role: 'admin' });
+  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  for (const path of ['/config', '/entries', '/clients', '/reports?from=2026-10-01&to=2026-10-31'])
+    assert.equal((await send(path)).status, 403);
+  assert.equal((await send('/entries', 'POST', validEntry)).status, 403);
+  assert.ok(calls.every((call) => /FROM users u|FROM org_modules/.test(call.sql)));
+});
+
+test('a user who is no longer a member of the organization is refused', async (t) => {
+  t.mock.method(db, 'execute', async () => [[]]);
+  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  assert.equal((await send('/entries')).status, 403);
+  const status = await (await send('/status')).json();
+  assert.deepEqual(status, { enabled: false, role: null });
+});
+
+test('employees cannot add clients, change setup or open reports', async (t) => {
+  mockDb(t, () => { throw Error('Unexpected query'); });
+  const send = await client(t);
+  assert.equal((await send('/clients', 'POST', { name: 'New client' })).status, 403);
+  assert.equal((await send('/settings', 'PUT', { lock_days: 30, unlock_days: 2 })).status, 403);
+  assert.equal((await send('/options', 'POST', { option_group: 'job_type', label: 'Audit' })).status, 403);
+  assert.equal((await send('/reports?from=2026-10-01&to=2026-10-31')).status, 403);
+  assert.equal((await send('/unlock-requests')).status, 403);
+});
+
+test('creating an entry uses the token organization and forces an employee to be their own agent', async (t) => {
+  let insert;
+  mockDb(t, async (sql, params) => {
+    if (sql.startsWith('SELECT id FROM timesheet_clients')) { assert.deepEqual(params, [5, 1]); return [[{ id: 5 }]]; }
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('SET XACT_ABORT ON')) { insert = params; return [{ insertId: 77, rows: [{ insertId: 77 }] }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const response = await send('/entries', 'POST', { ...validEntry, org_id: 999, created_by: 999 });
+  assert.equal(response.status, 201);
+  assert.equal(insert[0], 1, 'org from token');
+  assert.equal(insert[5], 10, 'agent forced to the employee');
+  assert.equal(insert[14], 10, 'created_by from token');
+});
+
+test('a person cannot log more than 24 hours on one day across entries', async (t) => {
+  mockDb(t, async (sql) => {
+    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 22 }]];
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const response = await send('/entries', 'POST', { ...validEntry, hours: 3 });
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).fields.hours, /24 hours/);
+});
+
+test('dropdown values outside the organization list are rejected', async (t) => {
+  mockDb(t, async (sql) => {
+    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const response = await send('/entries', 'POST', { ...validEntry, job_type: 'Made up' });
+  assert.equal(response.status, 422);
+  assert.ok((await response.json()).fields.job_type);
+});
+
+test('entries from another organization are not found', async (t) => {
+  mockDb(t, async (sql, params) => {
+    if (sql.includes('FROM timesheet_entries e') && sql.includes('WHERE e.id = ?')) { assert.deepEqual(params, [42, 1]); return [[]]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  }, { role: 'admin' });
+  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  assert.equal((await send('/entries/42')).status, 404);
+});

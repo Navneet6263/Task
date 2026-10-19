@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { notifications, users } from '../services/api';
+import { notifications, users, timesheet } from '../services/api';
 import useWorkspaceSocket from './useWorkspaceSocket';
 import useShellUnread from './useShellUnread';
 import { clearAuthentication } from '../services/preferences';
-import { parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon } from './LayoutParts';
+import { parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon } from './LayoutParts';
 export default function useLayout() {
   const navigate = useNavigate();
   const hasCompanyToken = Boolean(localStorage.getItem('company_token'));
@@ -66,6 +66,14 @@ export default function useLayout() {
 
     loadOrgAccess();
   }, []);
+
+  // Only organizations with the Timesheet add-on see its menu item.
+  const [timesheetEnabled, setTimesheetEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    timesheet.status().then(response => { if (active) setTimesheetEnabled(Boolean(response.data?.enabled)); }).catch(() => {});
+    return () => { active = false; };
+  }, [activeOrgId]);
 
   const handleMarkAllRead = async () => {
     try {
@@ -145,6 +153,17 @@ export default function useLayout() {
         section: 'Main',
         icon: <MailIcon />,
       },
+      ...(timesheetEnabled
+        ? [
+            {
+              path: '/timesheet',
+              label: 'Timesheet',
+              note: 'Client work and hours per person',
+              section: 'Main',
+              icon: <ClockIcon />,
+            },
+          ]
+        : []),
       {
         path: '/settings',
         label: 'Settings',
@@ -178,7 +197,7 @@ export default function useLayout() {
           ]
         : []),
     ],
-    [isAdmin]
+    [isAdmin, timesheetEnabled]
   );
 
   const formattedDate = new Date().toLocaleDateString('en-US', {

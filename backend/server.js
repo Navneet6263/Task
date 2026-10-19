@@ -82,6 +82,7 @@ app.use('/api/notifications', require('./src/routes/notifications'));
 app.use('/api/chat', require('./src/routes/chat'));
 app.use('/api/comments', require('./src/routes/comments'));
 app.use('/api/communications', require('./src/routes/communications'));
+app.use('/api/timesheet', require('./src/routes/timesheet'));
 
 app.use(notFound);
 app.use(errorHandler);
