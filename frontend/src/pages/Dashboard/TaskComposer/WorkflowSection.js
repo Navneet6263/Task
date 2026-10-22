@@ -1,4 +1,6 @@
 import React from 'react';
+import { Input, Textarea } from '../../../ui';
+import { ComposerSection } from './fields';
 
 const PLACEHOLDERS = {
   bug: 'e.g. Fix login button on mobile',
@@ -15,21 +17,19 @@ const DESCRIPTION_HINTS = {
 };
 
 const WorkflowSection = ({ taskForm, updateTaskFormField }) => (
-  <section className="rounded-2xl border border-indigo-100 border-t-[3px] border-t-indigo-500 bg-white p-4 shadow-[0_10px_26px_rgba(79,70,229,0.07)] sm:p-5">
-    <div className="mb-4 flex items-end justify-between gap-3">
-      <div><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-indigo-600">01 · Essentials</p><h4 className="mt-1 text-[16px] font-extrabold tracking-tight text-slate-900">What needs to be done?</h4></div>
-      <span className="hidden text-[10px] font-bold text-slate-400 sm:block">Keep it clear and actionable</span>
+  <ComposerSection step={1} title="What needs to be done?" aside={<span className="hidden text-xs text-muted sm:block">Keep it clear and actionable</span>}>
+    <div className="flex flex-col gap-1">
+      <label htmlFor="composer-title" className="text-xs font-medium text-muted">Task title <span className="text-danger">*</span></label>
+      <Input id="composer-title" autoFocus maxLength={255} required placeholder={PLACEHOLDERS[taskForm.issue_type] || PLACEHOLDERS.task}
+        value={taskForm.title} onChange={(event) => updateTaskFormField('title', event.target.value)} />
+      <small className="text-right font-mono text-[10px] text-muted">{taskForm.title.length}/255</small>
     </div>
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-bold text-slate-700">Task title <span className="text-red-500">*</span></span>
-      <input autoFocus maxLength={255} required className="h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10" placeholder={PLACEHOLDERS[taskForm.issue_type] || PLACEHOLDERS.task} value={taskForm.title} onChange={(event) => updateTaskFormField('title', event.target.value)} />
-      <small className="text-right text-[10px] font-semibold text-slate-400">{taskForm.title.length}/255</small>
-    </label>
-    <label className="mt-2 flex flex-col gap-1.5">
-      <span className="text-xs font-bold text-slate-700">Description</span>
-      <textarea className="min-h-[100px] resize-y rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-relaxed text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10" placeholder={DESCRIPTION_HINTS[taskForm.issue_type] || DESCRIPTION_HINTS.task} value={taskForm.description} onChange={(event) => updateTaskFormField('description', event.target.value)} />
-    </label>
-  </section>
+    <div className="flex flex-col gap-1">
+      <label htmlFor="composer-description" className="text-xs font-medium text-muted">Description</label>
+      <Textarea id="composer-description" className="min-h-[100px] leading-relaxed" placeholder={DESCRIPTION_HINTS[taskForm.issue_type] || DESCRIPTION_HINTS.task}
+        value={taskForm.description} onChange={(event) => updateTaskFormField('description', event.target.value)} />
+    </div>
+  </ComposerSection>
 );
 
 export default WorkflowSection;

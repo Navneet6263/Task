@@ -4,7 +4,7 @@ const { isModuleEnabled } = require('../services/orgModules');
 const { OPTION_GROUPS, fail, todayLocal, permissionsFor } = require('../services/timesheetRules');
 const {
   db, isDuplicateKey, route, positive, resolveRole, requireTimesheet, requirePermission, getSettings,
-  ensureDefaultOptions, getOptions, orgMembers,
+  ensureDefaultOptions, getOptions, orgMembers, syncTaskClients, taskScope,
 } = require('./timesheetSupport');
 
 router.use(authenticate);
@@ -26,7 +26,7 @@ const canManageClients = (role) => permissionsFor(role).manage_clients;
 const canSetup = (role) => permissionsFor(role).setup;
 
 router.get('/config', route(async (req, res) => {
-  await ensureDefaultOptions(req.orgId, req.userId);
+  await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncTaskClients(req.orgId, req.userId)]);
   const [settings, options, members, clientRows] = await Promise.all([
     getSettings(req.orgId),
     getOptions(req.orgId),
@@ -51,10 +51,32 @@ router.get('/config', route(async (req, res) => {
   });
 }));
 
+/* Tasks people can log time against, open ones and their own first. */
+router.get('/tasks', route(async (req, res) => {
+  const { where, params } = taskScope(req);
+  const q = String(req.query.q || '').trim().slice(0, 100);
+  if (q) {
+    const like = `%${q.replace(/[[%_]/g, (c) => `[${c}]`)}%`;
+    where.push('(t.title LIKE ? OR t.client_name LIKE ? OR CAST(t.id AS VARCHAR(12)) = ?)');
+    params.push(like, like, q.replace(/^#/, ''));
+  }
+  if (req.query.id) { where.push('t.id = ?'); params.push(positive(req.query.id, 'task')); }
+  const [rows] = await db.execute(
+    `SELECT TOP 50 t.id, t.title, t.client_name, t.status, CONVERT(VARCHAR(10), t.due_date, 23) AS due_date,
+       t.assigned_to, u.name AS assigned_to_name, te.name AS team_name
+     FROM tasks t LEFT JOIN users u ON u.id = t.assigned_to LEFT JOIN teams te ON te.id = t.team_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY CASE WHEN t.status = 'DONE' THEN 1 ELSE 0 END, CASE WHEN t.assigned_to = ? THEN 0 ELSE 1 END, t.id DESC`,
+    [...params, req.userId]
+  );
+  res.json(rows);
+}));
+
 /* Clients: managers and admins only. Employees only see active clients through /config. */
 router.get('/clients', requirePermission(canManageClients, 'Only managers and admins can manage clients'), route(async (req, res) => {
+  await syncTaskClients(req.orgId, req.userId);
   const [rows] = await db.execute(
-    `SELECT c.id, c.name, c.is_active,
+    `SELECT c.id, c.name, c.is_active, c.source,
        (SELECT COUNT(*) FROM timesheet_entries e WHERE e.client_id = c.id AND e.org_id = c.org_id AND e.is_deleted = 0) AS entry_count,
        (SELECT COALESCE(SUM(l.hours), 0) FROM timesheet_time_logs l JOIN timesheet_entries e ON e.id = l.entry_id
           WHERE e.client_id = c.id AND e.org_id = c.org_id AND e.is_deleted = 0 AND l.is_deleted = 0) AS total_hours

@@ -1,5 +1,9 @@
 const { express, db, authenticate, canAccessTeam, requireTeamAccess, getTaskDetail, listTeamTasks, ws, TASK_STATUSES, TASK_ISSUE_TYPES, normalizeText, normalizeDate, normalizeIssueType, normalizeReferenceImage, normalizeUserId, normalizeTaskPayload, canManageTaskForm, formatTaskFormOptions, ensureDefaultTaskFormOptions, TASK_OPTION_GROUPS, logActivity } = require('./taskSupport');
 const router = express.Router();
+const { getOrgLayout } = require('../../services/taskFormStore');
+const { resolveTaskClient } = require('../../services/orgClients');
+const { cleanCustomValues, missingCoreFields, buildTitle } = require('../../services/taskFormLayout');
+const timeLogs = require('./timeLogs');
 
 router.post('/', authenticate, async (req, res) => {
   try {
@@ -7,7 +11,7 @@ router.post('/', authenticate, async (req, res) => {
     const taskPayload = normalizeTaskPayload(req.body);
     const assignedTo = normalizeUserId(req.body.assigned_to);
 
-    if (!taskPayload.title || !team_id) {
+    if (!team_id) {
       return res.status(422).json({ error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
     }
 
@@ -54,6 +58,38 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'You can assign tasks only in your own team', code: 'FORBIDDEN' });
     }
 
+    // The client must come from the organization's list when it is "pick only" (Settings → Clients).
+    try {
+      taskPayload.clientName = await resolveTaskClient(resolvedOrgId, taskPayload.clientName, req.userRole, req.userId);
+    } catch (error) {
+      return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
+    }
+
+    // Organizations with a designed form: check its fields, store custom values, and log hours.
+    const layout = await getOrgLayout(resolvedOrgId);
+    let customFields = null;
+    let loggedHours = null;
+    if (layout) {
+      try {
+        customFields = cleanCustomValues(layout, req.body.custom_fields);
+        missingCoreFields(layout, { ...req.body, client_name: taskPayload.clientName, assigned_to: assignedTo });
+      } catch (error) {
+        return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
+      }
+      if (!taskPayload.title && layout.settings.title_pattern) {
+        taskPayload.title = buildTitle(layout.settings.title_pattern, { ...customFields, client_name: taskPayload.clientName, priority: taskPayload.priority, due_date: taskPayload.dueDate });
+      }
+      if (layout.settings.time_tracking && req.body.hours !== undefined && req.body.hours !== null && req.body.hours !== '') {
+        loggedHours = Math.round(Number(req.body.hours) * 100) / 100;
+        if (!(loggedHours > 0 && loggedHours <= 24)) return res.status(422).json({ error: 'Hours worked must be more than 0 and at most 24', fields: { hours: 'Enter 0.25 to 24 hours' }, code: 'VALIDATION_ERROR' });
+      }
+      const hoursField = layout.fields.find((f) => f.key === 'hours' && !f.hidden);
+      if (hoursField?.required && loggedHours === null) return res.status(422).json({ error: `${hoursField.label} is required`, fields: { hours: `${hoursField.label} is required` }, code: 'VALIDATION_ERROR' });
+    }
+    if (!taskPayload.title) {
+      return res.status(422).json({ error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
+    }
+
     if (assignedTo) {
       const [assigneeMembership] = await db.execute(
         `SELECT tm.id
@@ -87,8 +123,8 @@ router.post('/', authenticate, async (req, res) => {
         client_name, severity, bug_type, environment, affected_module, steps_to_reproduce,
         feature_area, story_points, feature_priority, acceptance_criteria,
         enhancement_type, impact_level, effort_estimate, improvement_detail,
-        story_role, epic, persona, story_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        story_role, epic, persona, story_notes, custom_fields)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         taskPayload.title, taskPayload.description, taskPayload.priority, taskStatus,
         assignedTo, req.userId, team_id,
@@ -101,8 +137,19 @@ router.post('/', authenticate, async (req, res) => {
         taskPayload.acceptanceCriteria, taskPayload.enhancementType, taskPayload.impactLevel,
         taskPayload.effortEstimate, taskPayload.improvementDetail,
         taskPayload.storyRole, taskPayload.epic, taskPayload.persona, taskPayload.storyNotes,
+        customFields && Object.keys(customFields).length ? JSON.stringify(customFields) : null,
       ]
     );
+
+    if (loggedHours !== null) {
+      // Hours go to the person doing the work when a manager or admin logs for them, otherwise to the creator.
+      const worker = assignedTo && timeLogs.canLogForOthers(req.userRole) ? assignedTo : req.userId;
+      const workDate = Object.entries(customFields || {}).find(([key, value]) => /date_worked|work_date/.test(key) && value)?.[1] || timeLogs.today();
+      await db.execute(
+        'INSERT INTO task_time_logs (org_id, task_id, user_id, hours, work_date, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [resolvedOrgId, result.insertId, worker, loggedHours, workDate > timeLogs.today() ? timeLogs.today() : workDate, null, req.userId]
+      );
+    }
 
     await logActivity(req.userId, team_id, result.insertId, type === 'bug' ? 'Bug Reported' : 'Task Assigned', taskPayload.title,
       type === 'bug' ? `Bug reported by ${req.userId}` : 'Task assigned', 'User (Local)');

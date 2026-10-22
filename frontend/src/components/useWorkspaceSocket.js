@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { WS_BASE_URL } from '../services/runtimeConfig';
+import { notify } from '../services/feedback';
 
 export default function useWorkspaceSocket({ wsRef, setSocketVersion, fetchNotifications, token, orgId }) {
   useEffect(() => {
@@ -34,8 +35,12 @@ export default function useWorkspaceSocket({ wsRef, setSocketVersion, fetchNotif
           if (stopped || !hasCurrentToken()) return;
           try {
             const message = JSON.parse(event.data);
-            if (['task_created', 'task_updated', 'overdue_alert'].includes(message.event)) {
+            if (['task_created', 'task_updated', 'overdue_alert', 'calendar_updated', 'calendar_reminder'].includes(message.event)) {
               fetchNotifications();
+            }
+            if (['calendar_updated', 'calendar_reminder'].includes(message.event)) {
+              window.dispatchEvent(new CustomEvent('calendar:changed'));
+              if (message.event === 'calendar_reminder' && message.data?.message) notify(message.data.message, 'success');
             }
           } catch { /* Ignore non-JSON messages, not connection failures. */ }
         };

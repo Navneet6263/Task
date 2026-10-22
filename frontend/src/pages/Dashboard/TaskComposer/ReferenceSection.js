@@ -1,41 +1,31 @@
 import React from 'react';
+import { Button } from '../../../ui';
+import { ComposerSection } from './fields';
 
 const ReferenceSection = ({ taskForm, updateTaskFormField, handleReferenceImageChange }) => (
-  <section className="rounded-2xl border border-emerald-100 border-t-[3px] border-t-emerald-500 bg-white shadow-[0_10px_26px_rgba(16,185,129,0.07)] px-5 py-5 flex flex-col gap-4">
-    <div>
-      <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-indigo-600">04 · Reference</p>
-      <h4 className="mt-1 text-[16px] font-extrabold text-gray-900 tracking-tight">Reference & Attachments</h4>
-      <p className="mt-0.5 text-xs text-gray-500">Add a screenshot or mockup so the assignee understands quickly.</p>
-    </div>
-
-    <label className="rounded-xl border-2 border-dashed border-blue-200 bg-gradient-to-b from-blue-50/60 to-indigo-50/40
-      px-4 py-5 flex items-center gap-4 cursor-pointer hover:border-[#2f5dff] hover:from-blue-50 transition-all group">
-      <div className="w-11 h-11 rounded-xl bg-white border border-blue-100 shadow-sm flex items-center justify-center shrink-0">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2f5dff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+  <ComposerSection step={4} title="Reference & Attachments" hint="Add a screenshot or mockup so the assignee understands quickly.">
+    <label className="group flex cursor-pointer items-center gap-4 rounded-md border border-dashed border-line bg-subtle px-4 py-4 hover:border-accent/60">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-accent">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-      </div>
-      <div>
-        <span className="text-sm font-bold text-gray-800 block group-hover:text-[#2f5dff] transition-colors">Upload Image</span>
-        <small className="text-xs text-gray-500">PNG, JPG or WEBP · Max 450KB</small>
-      </div>
+      </span>
+      <span>
+        <span className="block text-sm font-semibold group-hover:text-accent">Upload Image</span>
+        <small className="text-xs text-muted">PNG, JPG or WEBP · Max 450KB</small>
+      </span>
       <input className="hidden" type="file" accept="image/*" onChange={handleReferenceImageChange} />
     </label>
-
     {taskForm.reference_image && (
-      <div className="rounded-xl border-2 border-blue-100 bg-white p-3 flex flex-col gap-3">
+      <div className="flex flex-col gap-2 rounded-md border border-line p-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-gray-600">Preview</span>
-          <button type="button" onClick={() => updateTaskFormField('reference_image', '')}
-            className="text-xs font-bold text-red-500 hover:text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 transition-all">
-            Remove
-          </button>
+          <span className="text-xs font-medium text-muted">Preview</span>
+          <Button size="sm" variant="danger" onClick={() => updateTaskFormField('reference_image', '')}>Remove</Button>
         </div>
-        <img src={taskForm.reference_image} alt="Task reference preview"
-          className="w-full rounded-xl border border-blue-100 object-cover max-h-[260px]" />
+        <img src={taskForm.reference_image} alt="Task reference preview" className="max-h-[260px] w-full rounded-md border border-line object-cover" />
       </div>
     )}
-  </section>
+  </ComposerSection>
 );
 
 export default ReferenceSection;

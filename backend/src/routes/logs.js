@@ -63,6 +63,16 @@ router.get('/team/:teamId', authenticate, async (req, res) => {
       queryParams.push(activity);
     }
 
+    // Text search over task and description, and an optional date range (YYYY-MM-DD).
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    if (q) {
+      whereClause += ' AND (al.task_details LIKE ? OR al.description LIKE ?)';
+      queryParams.push(`%${q}%`, `%${q}%`);
+    }
+    const isDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+    if (isDay(req.query.from)) { whereClause += ' AND al.created_at >= CAST(? AS DATE)'; queryParams.push(req.query.from); }
+    if (isDay(req.query.to)) { whereClause += ' AND al.created_at < DATEADD(DAY, 1, CAST(? AS DATE))'; queryParams.push(req.query.to); }
+
     // Total count for current filter
     const [[{ total }]] = await db.execute(
       `SELECT COUNT(*) as total

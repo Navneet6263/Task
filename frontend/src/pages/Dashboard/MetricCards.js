@@ -1,45 +1,27 @@
 import React from 'react';
-import './MetricCards.css';
+import { Meter } from '../../ui';
 
+// `tone` keeps the historical class names (tested); `meter` is the UI kit colour.
 const MetricCards = ({ stats, teamList }) => {
+  const share = (value) => (stats.total ? Math.round((value / stats.total) * 100) : 0);
   const metrics = [
-    { label: 'Total Tasks', value: stats.total, note: `${teamList.length} teams`, progress: stats.total ? 100 : 0, tone: 'blue' },
-    { label: 'Open Queue', value: stats.open, note: `${stats.inProgress} in progress`, progress: stats.total ? Math.round((stats.open / stats.total) * 100) : 0, tone: 'amber' },
-    { label: 'Completed', value: `${stats.completion}%`, note: `${stats.done} finished`, progress: stats.completion, tone: 'green' },
-    { label: 'Overdue', value: stats.overdue, note: stats.overdue ? 'Needs attention' : 'On track', progress: stats.total ? Math.round((stats.overdue / stats.total) * 100) : 0, tone: 'coral' },
+    { label: 'Total Tasks', value: stats.total, note: `${teamList.length} ${teamList.length === 1 ? 'team' : 'teams'}`, tone: 'blue' },
+    { label: 'Open Queue', value: stats.open, note: `${stats.inProgress} in progress`, progress: share(stats.open), tone: 'amber', meter: 'warn' },
+    { label: 'Completed', value: `${stats.completion}%`, note: `${stats.done} finished`, progress: stats.completion, tone: 'green', meter: 'accent' },
+    { label: 'Overdue', value: stats.overdue, note: stats.overdue ? 'Needs attention' : 'On track', progress: share(stats.overdue), tone: 'coral', meter: 'danger' },
   ];
 
-  const getRingColor = (tone) => {
-    if (tone === 'blue') return '#2f5dff';
-    if (tone === 'amber') return '#f59e0b';
-    if (tone === 'green') return '#10b981';
-    return '#f97316';
-  };
-
   return (
-    <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {metrics.map((card, index) => (
-        <article
-          key={card.label}
-          className={`dashboard-metric-card rounded-2xl px-3.5 py-3.5 border shadow-[0_10px_24px_rgba(15,23,42,0.08)] flex justify-between gap-3 items-center opacity-0 translate-y-2.5 animate-[dashRise_0.45s_ease_forwards] dashboard-metric-${card.tone}`}
-          style={{ animationDelay: `${index * 80}ms` }}
-        >
-          <div>
-            <p className="text-xs text-[#64748b] font-bold">{card.label}</p>
-            <h3 className="text-[clamp(20px,2.2vw,30px)] my-1 font-display font-bold">{card.value}</h3>
-            <span className="text-[11px] text-[#64748b]">{card.note}</span>
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {metrics.map((card) => (
+        <article key={card.label} className={`dashboard-metric-card dashboard-metric-${card.tone} flex flex-col gap-2 rounded-lg border border-line bg-surface px-4 py-3`}>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{card.label}</p>
+            {card.progress !== undefined && <span className="font-mono text-xs text-muted">{card.progress}%</span>}
           </div>
-          {index > 0 && <div
-            className="w-[74px] h-[74px] rounded-full relative grid place-items-center dash-ring"
-            style={{
-              background: `conic-gradient(${getRingColor(card.tone)} ${card.progress}%, #e8ecf7 0)`,
-              '--ring-color': getRingColor(card.tone),
-              '--progress': `${card.progress}%`
-            }}
-          >
-            <div className="absolute inset-[7px] rounded-full bg-white" />
-            <strong className="relative z-10 text-xs text-[#334155] font-bold">{card.progress}%</strong>
-          </div>}
+          <h3 className={`font-mono text-[26px] font-semibold leading-none tabular-nums ${card.tone === 'coral' && stats.overdue ? 'text-danger' : ''}`}>{card.value}</h3>
+          {card.meter ? <Meter value={card.progress} tone={card.meter} label={`${card.label} share`} /> : <div className="h-1.5" />}
+          <span className="text-xs text-muted">{card.note}</span>
         </article>
       ))}
     </section>

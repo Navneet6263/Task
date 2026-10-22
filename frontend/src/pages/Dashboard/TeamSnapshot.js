@@ -1,4 +1,5 @@
 import React from 'react';
+import { Card, CardHeader, Meter } from '../../ui';
 
 const initials = (name) => {
   if (!name) return '?';
@@ -7,59 +8,24 @@ const initials = (name) => {
 };
 
 const TeamSnapshot = ({ memberSummary, members, maxLoad }) => (
-  <article className="relative overflow-hidden rounded-[24px] bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] px-5 py-6">
-    <div className="absolute top-0 left-0 w-40 h-40 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
-    
-    <header className="flex justify-between items-end mb-5 relative z-10">
-      <div>
-        <h2 className="font-display text-2xl font-extrabold text-slate-900 tracking-tight">Team Snapshot</h2>
-        <p className="text-xs text-slate-500 font-medium mt-0.5">Top contributors by active tasks</p>
-      </div>
-      <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-full px-3 py-1 border border-slate-200/50">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-        </span>
-        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">{members.length} Members</span>
-      </div>
-    </header>
-    
-    <div className="flex flex-col gap-3.5 relative z-10">
-      {memberSummary.length === 0 && (
-        <div className="text-center py-6 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-          <p className="text-sm text-slate-500 font-medium">No members in this team yet.</p>
-        </div>
-      )}
-      
+  <Card>
+    <CardHeader title="Team snapshot" aside={`${members.length} members`} />
+    <div className="flex flex-col gap-1 p-3">
+      {memberSummary.length === 0 && <p className="px-2 py-4 text-center text-sm text-muted">No members in this team yet.</p>}
       {memberSummary.map((member) => (
-        <div key={member.id} className="group flex items-center justify-between gap-3 p-2 -mx-2 rounded-xl hover:bg-slate-50 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <span className="w-10 h-10 rounded-2xl grid place-items-center text-white text-xs font-extrabold bg-gradient-to-br from-indigo-500 via-blue-500 to-sky-400 shadow-[0_4px_12px_rgba(59,130,246,0.3)] transform group-hover:scale-105 transition-transform">
-                {initials(member.name)}
-              </span>
+        <div key={member.id} className="flex items-center gap-3 rounded-md px-2 py-2">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-bold text-accent">{initials(member.name)}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="truncate text-sm font-semibold">{member.name}</p>
+              <span className="shrink-0 font-mono text-xs text-muted">{member.load} active</span>
             </div>
-            <div>
-              <p className="text-sm font-bold text-slate-800 leading-tight">{member.name}</p>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{member.role || member.team_role || 'Member'}</span>
-            </div>
-          </div>
-          
-          <div className="w-32 flex flex-col items-end gap-1.5">
-            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden shadow-inner border border-slate-200/40">
-              <span 
-                className="block h-full bg-gradient-to-r from-blue-500 to-sky-400 transition-all duration-700 ease-out" 
-                style={{ width: `${Math.round((member.load / maxLoad) * 100)}%` }} 
-              />
-            </div>
-            <strong className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wide">
-              {member.load} Active
-            </strong>
+            <Meter value={member.load} max={maxLoad} label={`${member.name} active tasks`} />
           </div>
         </div>
       ))}
     </div>
-  </article>
+  </Card>
 );
 
 export default TeamSnapshot;

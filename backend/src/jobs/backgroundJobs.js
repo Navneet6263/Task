@@ -39,6 +39,18 @@ cron.schedule('*/2 * * * *', () => {
 });
 
 
+  if (process.env.ENABLE_CALENDAR_REMINDERS !== 'false') {
+    const { sendDueReminders } = require('../services/calendarReminders');
+    let sending = false;
+    cron.schedule('* * * * *', async () => {
+      if (sending) return;
+      sending = true;
+      try { await sendDueReminders(); }
+      catch (error) { console.error('[CRON] calendar reminders failed:', error.message); }
+      finally { sending = false; }
+    });
+  }
+
   if (process.env.ENABLE_RECURRING_TASKS === 'true') {
     let running = false;
     cron.schedule('* * * * *', async () => {

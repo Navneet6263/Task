@@ -1,4 +1,5 @@
 import React from 'react';
+import { Input, Select, Textarea } from '../../ui';
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
 
@@ -10,35 +11,37 @@ const val = (v) => v || '—';
 
 /* ── Small reusable atoms ───────────────────────────────────── */
 const Row = ({ label, children }) => (
-  <div className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0 gap-3">
-    <span className="text-sm text-gray-500 shrink-0">{label}</span>
-    <span className="text-sm text-gray-900 font-semibold text-right">{children}</span>
+  <div className="flex items-start justify-between gap-3 border-b border-line py-2 last:border-0">
+    <span className="shrink-0 text-sm text-muted">{label}</span>
+    <span className="text-right text-sm font-semibold">{children}</span>
   </div>
 );
 
 const Sec = ({ title, children }) => (
-  <div className="bg-white rounded-2xl border border-gray-200 px-4 py-4">
-    <h4 className="text-xs font-extrabold uppercase tracking-wider text-gray-400 mb-3">{title}</h4>
+  <div className="rounded-lg border border-line bg-surface px-4 py-3">
+    <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h4>
     {children}
   </div>
 );
 
-const Label = ({ text }) => <span className="text-xs font-bold text-gray-600">{text}</span>;
-const cls = 'h-[38px] rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5 w-full focus:border-blue-400 outline-none';
+const Label = ({ text }) => <span className="text-xs font-medium text-muted">{text}</span>;
 const Sel = ({ label, value, onChange, children }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <select className={cls} value={value} onChange={onChange}>{children}</select>
+  <label className="flex flex-col gap-1"><Label text={label} />
+    <Select value={value} onChange={onChange}>{children}</Select>
   </label>
 );
 const Inp = ({ label, ...p }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <input className={cls} {...p} />
+  <label className="flex flex-col gap-1"><Label text={label} />
+    <Input {...p} />
   </label>
 );
 const Txt = ({ label, ...p }) => (
-  <label className="flex flex-col gap-1.5"><Label text={label} />
-    <textarea className="rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5 py-2 w-full min-h-[72px] resize-y focus:border-blue-400 outline-none" {...p} />
+  <label className="flex flex-col gap-1"><Label text={label} />
+    <Textarea {...p} />
   </label>
+);
+const LongText = ({ title, children }) => (
+  <div className="mt-2"><p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</p><p className="whitespace-pre-wrap text-sm">{children}</p></div>
 );
 
 /* ── Issue-specific detail sections ────────────────────────── */
@@ -48,7 +51,7 @@ const BugDetailSec = ({ t }) => (
     <Row label="Bug Type">{val(t.bug_type)}</Row>
     <Row label="Environment">{val(t.environment)}</Row>
     <Row label="Affected Module">{val(t.affected_module)}</Row>
-    {t.steps_to_reproduce && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Steps to Reproduce</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.steps_to_reproduce}</p></div>}
+    {t.steps_to_reproduce && <LongText title="Steps to Reproduce">{t.steps_to_reproduce}</LongText>}
   </Sec>
 );
 
@@ -57,7 +60,7 @@ const FeatureDetailSec = ({ t }) => (
     <Row label="Feature Area">{val(t.feature_area)}</Row>
     <Row label="Story Points">{val(t.story_points)}</Row>
     <Row label="MoSCoW Priority">{val(t.feature_priority)}</Row>
-    {t.acceptance_criteria && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Acceptance Criteria</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.acceptance_criteria}</p></div>}
+    {t.acceptance_criteria && <LongText title="Acceptance Criteria">{t.acceptance_criteria}</LongText>}
   </Sec>
 );
 
@@ -66,7 +69,7 @@ const EnhDetailSec = ({ t }) => (
     <Row label="Enhancement Type">{val(t.enhancement_type)}</Row>
     <Row label="Impact Level">{val(t.impact_level)}</Row>
     <Row label="Effort Estimate">{val(t.effort_estimate)}</Row>
-    {t.improvement_detail && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">What to Improve</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.improvement_detail}</p></div>}
+    {t.improvement_detail && <LongText title="What to Improve">{t.improvement_detail}</LongText>}
   </Sec>
 );
 
@@ -76,7 +79,7 @@ const StoryDetailSec = ({ t }) => (
     <Row label="Story Points">{val(t.story_points)}</Row>
     <Row label="Epic / Theme">{val(t.epic)}</Row>
     <Row label="User Persona">{val(t.persona)}</Row>
-    {t.story_notes && <div className="mt-2"><p className="text-xs font-bold text-gray-400 uppercase mb-1">Notes</p><p className="text-sm text-gray-700 whitespace-pre-wrap">{t.story_notes}</p></div>}
+    {t.story_notes && <LongText title="Notes">{t.story_notes}</LongText>}
   </Sec>
 );
 

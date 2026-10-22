@@ -22,4 +22,13 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests. Slow down.', code: 'RATE_LIMIT', status: 429 }
 });
 
-module.exports = { authLimiter, apiLimiter };
+// Platform console sign-in and password setup: a full sign-in takes 2–3 requests.
+const consoleAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sign-in attempts. Try again after 15 minutes.', code: 'RATE_LIMIT', status: 429 }
+});
+
+module.exports = { authLimiter, apiLimiter, consoleAuthLimiter };

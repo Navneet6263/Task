@@ -13,18 +13,23 @@ const Settings = lazy(() => import('./pages/Settings'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const Reports = lazy(() => import('./pages/Reports'));
 const RegisterCompany = lazy(() => import('./pages/RegisterCompany'));
-const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdmin'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ConsoleSetup = lazy(() => import('./pages/ConsoleSetup'));
 const LiveReviewRoom = lazy(() => import('./pages/LiveReviewRoom'));
 const TeamWorkspaceRoom = lazy(() => import('./pages/TeamWorkspaceRoom'));
 const Communications = lazy(() => import('./pages/Communications'));
 const UpdatesPage = lazy(() => import('./pages/Updates'));
+const CalendarPage = lazy(() => import('./pages/Calendar'));
 const Timesheet = lazy(() => import('./pages/Timesheet'));
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token') || localStorage.getItem('company_token');
   return token ? children : <Navigate to="/login" />;
 };
+
+// Screens outside the shell that are not redesigned yet stay light in dark mode.
+const Light = ({ children }) => <div className="theme-light min-h-screen bg-canvas text-ink">{children}</div>;
 
 const SuperAdminRoute = ({ children }) => {
   const token = localStorage.getItem('sa_token');
@@ -37,9 +42,10 @@ function App() {
       <AppErrorBoundary><Suspense fallback={<div role="status" className="p-6 text-slate-500">Loading screen...</div>}><Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/sa-setup" element={<ConsoleSetup />} />
         <Route path="/register-company" element={<RegisterCompany />} />
-        <Route path="/live-review" element={<PrivateRoute><LiveReviewRoom /></PrivateRoute>} />
-        <Route path="/team-workspace" element={<PrivateRoute><TeamWorkspaceRoom /></PrivateRoute>} />
+        <Route path="/live-review" element={<PrivateRoute><Light><LiveReviewRoom /></Light></PrivateRoute>} />
+        <Route path="/team-workspace" element={<PrivateRoute><Light><TeamWorkspaceRoom /></Light></PrivateRoute>} />
         <Route path="/updates" element={<PrivateRoute><UpdatesPage /></PrivateRoute>} />
         <Route path="/sa-login" element={<Navigate to="/login?mode=system-admin" replace />} />
         <Route path="/sa-dashboard" element={<SuperAdminRoute><SuperAdminDashboard /></SuperAdminRoute>} />
@@ -55,6 +61,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="communications" element={<Communications />} />
           <Route path="timesheet" element={<Timesheet />} />
+          <Route path="calendar" element={<CalendarPage />} />
         </Route>
       </Routes></Suspense></AppErrorBoundary>
     </Router>

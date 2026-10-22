@@ -37,6 +37,12 @@ const ensureWorkspaceSchema = async () => {
   await ensureRecurringSchema();
   await require('./updatesSchema').ensureUpdatesSchema();
   await require('./timesheetSchema').ensureTimesheetSchema();
+  await require('./calendarSchema').ensureCalendarSchema();
+  await require('./communicationsSchema').ensureCommunicationsSchema();
+  await require('./notesSchema').ensureNotesSchema();
+  await require('./superAdminSchema').ensureSuperAdminSchema();
+  await require('./taskFormSchema').ensureTaskFormSchema();
+  await require('./clientsSchema').ensureClientsSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };

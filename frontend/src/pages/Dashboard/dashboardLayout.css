@@ -1,0 +1,24 @@
+/* Moved from the old shell stylesheet; removed when the Dashboard is redesigned. */
+.shell-root.shell-sidebar-collapsed .dashboard-workspace-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-root.shell-sidebar-collapsed .dashboard-insights {
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1120px) {
+  .dashboard-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-insights {
+    position: static;
+  }
+
+  .shell-root.shell-sidebar-collapsed .dashboard-insights {
+    display: flex;
+  }
+}

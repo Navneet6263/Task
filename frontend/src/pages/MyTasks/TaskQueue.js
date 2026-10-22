@@ -1,47 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import TaskCard from './TaskCard';
+import { STATUS_DOT } from './taskMeta';
 
-const TaskQueue = ({ title, icon, colorClass, tasks, statusValue, handleStatusChange, handlePriorityLock, openReassign, handleDrop, onCardClick }) => {
+// One board column. Highlights while a card is dragged over it.
+const TaskQueue = ({ title, statusValue, tasks, handleDrop, ...cardProps }) => {
+  const [over, setOver] = useState(false);
   return (
-    <div 
-      className={`flex flex-col bg-slate-50/50 rounded-3xl border border-slate-200/60 p-4 h-full min-h-[500px] transition-colors`}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const taskId = e.dataTransfer.getData('taskId');
-        if (taskId) handleDrop(taskId, statusValue);
-      }}
-    >
-      <header className="flex justify-between items-center mb-4 px-1">
-        <div className="flex items-center gap-2">
-          <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-sm ${colorClass}`}>
-            {icon}
-          </span>
-          <h3 className="font-display font-extrabold text-slate-800 tracking-tight">{title}</h3>
-        </div>
-        <span className="bg-white border border-slate-200 text-slate-500 font-bold text-[10px] px-2.5 py-1 rounded-full shadow-sm">
-          {tasks.length}
-        </span>
+    <div onDragOver={(event) => { event.preventDefault(); setOver(true); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOver(false); }}
+      onDrop={(event) => { event.preventDefault(); setOver(false); const taskId = event.dataTransfer.getData('taskId'); if (taskId) handleDrop(taskId, statusValue); }}
+      className={`flex min-h-[420px] flex-col rounded-lg border p-2.5 transition-colors ${over ? 'border-accent bg-accent-soft/50' : 'border-line bg-subtle'}`}>
+      <header className="mb-2.5 flex items-center justify-between px-1">
+        <span className="flex items-center gap-2 text-sm font-semibold"><span className={`h-2 w-2 rounded-full ${STATUS_DOT[statusValue]}`} />{title}</span>
+        <span className="rounded-full bg-surface px-2 font-mono text-xs text-muted">{tasks.length}</span>
       </header>
-      
-      <div className="flex flex-col gap-3 flex-1">
-        {tasks.map(task => (
-          <TaskCard 
-            key={task.id} 
-            task={task} 
-            handleStatusChange={handleStatusChange} 
-            handlePriorityLock={handlePriorityLock} 
-            openReassign={openReassign} 
-            onCardClick={onCardClick}
-          />
-        ))}
-        
-        {tasks.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-2xl opacity-60">
-            <span className="text-2xl mb-2 grayscale opacity-50">{icon}</span>
-            <p className="text-xs font-bold text-slate-400">No tasks here</p>
-          </div>
-        )}
+      <div className="flex flex-1 flex-col gap-2">
+        {tasks.map((task) => <TaskCard key={task.id} task={task} {...cardProps} />)}
+        {!tasks.length && <div className="grid flex-1 place-items-center rounded-md border border-dashed border-line p-6 text-center text-xs text-muted">Drop a task here</div>}
       </div>
     </div>
   );

@@ -106,6 +106,14 @@ async function ensureTimesheetSchema() {
         detail NVARCHAR(2000) NULL,
         created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME());
   `);
+  // Optional link to the task the work was done for (managers create the task, people log time against it).
+  await db.query(`IF COL_LENGTH('dbo.timesheet_entries', 'task_id') IS NULL ALTER TABLE dbo.timesheet_entries ADD task_id INT NULL REFERENCES dbo.tasks(id);`);
+  await db.query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_timesheet_entries_task' AND object_id = OBJECT_ID('dbo.timesheet_entries'))
+      CREATE INDEX idx_timesheet_entries_task ON dbo.timesheet_entries(org_id, task_id) WHERE task_id IS NOT NULL AND is_deleted = 0;
+  `);
+  // 'task' when the client was copied from a task's client name, NULL when someone added it here.
+  await db.query(`IF COL_LENGTH('dbo.timesheet_clients', 'source') IS NULL ALTER TABLE dbo.timesheet_clients ADD source VARCHAR(10) NULL;`);
   await db.query(`
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_timesheet_entries_org_date' AND object_id = OBJECT_ID('dbo.timesheet_entries'))
       CREATE INDEX idx_timesheet_entries_org_date ON dbo.timesheet_entries(org_id, date_worked DESC, id DESC) WHERE is_deleted = 0;

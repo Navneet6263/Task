@@ -7,6 +7,7 @@ import TaskTimelineView from './TaskTimelineView';
 import TaskFilterBar from './TaskFilters/TaskFilterBar';
 import FocusViews from './TaskFilters/FocusViews';
 import SavedViewsBar from './TaskFilters/SavedViewsBar';
+import { Button, Card, Chip, Segmented, Select } from '../../ui';
 
 const visiblePages = (page, totalPages) => {
   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
@@ -65,53 +66,39 @@ const TaskWorkspace = (props) => {
     setFilterCreatedTo('');
   };
 
+  const count = props.totalTasks ?? filtered.length;
+
   return (
-    <div className="relative rounded-[24px] bg-white/90 backdrop-blur-2xl border border-white shadow-[0_8px_30px_rgba(15,23,42,0.06)] px-4 py-4 flex flex-col gap-3">
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      <header className="flex justify-between items-center flex-wrap gap-3 relative z-10 border-b border-slate-100 pb-3">
-        <div>
-          <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">
-            {selectedTeam.name}
-          </span>
-          <h2 className="font-display text-[22px] font-extrabold text-slate-900 tracking-tight mt-1.5">Task Workspace</h2>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs font-medium text-slate-500">
-              {props.totalTasks ?? filtered.length} {(props.totalTasks ?? filtered.length) === 1 ? 'task' : 'tasks'} found
-            </span>
-            {activeFilterCount > 0 && (
-              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                <span className="w-3.5 h-3.5 bg-blue-600 text-white rounded-full inline-flex items-center justify-center text-[9px]">{activeFilterCount}</span>
-                filters active
-              </span>
-            )}
+    <Card className="flex flex-col gap-3 p-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Tasks</h2>
+            <Chip tone="ok">{selectedTeam.name}</Chip>
           </div>
+          <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+            {count} {count === 1 ? 'task' : 'tasks'} found
+            {activeFilterCount > 0 && <Chip tone="info">{activeFilterCount} filters active</Chip>}
+          </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <select aria-label="Task sort order" value={props.sort || 'newest'} onChange={e => props.setSort(e.target.value)} className="rounded-lg border bg-white p-2 text-xs">
+          <Select aria-label="Task sort order" value={props.sort || 'newest'} onChange={e => props.setSort(e.target.value)} className="!w-auto py-1.5 text-xs">
             <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title A–Z</option>
-          </select>
-        <div className="flex p-1 rounded-xl bg-slate-100/80 border border-slate-200/50 shadow-inner">
-          {['list', 'board', 'timeline'].map((type) => (
-            <button key={type} type="button" className={`px-3 py-1.5 rounded-md text-[12px] font-bold capitalize transition-all ${view === type ? 'bg-white text-blue-700 shadow-[0_2px_12px_rgba(30,64,175,0.12)]' : 'text-slate-500 hover:bg-slate-200/50'}`} onClick={() => setView(type)}>
-              {type}
-            </button>
-          ))}
-        </div></div>
+          </Select>
+          <Segmented label="Task view" value={view} onChange={setView} options={[['list', 'list'], ['board', 'board'], ['timeline', 'timeline']]} />
+        </div>
       </header>
 
-      <div className="relative z-40 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/75 px-3 py-2.5">
+      <div className="relative z-40 flex flex-wrap items-center gap-2 rounded-md border border-line bg-subtle px-3 py-2">
         <FocusViews value={focusMode} onChange={setFocusMode} />
-        <span className="hidden h-5 w-px bg-slate-200 xl:block" />
+        <span className="hidden h-5 w-px bg-line xl:block" />
         <SavedViewsBar members={members} clientNameOptions={clientNameOptions} teamId={selectedTeam.id} userId={userId} view={view} setView={setView} focusMode={focusMode} setFocusMode={setFocusMode} filters={filters} setters={setters} />
         <TaskFilterBar filters={filters} setters={setters} members={members} clientNameOptions={clientNameOptions} onClear={clearFilters} />
       </div>
 
       {focusMode === 'MY_DAY' && <MyDayPlan key={selectedTeam.id} teamId={selectedTeam.id} tasks={filtered} onOpen={setSelectedTask} />}
       <ActiveFilterSummary filters={filters} setters={setters} members={members} onClear={clearFilters} />
-      <div className="relative z-10 flex-1 flex flex-col">
+      <div className="relative z-10 flex flex-1 flex-col">
         {view === 'list' && (
           <TaskListView members={members} onUpdated={props.onUpdated} paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
         )}
@@ -121,19 +108,22 @@ const TaskWorkspace = (props) => {
         {view === 'timeline' && (
           <TaskTimelineView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} />
         )}
-
-        {view !== 'board' && totalPages > 1 && (
-          <footer className="flex gap-1.5 justify-center mt-4 mb-1">
-            <button type="button" className="px-3 h-[34px] rounded-lg border border-slate-200 bg-white text-slate-600 text-[11px] font-bold disabled:opacity-40" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Previous</button>
-            {visiblePages(page, totalPages).map((value) => (
-              <button key={value} type="button" className={`w-[34px] h-[34px] rounded-lg text-[11px] font-extrabold shadow-sm ${page === value ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`} onClick={() => setPage(value)}>{value}</button>
-            ))}
-            <button type="button" className="px-3 h-[34px] rounded-lg border border-slate-200 bg-white text-slate-600 text-[11px] font-bold disabled:opacity-40" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>Next</button>
-          </footer>
-        )}
+        {view !== 'board' && totalPages > 1 && <Pagination page={page} setPage={setPage} totalPages={totalPages} />}
       </div>
-    </div>
+    </Card>
   );
 };
+
+function Pagination({ page, setPage, totalPages }) {
+  return (
+    <footer className="mb-1 mt-4 flex justify-center gap-1.5">
+      <Button size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Previous</Button>
+      {visiblePages(page, totalPages).map((value) => (
+        <Button key={value} size="sm" variant={page === value ? 'primary' : 'secondary'} className="min-w-[32px] font-mono" aria-current={page === value ? 'page' : undefined} onClick={() => setPage(value)}>{value}</Button>
+      ))}
+      <Button size="sm" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page === totalPages}>Next</Button>
+    </footer>
+  );
+}
 
 export default TaskWorkspace;

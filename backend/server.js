@@ -6,7 +6,7 @@ const ws = require('./src/websocket');
 const { ensureCollaborationSchema } = require('./src/bootstrap/collaborationSchema');
 const { ensureWorkspaceSchema } = require('./src/bootstrap/workspaceSchema');
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
-const { authLimiter, apiLimiter } = require('./src/middleware/rateLimiter');
+const { authLimiter, apiLimiter, consoleAuthLimiter } = require('./src/middleware/rateLimiter');
 
 const app = express();
 // Trust Nginx reverse proxy (1 hop). Required for express-rate-limit to work correctly.
@@ -59,15 +59,18 @@ app.get('/api', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' 
 
 // Rate limiting
 app.use('/api/auth', authLimiter);
+app.use(['/api/sa/login', '/api/sa/setup-password'], consoleAuthLimiter);
 app.use('/api', apiLimiter);
 
 // Routes
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/company-auth', require('./src/routes/companyAuth'));
-app.use('/api/super-admin', require('./src/routes/superAdmin'));
 app.use('/api/sa', require('./src/routes/superAdminAuth').router);
 app.use('/api/teams', require('./src/routes/teams'));
 app.use('/api/tasks', require('./src/routes/tasks'));
+app.use('/api/task-form', require('./src/routes/taskForm'));
+app.use('/api/clients', require('./src/routes/clients'));
+app.use('/api/timesheet', require('./src/routes/timesheet'));
 app.use('/api/workspace', require('./src/routes/workspace'));
 app.use('/api/updates', require('./src/routes/updates'));
 app.use('/api/task-productivity', require('./src/routes/taskProductivity'));
@@ -82,7 +85,8 @@ app.use('/api/notifications', require('./src/routes/notifications'));
 app.use('/api/chat', require('./src/routes/chat'));
 app.use('/api/comments', require('./src/routes/comments'));
 app.use('/api/communications', require('./src/routes/communications'));
-app.use('/api/timesheet', require('./src/routes/timesheet'));
+app.use('/api/calendar', require('./src/routes/calendar'));
+app.use('/api/notes', require('./src/routes/notes'));
 
 app.use(notFound);
 app.use(errorHandler);

@@ -103,6 +103,13 @@ const AdminIcon = () => (
   </svg>
 );
 
+const CalendarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="4.5" width="18" height="16.5" rx="2" />
+    <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+  </svg>
+);
+
 const ClockIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="12" cy="12" r="9" />
@@ -139,4 +146,4 @@ const ChevronIcon = () => (
 );
 
 
-export { formatNotificationTime, parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };
+export { formatNotificationTime, parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };

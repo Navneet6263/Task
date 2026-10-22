@@ -93,5 +93,45 @@ const sendResetOtp = async (toEmail, otp) => {
   });
 };
 
-module.exports = { createTransporter, sendResetOtp, sendResetLink };
+const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const consoleMail = (title, body) => `
+  <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #d6dfda;border-radius:16px;background:#ffffff">
+    <p style="margin:0 0 18px;font-size:22px;font-weight:800;letter-spacing:-0.5px;color:#0f1f18">Green<span style="color:#17775a">Task</span>
+      <span style="font-size:11px;font-weight:700;color:#56665e;text-transform:uppercase;letter-spacing:1px;margin-left:6px">Console</span></p>
+    <h2 style="margin:0 0 12px;font-size:19px;color:#0f1f18">${title}</h2>
+    ${body}
+    <hr style="border:none;border-top:1px solid #eaf0ed;margin:24px 0 12px"/>
+    <p style="color:#8a9891;font-size:11px;margin:0">GreenTask staff will never ask you for this code or link.</p>
+  </div>`;
+
+/** Sends the 6-digit code for platform console sign-in. */
+const sendConsoleCode = async (toEmail, code) => {
+  const fromAddr = process.env.RESET_MAIL_USER || process.env.SMTP_USER;
+  await createTransporter('reset').sendMail({
+    from: `"GreenTask Security" <${fromAddr}>`,
+    to: toEmail,
+    subject: `${code} is your GreenTask console code`,
+    html: consoleMail('Your sign-in code', `
+      <p style="color:#56665e;font-size:14px;line-height:1.6">Enter this code to finish signing in to the GreenTask platform console. It expires in <strong>10 minutes</strong> and works once.</p>
+      <p style="font-family:Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#0f1f18;background:#f5f8f6;border-radius:12px;padding:16px;text-align:center;margin:20px 0">${code}</p>
+      <p style="color:#56665e;font-size:13px;line-height:1.6">If you did not just sign in, someone may know your password. Change it and tell the platform owner.</p>`),
+  });
+};
+
+/** Sends the one-time link a console helper uses to set their password. */
+const sendConsoleInvite = async (toEmail, name, setupUrl) => {
+  const fromAddr = process.env.RESET_MAIL_USER || process.env.SMTP_USER;
+  await createTransporter('reset').sendMail({
+    from: `"GreenTask Security" <${fromAddr}>`,
+    to: toEmail,
+    subject: 'Set your GreenTask console password',
+    html: consoleMail(`Hi ${escapeHtml(name || 'there')}, set your password`, `
+      <p style="color:#56665e;font-size:14px;line-height:1.6">You have been given access to the GreenTask platform console. Choose a password to finish setup. This link works once and expires in <strong>48 hours</strong>.</p>
+      <p style="margin:24px 0;text-align:center"><a href="${escapeHtml(setupUrl)}" style="background:#17775a;color:#ffffff;text-decoration:none;padding:13px 28px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block">Set my password</a></p>
+      <p style="color:#56665e;font-size:13px;line-height:1.6">After that you sign in with your email, your password and a code we email you each time.</p>
+      <p style="color:#8a9891;font-size:12px;word-break:break-all">Link not working? Copy this into your browser:<br/>${escapeHtml(setupUrl)}</p>`),
+  });
+};
+
+module.exports = { createTransporter, sendResetOtp, sendResetLink, sendConsoleCode, sendConsoleInvite };
 

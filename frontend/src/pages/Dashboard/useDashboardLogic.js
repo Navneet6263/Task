@@ -48,6 +48,8 @@ const buildInitialTaskForm = () => {
     enhancement_type: '', impact_level: '', effort_estimate: '', improvement_detail: '',
     // story fields
     story_role: '', epic: '', persona: '', story_notes: '',
+    // designed-form fields
+    custom_fields: {}, hours: '',
   };
 };
 

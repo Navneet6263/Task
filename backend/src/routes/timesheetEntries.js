@@ -5,13 +5,13 @@ const {
 } = require('../services/timesheetRules');
 const {
   db, isDuplicateKey, route, positive, requirePermission, getSettings, getOptions, isOrgMember, ENTRY_COLUMNS, ENTRY_FROM,
-  loadEntry, audit,
+  loadEntry, audit, canUseTask,
 } = require('./timesheetSupport');
 
 const PAGE_SIZE = 50;
 const REPORT_ROW_LIMIT = 10000;
 const GROUP_LABELS = { job_type: 'Job Type', work_type: 'Work Type', period_type: 'Period Type', registration_status: 'Registration Status', count_type: 'Count Type' };
-const ENTRY_FIELDS = ['client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number'];
+const ENTRY_FIELDS = ['task_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number'];
 
 function decorate(entry, req, settings, today) {
   const lock = lockState(entry, settings.lock_days, today);
@@ -39,6 +39,9 @@ async function checkReferences(req, entry, current) {
   if (entry.client_id && entry.client_id !== current?.client_id) {
     const [[client]] = await db.execute('SELECT id FROM timesheet_clients WHERE id = ? AND org_id = ? AND is_active = 1', [entry.client_id, req.orgId]);
     if (!client) errors.client_id = 'Pick a client from the list.';
+  }
+  if (entry.task_id && entry.task_id !== current?.task_id && !(await canUseTask(req, entry.task_id))) {
+    errors.task_id = 'Pick a task from the list.';
   }
   if (entry.agent_id && entry.agent_id !== current?.agent_id && !(await isOrgMember(req.orgId, entry.agent_id))) {
     errors.agent_id = 'Pick an agent from your organization.';
@@ -76,6 +79,7 @@ router.get('/entries', route(async (req, res) => {
   if (req.tsRole === 'person') { where.push("(e.status = 'SUBMITTED' OR e.created_by = ?)"); params.push(req.userId); }
   if (req.query.client_id) { where.push('e.client_id = ?'); params.push(positive(req.query.client_id, 'client')); }
   if (req.query.agent_id) { where.push('e.agent_id = ?'); params.push(positive(req.query.agent_id, 'agent')); }
+  if (req.query.task_id) { where.push('e.task_id = ?'); params.push(positive(req.query.task_id, 'task')); }
   if (req.query.from) { if (!isValidDate(req.query.from)) throw fail(422, 'Invalid from date'); where.push('e.date_worked >= ?'); params.push(req.query.from); }
   if (req.query.to) { if (!isValidDate(req.query.to)) throw fail(422, 'Invalid to date'); where.push('e.date_worked <= ?'); params.push(req.query.to); }
   const lockedSql = `(e.status = 'SUBMITTED' AND DATEADD(DAY, ?, e.submitted_on) < ? AND (e.unlocked_until IS NULL OR e.unlocked_until < ?))`;
@@ -150,8 +154,8 @@ router.post('/entries', route(async (req, res) => {
      BEGIN TRAN;
      DECLARE @entry_id INT;
      INSERT INTO timesheet_entries (org_id, client_id, job_type, work_type, date_worked, agent_id, period_type, period_ended,
-       registration_status, description, count_type, count_number, status, submitted_on, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+       registration_status, description, count_type, count_number, status, submitted_on, created_by, task_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
      SET @entry_id = SCOPE_IDENTITY();
      IF ? IS NOT NULL
        INSERT INTO timesheet_time_logs (org_id, entry_id, user_id, work_date, hours, note, created_by)
@@ -160,7 +164,7 @@ router.post('/entries', route(async (req, res) => {
      SELECT @entry_id AS insertId;`,
     [req.orgId, entry.client_id, entry.job_type, entry.work_type, entry.date_worked, entry.agent_id, entry.period_type, entry.period_ended,
       entry.registration_status, entry.description, entry.count_type, entry.count_number, mode === 'draft' ? 'DRAFT' : 'SUBMITTED',
-      mode === 'draft' ? null : today, req.userId,
+      mode === 'draft' ? null : today, req.userId, entry.task_id,
       entry.hours, req.orgId, logUser, logDate, entry.hours, 'Initial entry', req.userId]
   );
   await audit(req, result.insertId, mode === 'draft' ? 'CREATE_DRAFT' : 'CREATE', entry.hours ? `${entry.hours}h initial` : null);
@@ -184,11 +188,11 @@ router.put('/entries/:id', route(async (req, res) => {
   const changed = ENTRY_FIELDS.filter((key) => String(entry[key] ?? '') !== String(current[key] ?? ''));
   const [result] = await db.execute(
     `UPDATE timesheet_entries SET client_id = ?, job_type = ?, work_type = ?, date_worked = ?, agent_id = ?, period_type = ?,
-       period_ended = ?, registration_status = ?, description = ?, count_type = ?, count_number = ?,
+       period_ended = ?, registration_status = ?, description = ?, count_type = ?, count_number = ?, task_id = ?,
        updated_by = ?, version = version + 1, updated_at = SYSDATETIME()
      WHERE id = ? AND org_id = ? AND version = ? AND is_deleted = 0`,
     [entry.client_id, entry.job_type, entry.work_type, entry.date_worked, entry.agent_id, entry.period_type, entry.period_ended,
-      entry.registration_status, entry.description, entry.count_type, entry.count_number, req.userId, current.id, req.orgId, version]
+      entry.registration_status, entry.description, entry.count_type, entry.count_number, entry.task_id, req.userId, current.id, req.orgId, version]
   );
   if (!result.affectedRows) throw fail(409, 'Someone else changed this entry. Reload it and try again.');
   await audit(req, current.id, lock.locked ? 'EDIT_LOCKED_AS_ADMIN' : 'EDIT', changed.length ? `Changed: ${changed.join(', ')}` : 'No field changes');
@@ -352,11 +356,12 @@ router.get('/reports', requirePermission((role) => permissionsFor(role).view_rep
     `SELECT l.id, CONVERT(VARCHAR(10), l.work_date, 23) AS work_date, l.hours, l.note, l.user_id, u.name AS user_name,
        e.id AS entry_id, e.client_id, c.name AS client_name, e.job_type, e.work_type, e.period_type,
        CONVERT(VARCHAR(10), e.period_ended, 23) AS period_ended, CONVERT(VARCHAR(10), e.date_worked, 23) AS date_worked,
-       e.registration_status, e.count_type, e.count_number
+       e.registration_status, e.count_type, e.count_number, e.task_id, tk.title AS task_title
      FROM timesheet_time_logs l
      JOIN timesheet_entries e ON e.id = l.entry_id AND e.org_id = l.org_id
      JOIN timesheet_clients c ON c.id = e.client_id AND c.org_id = e.org_id
      LEFT JOIN users u ON u.id = l.user_id
+     LEFT JOIN tasks tk ON tk.id = e.task_id AND tk.org_id = e.org_id
      WHERE ${where.join(' AND ')}
      ORDER BY c.name ASC, e.date_worked ASC, e.id ASC, l.work_date ASC, l.id ASC
      OFFSET 0 ROWS FETCH NEXT ${REPORT_ROW_LIMIT + 1} ROWS ONLY`,

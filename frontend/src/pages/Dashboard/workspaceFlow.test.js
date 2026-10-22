@@ -2,10 +2,11 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './index';
-import { tasks, teams } from '../../services/api';
+import { calendar, tasks, teams } from '../../services/api';
 jest.mock('../../services/api', () => ({
   tasks: { getByTeam: jest.fn(), getClients: jest.fn(), getFormOptions: jest.fn(), getDetail: jest.fn(), update: jest.fn() },
   teams: { getAll: jest.fn(), getMembers: jest.fn() },
+  calendar: { events: jest.fn() },
 }));
 let root, container;
 const task = { id: 8, title: 'Fix login', team_id: 2, priority: 'HIGH', status: 'TODO', issue_type: 'bug', version: 3 };
@@ -17,6 +18,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   teams.getAll.mockResolvedValue({ data: [{ id: 2, name: 'Test Team' }] }); teams.getMembers.mockResolvedValue({ data: [] });
   tasks.getClients.mockResolvedValue({ data: ['Acme'] });
+  calendar.events.mockResolvedValue({ data: { events: [], tasks: [] } });
   tasks.getFormOptions.mockResolvedValue({ data: { task_types: [], products: [], categories: [] } });
   tasks.getByTeam.mockResolvedValue({ data: { data: [task], summary, team_summary: summary, pagination: { total: 219, total_pages: 19 } } });
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);

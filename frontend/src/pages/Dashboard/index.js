@@ -8,6 +8,12 @@ import Reminders from './Reminders';
 import TaskDetailModal from './TaskDetailModal';
 import TaskWorkspace from './TaskWorkspace';
 import TeamSnapshot from './TeamSnapshot';
+import './dashboardLayout.css';
+import { Banner, Button, EmptyState } from '../../ui';
+import { readPreference, writePreference } from '../../services/preferences';
+import StatusOverview from './StatusOverview';
+import UpNext from './UpNext';
+import useAgenda from './useAgenda';
 import { useDashboardData } from './useDashboardData';
 import { useDashboardLogic } from './useDashboardLogic';
 
@@ -17,7 +23,9 @@ const Dashboard = () => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showMgrModal, setShowMgrModal] = useState(false);
   const [orgUsers, setOrgUsers] = useState([]);
-  const [showInsights, setShowInsights] = useState(false);
+  const [showInsights, setShowInsights] = useState(() => readPreference('dashboard-insights', true));
+  const agenda = useAgenda();
+  const toggleInsights = () => setShowInsights((current) => { writePreference('dashboard-insights', !current); return !current; });
   const {
     teamList, selectedTeam, selectTeam, members, taskList, view, setView,
     page, setPage, totalPages, totalTasks, loading, loadError,
@@ -40,33 +48,26 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="flex flex-col gap-4 text-gray-900">
-      <style>{`
-        @keyframes dashRise { to { opacity: 1; transform: translateY(0); } }
-        @keyframes dsv2Slide { from { opacity: 0; transform: scale(0.94) translateY(12px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-      `}</style>
-
-      <DashboardHero user={user} today={today} teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam} onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal} />
-      <div className="flex justify-between items-center text-sm text-slate-500"><span>Team totals · filters below only change your task results</span><button type="button" onClick={() => setShowInsights(!showInsights)} className="rounded-lg border bg-white px-3 py-2">{showInsights ? 'Hide insights' : 'Show insights'}</button></div>
+    <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
+      <DashboardHero
+        user={user} today={today} agenda={agenda} overdue={stats.overdue}
+        teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam}
+        onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal}
+        onFocus={setFocusMode} showInsights={showInsights} onToggleInsights={toggleInsights}
+      />
       <MetricCards stats={stats} teamList={teamList} />
+      <StatusOverview stats={stats} />
 
-      {loadError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" role="alert">
-          {loadError} <button type="button" onClick={refreshWorkspace} className="ml-3 underline">Retry</button>
-        </div>
-      )}
+      {loadError && <Banner tone="danger" action={<Button size="sm" onClick={refreshWorkspace}>Retry</Button>}><span role="alert">{loadError}</span></Banner>}
 
       {!selectedTeam && (
-        <section className="rounded-2xl px-5 py-8 border border-dashed border-gray-300 bg-white/75 text-center">
-          <h2 className="font-display mb-2">No team selected</h2>
-          <p className="text-sm text-gray-500">Open Team Management and create a team to start assigning tasks.</p>
-        </section>
+        <EmptyState title="No team selected">Open Team Management and create a team to start assigning tasks.</EmptyState>
       )}
 
       {selectedTeam && (
         <section className={`dashboard-workspace-grid grid ${showInsights ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
           <div className="flex flex-col gap-3.5 min-w-0">
-            {loading && <span className="text-xs font-semibold text-blue-600">Refreshing tasks...</span>}
+            {loading && <span role="status" className="text-xs font-semibold text-accent">Refreshing tasks...</span>}
             <TaskWorkspace
               sort={data.sort} setSort={data.setSort} onUpdated={refreshWorkspace} view={view} setView={setView} selectedTeam={selectedTeam}
               filtered={taskList} paginated={taskList} members={members}
@@ -90,7 +91,8 @@ const Dashboard = () => {
             />
           </div>
 
-          {showInsights && <aside className="dashboard-insights flex flex-col gap-3.5 sticky top-[78px] min-w-0">
+          {showInsights && <aside className="dashboard-insights sticky top-[calc(var(--shell-header-height,57px)+16px)] flex min-w-0 flex-col gap-3.5">
+            <UpNext agenda={agenda} />
             <PriorityBreakdown priorityStats={priorityStats} stats={stats} />
             <TeamSnapshot memberSummary={memberSummary} members={members} maxLoad={maxLoad} />
             <Reminders reminders={reminders} />

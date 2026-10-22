@@ -4,22 +4,21 @@ import fs from 'fs';
 import path from 'path';
 import BrandLogo from './BrandLogo';
 
-test('shared wordmark uses the blue leaf asset with cache-busting', () => {
+test('brand is a text-only wordmark in theme colors, with no image', () => {
   const markup = renderToStaticMarkup(<BrandLogo subtitle="Workspace" compact />);
-  expect(markup).toContain('Green<b>Task</b>');
-  expect(markup).toContain('/brand/greentask-mark-192.png?v=blue-2');
+  expect(markup).toMatch(/Green<b class="[^"]*text-accent[^"]*">Task<\/b>/);
   expect(markup).toContain('greentask-brand--compact');
   expect(markup).toContain('Workspace');
-  expect(markup).toContain('alt=""');
-  const css = fs.readFileSync(path.join(__dirname, 'BrandLogo.css'), 'utf8');
-  expect(css).toContain('#2563eb');
-  expect(css).toContain('#1686cf');
-  expect(css).not.toContain('#07543d');
+  expect(markup).not.toContain('<img');
 });
 
-test('standalone mark has an accessible name and dark surfaces have a light wordmark', () => {
-  expect(renderToStaticMarkup(<BrandLogo iconOnly />)).toContain('alt="GreenTask"');
-  expect(renderToStaticMarkup(<BrandLogo inverse />)).toContain('greentask-brand--inverse');
+test('icon-only use keeps an accessible name and dark surfaces get a light wordmark', () => {
+  const iconOnly = renderToStaticMarkup(<BrandLogo iconOnly subtitle="Hidden" />);
+  expect(iconOnly).toContain('aria-label="GreenTask"');
+  expect(iconOnly).not.toContain('Hidden');
+  const inverse = renderToStaticMarkup(<BrandLogo inverse />);
+  expect(inverse).toContain('greentask-brand--inverse');
+  expect(inverse).toContain('text-white');
 });
 
 test('browser and home-screen icons exist at their declared dimensions', () => {

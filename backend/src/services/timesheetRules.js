@@ -133,6 +133,7 @@ function validateEntry(body, mode, today) {
   const full = mode !== 'draft';
   const entry = {
     client_id: id(body, 'client_id', 'Client', errors, true),
+    task_id: id(body, 'task_id', 'Task', errors, false),
     job_type: text(body, 'job_type', 120, 'Job Type', errors, full),
     work_type: text(body, 'work_type', 120, 'Work Type', errors, full),
     date_worked: date(body, 'date_worked', 'Date worked', errors, full, today, true),

@@ -43,6 +43,9 @@ export const teams = {
   getMembers: (teamId) => cachedGet(api, `/teams/${teamId}/members`),
   addMember: (teamId, data) => api.post(`/teams/${teamId}/members`, data),
   removeMember: (teamId, userId) => api.delete(`/teams/${teamId}/members/${userId}`),
+  update: (teamId, data) => api.patch(`/teams/${teamId}`, data),
+  candidates: (teamId, q = '', signal) => api.get(`/teams/${teamId}/candidates`, { params: { q }, signal }),
+  updateMemberRole: (teamId, userId, role) => api.patch(`/teams/${teamId}/members/${userId}`, { role }),
 };
 
 export const tasks = {
@@ -66,7 +69,16 @@ export const tasks = {
       },
     }),
   getDetail: (taskId) => api.get(`/tasks/detail/${taskId}`),
-  getMy: (page = 1, limit = 24, status = '') => api.get('/tasks/my', { params: { page, limit, status } }),
+  getMy: (page = 1, limit = 24, status = '', extra = {}, signal) => api.get('/tasks/my', {
+    signal,
+    params: {
+      page, limit, status,
+      ...(extra.priorities?.length ? { priorities: JSON.stringify(extra.priorities) } : {}),
+      ...(extra.search ? { search: extra.search } : {}),
+      ...(extra.sort ? { sort: extra.sort } : {}),
+      ...(extra.focus ? { focus: extra.focus } : {}),
+    },
+  }),
 
   getFormOptions: () => cachedGet(api, '/tasks/form-options', 300000),
   createFormOption: (data) => api.post('/tasks/form-options', data),
@@ -87,11 +99,59 @@ export const tasks = {
   getClients: () => cachedGet(api, '/tasks/clients'),
   markTaskViewed: (id, lastCommentId = 0) => api.patch(`/tasks/${id}/view`, { last_comment_id: lastCommentId }),
   snooze: (id, until) => api.patch(`/task-productivity/${id}/snooze`, { until }),
+  timeLogs: (id) => api.get(`/tasks/${id}/time-logs`),
+  addTimeLog: (id, data) => api.post(`/tasks/${id}/time-logs`, data),
+  deleteTimeLog: (id, logId) => api.delete(`/tasks/${id}/time-logs/${logId}`),
+};
+
+// Add-on module; the server refuses every call when it is not enabled for the organization.
+export const timesheet = {
+  status: () => cachedGet(api, '/timesheet/status', 300000),
+  config: () => api.get('/timesheet/config'),
+  tasks: (params) => api.get('/timesheet/tasks', { params }),
+  entries: (params) => api.get('/timesheet/entries', { params }),
+  entry: (id) => api.get(`/timesheet/entries/${id}`),
+  create: (data) => api.post('/timesheet/entries', data),
+  update: (id, data) => api.put(`/timesheet/entries/${id}`, data),
+  submit: (id) => api.post(`/timesheet/entries/${id}/submit`),
+  remove: (id) => api.delete(`/timesheet/entries/${id}`),
+  addLog: (id, data) => api.post(`/timesheet/entries/${id}/logs`, data),
+  removeLog: (id, logId) => api.delete(`/timesheet/entries/${id}/logs/${logId}`),
+  requestUnlock: (id, reason) => api.post(`/timesheet/entries/${id}/unlock-requests`, { reason }),
+  unlockRequests: (status = 'PENDING') => api.get('/timesheet/unlock-requests', { params: { status } }),
+  decideUnlock: (id, decision) => api.patch(`/timesheet/unlock-requests/${id}`, { decision }),
+  clients: () => api.get('/timesheet/clients'),
+  createClient: (name) => api.post('/timesheet/clients', { name }),
+  updateClient: (id, data) => api.put(`/timesheet/clients/${id}`, data),
+  options: () => api.get('/timesheet/options'),
+  addOption: (data) => api.post('/timesheet/options', data),
+  setOptionActive: (id, isActive) => api.patch(`/timesheet/options/${id}`, { is_active: isActive }),
+  saveSettings: (data) => api.put('/timesheet/settings', data),
+  report: (params) => api.get('/timesheet/reports', { params }),
+};
+
+// Settings → Clients: the organization's client list and the "pick only from the list" rule.
+export const clients = {
+  list: () => api.get('/clients'),
+  create: (name) => api.post('/clients', { name }),
+  update: (id, data) => api.patch(`/clients/${id}`, data),
+  setPickOnly: (pickOnly) => api.put('/clients/settings', { pick_only: pickOnly }),
+};
+
+// The organization's designed "Create task" form (null layout = classic form).
+export const taskForm = {
+  get: () => api.get('/task-form'),
+  save: (layout, version) => api.put('/task-form', { layout, version }),
+  reset: () => api.delete('/task-form'),
+  // Hours logged on tasks across the organization, for reports (managers and admins).
+  timeReport: (params) => api.get('/task-form/time-report', { params }),
 };
 
 export const logs = {
-  getByTeam: (teamId, page = 1, limit = 20, userId = '', activity = '') =>
-    api.get(`/logs/team/${teamId}?page=${page}&limit=${limit}${userId ? '&userId=' + encodeURIComponent(userId) : ''}${activity ? '&activity=' + encodeURIComponent(activity) : ''}`),
+  getByTeam: (teamId, page = 1, limit = 20, userId = '', activity = '', extra = {}) =>
+    api.get(`/logs/team/${teamId}?page=${page}&limit=${limit}${userId ? '&userId=' + encodeURIComponent(userId) : ''}${activity ? '&activity=' + encodeURIComponent(activity) : ''}`, {
+      params: { ...(extra.q ? { q: extra.q } : {}), ...(extra.from ? { from: extra.from } : {}), ...(extra.to ? { to: extra.to } : {}) },
+    }),
   getMy: (page = 1, limit = 20) => api.get(`/logs/my?page=${page}&limit=${limit}`),
 };
 
@@ -118,6 +178,8 @@ export const companyAdmin = {
 
 export const analytics = {
   report: (teamId, params = {}, signal) => api.get(`/analytics/report/${teamId}`, { params, signal }),
+  reportTasks: (teamId, params = {}, signal) => api.get(`/analytics/report/${teamId}/tasks`, { params, signal }),
+  myPerformance: (days = 90, signal) => api.get('/analytics/me/performance', { params: { days }, signal }),
   suggestAssignee: (teamId, priority) => api.get(`/analytics/suggest-assignee?teamId=${teamId}&priority=${priority}`),
   energy: (teamId) => api.get(`/analytics/energy/${teamId}`),
   performance: (userId) => api.get(`/analytics/performance/${userId}`),
@@ -140,31 +202,48 @@ export const comments = {
 
 export const communications = {
   send: (data) => api.post('/communications/send', data),
+  history: (page = 1, mine = false) => api.get('/communications/history', { params: { page, ...(mine ? { mine: 'true' } : {}) } }),
+  historyItem: (id) => api.get(`/communications/history/${id}`),
+  templates: () => api.get('/communications/templates'),
+  createTemplate: (data) => api.post('/communications/templates', data),
+  updateTemplate: (id, data) => api.put(`/communications/templates/${id}`, data),
+  deleteTemplate: (id) => api.delete(`/communications/templates/${id}`),
+};
+
+export const chat = {
+  unread: () => api.get('/chat/unread/counts'),
+  threads: (teamId) => api.get(`/chat/${teamId}/threads`),
+  messages: (teamId, threadId, before = 0) => api.get(`/chat/${teamId}`, { params: { thread_id: threadId, ...(before ? { before } : {}) } }),
+  send: (teamId, data) => api.post(`/chat/${teamId}`, data),
+  markRead: (teamId, threadId) => api.post(`/chat/${teamId}/read`, { thread_id: threadId }),
+  direct: (teamId, userId) => api.post(`/chat/${teamId}/direct-thread`, { target_user_id: userId }),
+  activeSession: (teamId) => api.get(`/chat/${teamId}/review-sessions/active`),
+  sessions: (teamId) => api.get(`/chat/${teamId}/review-sessions`),
+  startSession: (teamId, data) => api.post(`/chat/${teamId}/review-sessions`, data),
+  joinSession: (id) => api.post(`/chat/review-sessions/${id}/join`),
+  leaveSession: (id) => api.post(`/chat/review-sessions/${id}/leave`),
+  endSession: (id, reason) => api.post(`/chat/review-sessions/${id}/end`, { reason }),
+  decideSession: (id, decision, remark) => api.post(`/chat/review-sessions/${id}/decision`, { decision, remark }),
+};
+
+export const notes = {
+  list: (q = '') => api.get('/notes', { params: q ? { q } : {} }),
+  create: (data) => api.post('/notes', data),
+  update: (id, data) => api.put(`/notes/${id}`, data),
+  pin: (id, pinned) => api.patch(`/notes/${id}/pin`, { pinned }),
+  remove: (id) => api.delete(`/notes/${id}`),
+};
+
+export const calendar = {
+  events: (from, to, scope) => api.get('/calendar/events', { params: { from, to, ...(scope === 'team' ? { scope } : {}) } }),
+  event: (id) => api.get(`/calendar/events/${id}`),
+  members: () => cachedGet(api, '/calendar/members', 300000),
+  create: (data) => api.post('/calendar/events', data),
+  update: (id, data) => api.put(`/calendar/events/${id}`, data),
+  remove: (id) => api.delete(`/calendar/events/${id}`),
+  respond: (id, response) => api.patch(`/calendar/events/${id}/response`, { response }),
 };
 
 // Add-on module; the server refuses every call unless the active organization has it enabled.
-export const timesheet = {
-  status: () => cachedGet(api, '/timesheet/status', 300000),
-  config: () => api.get('/timesheet/config'),
-  entries: (params) => api.get('/timesheet/entries', { params }),
-  entry: (id) => api.get(`/timesheet/entries/${id}`),
-  create: (data) => api.post('/timesheet/entries', data),
-  update: (id, data) => api.put(`/timesheet/entries/${id}`, data),
-  submit: (id) => api.post(`/timesheet/entries/${id}/submit`),
-  remove: (id) => api.delete(`/timesheet/entries/${id}`),
-  addLog: (id, data) => api.post(`/timesheet/entries/${id}/logs`, data),
-  removeLog: (id, logId) => api.delete(`/timesheet/entries/${id}/logs/${logId}`),
-  requestUnlock: (id, reason) => api.post(`/timesheet/entries/${id}/unlock-requests`, { reason }),
-  unlockRequests: (status = 'PENDING') => api.get('/timesheet/unlock-requests', { params: { status } }),
-  decideUnlock: (id, decision) => api.patch(`/timesheet/unlock-requests/${id}`, { decision }),
-  clients: () => api.get('/timesheet/clients'),
-  createClient: (name) => api.post('/timesheet/clients', { name }),
-  updateClient: (id, data) => api.put(`/timesheet/clients/${id}`, data),
-  options: () => api.get('/timesheet/options'),
-  addOption: (data) => api.post('/timesheet/options', data),
-  setOptionActive: (id, isActive) => api.patch(`/timesheet/options/${id}`, { is_active: isActive }),
-  saveSettings: (data) => api.put('/timesheet/settings', data),
-  report: (params) => api.get('/timesheet/reports', { params }),
-};
 
 export default api;

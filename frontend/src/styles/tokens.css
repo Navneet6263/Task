@@ -1,0 +1,44 @@
+/* Design tokens as RGB channels (Tailwind adds alpha). Light is the default. */
+:root,
+.theme-light {
+  --c-canvas: 243 246 244;
+  --c-surface: 255 255 255;
+  --c-subtle: 234 240 237;
+  --c-ink: 22 32 27;
+  --c-muted: 86 102 94;
+  --c-line: 214 223 218;
+  --c-accent: 23 119 90;
+  --c-accent-fg: 255 255 255;
+  --c-accent-soft: 220 239 230;
+  --c-warn: 143 80 0;
+  --c-warn-soft: 251 239 217;
+  --c-danger: 179 38 30;
+  --c-danger-soft: 250 230 228;
+  --c-info: 33 85 163;
+  --c-info-soft: 227 235 248;
+  color-scheme: light;
+}
+
+.dark {
+  --c-canvas: 14 20 17;
+  --c-surface: 21 29 25;
+  --c-subtle: 28 38 33;
+  --c-ink: 226 234 230;
+  --c-muted: 152 168 160;
+  --c-line: 42 56 50;
+  --c-accent: 76 191 145;
+  --c-accent-fg: 5 20 13;
+  --c-accent-soft: 23 58 44;
+  --c-warn: 240 179 90;
+  --c-warn-soft: 58 42 18;
+  --c-danger: 240 138 130;
+  --c-danger-soft: 61 26 24;
+  --c-info: 141 180 240;
+  --c-info-soft: 24 38 59;
+  color-scheme: dark;
+}
+
+/* Screens not yet moved to the new design stay light inside a dark shell. */
+.dark .theme-light {
+  color-scheme: light;
+}

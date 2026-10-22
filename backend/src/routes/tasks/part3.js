@@ -1,5 +1,10 @@
 const { express, db, authenticate, canAccessTeam, requireTeamAccess, getTaskDetail, listTeamTasks, ws, TASK_STATUSES, TASK_ISSUE_TYPES, normalizeText, normalizeDate, normalizeIssueType, normalizeReferenceImage, normalizeUserId, normalizeTaskPayload, canManageTaskForm, formatTaskFormOptions, ensureDefaultTaskFormOptions, TASK_OPTION_GROUPS, logActivity } = require('./taskSupport');
 const router = express.Router();
+const { getOrgLayout, parseCustom } = require('../../services/taskFormStore');
+const { resolveTaskClient } = require('../../services/orgClients');
+const { cleanCustomValues, isPastEditWindow } = require('../../services/taskFormLayout');
+// Status changes stay possible after the edit window; everything else needs an admin.
+const ALWAYS_EDITABLE = ['status', 'version', 'priority_locked'];
 const { notifyTaskFollowers } = require('../../services/taskNotifications');
 
 router.put('/:id', authenticate, async (req, res) => {
@@ -16,6 +21,21 @@ router.put('/:id', authenticate, async (req, res) => {
 
     if (!await requireTeamAccess(req, res, currentTask.team_id)) return;
 
+    const layout = await getOrgLayout(currentTask.org_id);
+    const isAdmin = ['admin', 'company_admin'].includes(req.userRole);
+    if (layout && !isAdmin && isPastEditWindow(layout, currentTask.created_at) && Object.keys(req.body).some((key) => !ALWAYS_EDITABLE.includes(key))) {
+      return res.status(423).json({ error: `This task is past its ${layout.settings.edit_window_days}-day edit window. Ask an admin to make changes.`, code: 'LOCKED' });
+    }
+    let nextCustomFields = currentTask.custom_fields || null;
+    if (req.body.custom_fields !== undefined && layout) {
+      try {
+        const merged = { ...parseCustom(currentTask.custom_fields), ...cleanCustomValues(layout, req.body.custom_fields, { partial: true }) };
+        nextCustomFields = Object.keys(merged).length ? JSON.stringify(merged) : null;
+      } catch (error) {
+        return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
+      }
+    }
+
     const nextAssignedTo = req.body.assigned_to === undefined ? currentTask.assigned_to : normalizeUserId(req.body.assigned_to);
     const nextTitle = req.body.title === undefined ? currentTask.title : normalizeText(req.body.title, 255);
     const nextDescription = req.body.description === undefined ? currentTask.description : normalizeText(req.body.description, 5000);
@@ -30,7 +50,11 @@ router.put('/:id', authenticate, async (req, res) => {
     const nextDueDate = normalizeDate(req.body.due_date === undefined ? currentTask.due_date : req.body.due_date, 'due_date');
     const nextReferenceImage = req.body.reference_image === undefined ? currentTask.reference_image : normalizeReferenceImage(req.body.reference_image);
 
-    const nextClientName = req.body.client_name === undefined ? currentTask.client_name : normalizeText(req.body.client_name, 255);
+    let nextClientName = req.body.client_name === undefined ? currentTask.client_name : normalizeText(req.body.client_name, 255);
+    if (req.body.client_name !== undefined && nextClientName !== currentTask.client_name) {
+      try { nextClientName = await resolveTaskClient(currentTask.org_id, nextClientName, req.userRole, req.userId); }
+      catch (error) { return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' }); }
+    }
     const nextSeverity = req.body.severity === undefined ? currentTask.severity : normalizeText(req.body.severity, 20);
     const nextBugType = req.body.bug_type === undefined ? currentTask.bug_type : normalizeText(req.body.bug_type, 50);
     const nextEnvironment = req.body.environment === undefined ? currentTask.environment : normalizeText(req.body.environment, 30);
@@ -88,7 +112,7 @@ router.put('/:id', authenticate, async (req, res) => {
            client_name=?, severity=?, bug_type=?, environment=?, affected_module=?, steps_to_reproduce=?, 
            feature_area=?, story_points=?, feature_priority=?, acceptance_criteria=?, 
            enhancement_type=?, impact_level=?, effort_estimate=?, improvement_detail=?, 
-           story_role=?, epic=?, persona=?, story_notes=?, 
+           story_role=?, epic=?, persona=?, story_notes=?, custom_fields=?,
            completed_at=CASE WHEN ? = 'DONE' THEN CASE WHEN status = 'DONE' THEN completed_at ELSE CURRENT_TIMESTAMP END ELSE NULL END,
            version=version+1, updated_at=CURRENT_TIMESTAMP
        WHERE id=? AND is_deleted=FALSE AND version=?`,
@@ -97,7 +121,7 @@ router.put('/:id', authenticate, async (req, res) => {
         nextClientName, nextSeverity, nextBugType, nextEnvironment, nextAffectedModule, nextStepsToReproduce,
         nextFeatureArea, nextStoryPoints, nextFeaturePriority, nextAcceptanceCriteria,
         nextEnhancementType, nextImpactLevel, nextEffortEstimate, nextImprovementDetail,
-        nextStoryRole, nextEpic, nextPersona, nextStoryNotes,
+        nextStoryRole, nextEpic, nextPersona, nextStoryNotes, nextCustomFields,
         nextStatus, req.params.id, currentTask.version,
       ]
     );

@@ -436,10 +436,27 @@ const getActiveSession = async (teamId) => {
   return getSessionDetails(session.id);
 };
 
+// A screen share started from a 1:1 conversation is private to those two people.
+const sessionThread = async (threadId) => {
+  if (!threadId) return null;
+  const [[thread]] = await db.execute('SELECT thread_type, direct_user_one, direct_user_two FROM team_discussion_threads WHERE id = ?', [threadId]);
+  return thread || null;
+};
+const directPair = (thread) => (thread && String(thread.thread_type || 'group') === 'direct'
+  ? [thread.direct_user_one, thread.direct_user_two].map(Number) : null);
+const canSeeSession = async (session, userId) => {
+  const pair = directPair(await sessionThread(session?.thread_id));
+  return !pair || pair.includes(Number(userId));
+};
+
 const broadcastSession = async (req, sessionId) => {
   const payload = await getSessionDetails(sessionId);
   const ws = req.app.get('ws');
-  if (payload && ws) ws.broadcast(payload.team_id, 'review_session_updated', payload);
+  if (payload && ws) {
+    const pair = directPair(await sessionThread(payload.thread_id));
+    if (pair) pair.forEach((userId) => ws.sendToUser(userId, 'review_session_updated', payload));
+    else ws.broadcast(payload.team_id, 'review_session_updated', payload);
+  }
   return payload;
 };
 
@@ -553,7 +570,8 @@ router.get('/:teamId/review-sessions/active', authenticate, async (req, res) => 
       return res.status(403).json({ error: 'Team access denied' });
     }
 
-    const session = await getActiveSession(teamId);
+    const active = await getActiveSession(teamId);
+    const session = active && await canSeeSession(active, req.userId) ? active : null;
     res.json({
       session,
       can_review: await canReviewTeam(req, teamId),
@@ -570,7 +588,9 @@ router.get('/:teamId/review-sessions', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Team access denied' });
     }
 
-    const sessions = await getHistory(teamId);
+    const all = await getHistory(teamId);
+    const sessions = [];
+    for (const item of all) if (await canSeeSession(item, req.userId)) sessions.push(item);
     res.json({
       sessions,
       can_review: await canReviewTeam(req, teamId),
@@ -597,7 +617,7 @@ router.post('/:teamId/review-sessions', authenticate, async (req, res) => {
     );
 
     if (existing) {
-      return res.status(409).json({ error: 'An active review session is already running' });
+      return res.status(409).json({ error: 'Another screen share is already running in this team. Try again when it ends.' });
     }
 
     const thread = await resolveThread(teamId, Number(req.body?.thread_id || 0), req.userId);
@@ -645,6 +665,10 @@ router.post('/review-sessions/:sessionId/join', authenticate, async (req, res) =
 
     if (session.status !== 'active') {
       return res.status(422).json({ error: 'This session is no longer live' });
+    }
+
+    if (!(await canSeeSession(session, req.userId))) {
+      return res.status(403).json({ error: 'This screen share is private to a 1:1 conversation' });
     }
 
     if (session.sharer_id !== req.userId) {

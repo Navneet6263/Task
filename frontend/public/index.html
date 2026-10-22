@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#3b94ef" />
+    <meta name="theme-color" content="#17775a" />
     <meta name="description" content="GreenTask - Your team's tasks, progress, and collaboration in one workspace." />
     <meta name="application-name" content="GreenTask" />
     <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico?v=blue-2" />
@@ -12,6 +12,16 @@
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/brand/apple-touch-icon.png?v=blue-2" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json?v=blue-2" />
     <title>GreenTask</title>
+    <script>
+      // Apply the saved theme before first paint (same rules as src/theme/theme.js).
+      (function () {
+        try {
+          var pref = localStorage.getItem('theme_preference');
+          var dark = pref === 'dark' || ((pref !== 'light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

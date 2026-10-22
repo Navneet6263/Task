@@ -1,26 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { comments as commentsApi, tasks } from '../services/api';
-import './TaskComments.css';
+import { Button, ErrorText, Loading, Textarea } from '../ui';
 
-/* ─── avatar palette ─────────────────────────────────────────────── */
-const AVATAR_PALETTE = [
-  'linear-gradient(135deg, #2f5dff, #0ea5e9)',
-  'linear-gradient(135deg, #10b981, #34d399)',
-  'linear-gradient(135deg, #f97316, #fbbf24)',
-  'linear-gradient(135deg, #8b5cf6, #a78bfa)',
-  'linear-gradient(135deg, #ec4899, #f43f5e)',
-  'linear-gradient(135deg, #06b6d4, #67e8f9)',
-  'linear-gradient(135deg, #14b8a6, #2dd4bf)',
-  'linear-gradient(135deg, #f59e0b, #fcd34d)',
-];
+const firstLetter = (name) => (name ? String(name).trim()[0].toUpperCase() : '?');
 
-const avatarGradient = (userId) =>
-  AVATAR_PALETTE[(userId || 0) % AVATAR_PALETTE.length];
-
-const firstLetter = (name) =>
-  name ? String(name).trim()[0].toUpperCase() : '?';
-
-/* ─── relative time helper ──────────────────────────────────────── */
 const timeAgo = (isoString) => {
   const diff = Date.now() - new Date(isoString).getTime();
   const minutes = Math.floor(diff / 60_000);
@@ -34,255 +17,124 @@ const timeAgo = (isoString) => {
   return `${months} month${months === 1 ? '' : 's'} ago`;
 };
 
-/* ─── main component ────────────────────────────────────────────── */
-const TaskComments = ({ taskId, members = [] }) => {
-  const currentUser = JSON.parse(
-    localStorage.getItem('user') || localStorage.getItem('company_user') || '{}'
-  );
-  const currentUserId = currentUser?.id;
+function CommentItem({ comment: c, isOwn, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(c.comment);
+  const wasEdited = c.updated_at && c.created_at && c.updated_at !== c.created_at;
+  const save = async () => { if (text.trim() && await onSave(c.id, text.trim())) setEditing(false); };
+  const cancel = () => { setEditing(false); setText(c.comment); };
 
+  return (
+    <div className="flex gap-3">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-bold text-accent">{firstLetter(c.user_name)}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-sm font-semibold">{c.user_name || 'Unknown'}</span>
+          <span className="text-xs text-muted">{timeAgo(c.created_at)}</span>
+          {wasEdited && <span className="text-xs italic text-muted">(edited)</span>}
+        </div>
+        {editing ? (
+          <>
+            <Textarea className="mt-1" value={text} autoFocus onChange={(event) => setText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); save(); }
+                if (event.key === 'Escape') cancel();
+              }} />
+            <div className="mt-1.5 flex gap-1.5"><Button size="sm" variant="primary" onClick={save}>Save</Button><Button size="sm" onClick={cancel}>Cancel</Button></div>
+          </>
+        ) : (
+          <>
+            <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.comment}</p>
+            {isOwn && (
+              <div className="mt-1 flex gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => onDelete(c.id)}>Delete</Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TaskComments = ({ taskId, members = [] }) => {
+  const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
+  const currentUserId = currentUser?.id;
   const [commentList, setCommentList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [newText, setNewText] = useState('');
   const [mentions, setMentions] = useState([]);
   const [sending, setSending] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState('');
-
   const listRef = useRef(null);
-  const textareaRef = useRef(null);
 
-  /* ─ fetch comments ─ */
   const fetchComments = useCallback(async () => {
     if (!taskId) return;
     try {
       setLoading(true);
       const res = await commentsApi.getByTask(taskId);
-      setCommentList(Array.isArray(res.data) ? res.data : []);
+      const rows = Array.isArray(res.data) ? res.data : [];
+      setCommentList(rows);
       setError('');
-      await tasks.markTaskViewed(taskId, Math.max(0, ...(Array.isArray(res.data) ? res.data : []).map(comment => Number(comment.id))));
-    } catch (err) {
-      setError('Could not load comments.');
-    } finally {
-      setLoading(false);
-    }
+      await tasks.markTaskViewed(taskId, Math.max(0, ...rows.map((comment) => Number(comment.id))));
+    } catch { setError('Could not load comments.'); }
+    finally { setLoading(false); }
   }, [taskId]);
+  useEffect(() => { fetchComments(); }, [fetchComments]);
+  useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [commentList]);
 
-  useEffect(() => {
-    fetchComments();
-  }, [fetchComments]);
-
-  /* auto-scroll to bottom on new comment */
-  useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [commentList]);
-
-  /* ─ post new comment ─ */
   const handleSend = async () => {
     const text = newText.trim();
     if (!text || sending) return;
-    setSending(true);
-    setError('');
+    setSending(true); setError('');
     try {
       const res = await commentsApi.create({ task_id: taskId, comment: text, mentioned_user_ids: mentions });
       setCommentList((prev) => [...prev, res.data]);
-      setNewText('');
-      setMentions([]);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to post comment.');
-    } finally {
-      setSending(false);
-    }
+      setNewText(''); setMentions([]);
+    } catch (err) { setError(err.response?.data?.error || 'Failed to post comment.'); }
+    finally { setSending(false); }
   };
-
-  /* Enter = send, Shift+Enter = new line */
-  const handleKeyDown = (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
-  };
-
-  /* ─ start editing ─ */
-  const startEdit = (comment) => {
-    setEditingId(comment.id);
-    setEditText(comment.comment);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditText('');
-  };
-
-  /* ─ save edit ─ */
-  const handleEditSave = async (commentId) => {
-    const text = editText.trim();
-    if (!text) return;
+  const handleEditSave = async (commentId, text) => {
     try {
       const res = await commentsApi.update(commentId, { comment: text });
-      setCommentList((prev) =>
-        prev.map((c) => (c.id === commentId ? res.data : c))
-      );
-      cancelEdit();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update comment.');
-    }
+      setCommentList((prev) => prev.map((c) => (c.id === commentId ? res.data : c)));
+      return true;
+    } catch (err) { setError(err.response?.data?.error || 'Failed to update comment.'); return false; }
   };
-
-  /* ─ delete comment ─ */
   const handleDelete = async (commentId) => {
     if (!window.confirm('Delete this comment?')) return;
-    try {
-      await commentsApi.delete(commentId);
-      setCommentList((prev) => prev.filter((c) => c.id !== commentId));
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete comment.');
-    }
+    try { await commentsApi.delete(commentId); setCommentList((prev) => prev.filter((c) => c.id !== commentId)); }
+    catch (err) { setError(err.response?.data?.error || 'Failed to delete comment.'); }
   };
 
-  /* ─ render ─ */
   return (
-    <div className="tc-root">
-      <div className="tc-header">
-        <p className="tc-title">
-          Comments
-          {!loading && (
-            <span className="tc-count-badge">{commentList.length}</span>
-          )}
-        </p>
-      </div>
-
-      {loading && (
-        <div className="tc-loading">
-          <span className="tc-spinner" />
-          Loading comments…
-        </div>
-      )}
-
-      {!loading && commentList.length === 0 && (
-        <div className="tc-empty">
-          <span>💬</span>
-          No comments yet. Be the first to add one!
-        </div>
-      )}
-
+    <div className="flex flex-col gap-3">
+      <p className="flex items-center gap-2 text-[15px] font-semibold">
+        Comments {!loading && <span className="rounded-full bg-subtle px-2 font-mono text-xs text-muted">{commentList.length}</span>}
+      </p>
+      {loading && <Loading>Loading comments...</Loading>}
+      {!loading && commentList.length === 0 && <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-sm text-muted">No comments yet. Be the first to add one.</p>}
       {!loading && commentList.length > 0 && (
-        <div className="tc-list" ref={listRef}>
-          {commentList.map((c) => {
-            const isOwn = c.user_id === currentUserId;
-            const isEditing = editingId === c.id;
-            const wasEdited =
-              c.updated_at && c.created_at && c.updated_at !== c.created_at;
-
-            return (
-              <div className="tc-item" key={c.id}>
-                {/* colored avatar */}
-                <div
-                  className="tc-avatar"
-                  style={{ background: avatarGradient(c.user_id) }}
-                >
-                  {firstLetter(c.user_name)}
-                </div>
-
-                <div className="tc-body">
-                  <div className="tc-meta">
-                    <span className="tc-author">{c.user_name || 'Unknown'}</span>
-                    <span className="tc-time">{timeAgo(c.created_at)}</span>
-                    {wasEdited && (
-                      <span className="tc-edited-tag">(edited)</span>
-                    )}
-                  </div>
-
-                  {isEditing ? (
-                    <>
-                      <textarea
-                        className="tc-edit-area"
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleEditSave(c.id);
-                          }
-                          if (e.key === 'Escape') cancelEdit();
-                        }}
-                        autoFocus
-                      />
-                      <div className="tc-edit-actions">
-                        <button
-                          type="button"
-                          className="tc-action-btn save"
-                          onClick={() => handleEditSave(c.id)}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="tc-action-btn cancel"
-                          onClick={cancelEdit}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="tc-text">{c.comment}</p>
-                      {isOwn && (
-                        <div className="tc-actions">
-                          <button
-                            type="button"
-                            className="tc-action-btn edit"
-                            onClick={() => startEdit(c)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="tc-action-btn delete"
-                            onClick={() => handleDelete(c.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div className="flex max-h-[420px] flex-col gap-4 overflow-y-auto pr-1" ref={listRef}>
+          {commentList.map((c) => <CommentItem key={c.id} comment={c} isOwn={c.user_id === currentUserId} onSave={handleEditSave} onDelete={handleDelete} />)}
         </div>
       )}
-
-      {error && <p className="tc-error">{error}</p>}
-
-      {/* ── composer ── */}
-      <div className="tc-composer">
-        <details><summary className="cursor-pointer text-sm text-blue-700">Mention teammates ({mentions.length})</summary><select multiple aria-label="Mention teammates" className="w-full rounded-lg border p-2 text-sm" value={mentions} onChange={e => setMentions([...e.target.selectedOptions].map(option => option.value))}>{members.filter(member => Number(member.id) !== Number(currentUserId)).map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></details>
-        <textarea
-          maxLength={5000}
-          ref={textareaRef}
-          className="tc-textarea"
-          placeholder="Add a comment… (Enter to send, Shift+Enter for new line)"
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={2}
-        />
-        <div className="tc-composer-footer">
-          <span className="tc-hint">Enter ↵ to send · Shift+Enter for new line</span>
-          <button
-            type="button"
-            className="tc-send-btn"
-            onClick={handleSend}
-            disabled={!newText.trim() || sending}
-          >
-            {sending ? 'Sending…' : 'Send'}
-          </button>
+      <ErrorText>{error}</ErrorText>
+      <div className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-3">
+        <details>
+          <summary className="cursor-pointer text-xs font-semibold text-accent">Mention teammates ({mentions.length})</summary>
+          <select multiple aria-label="Mention teammates" className="mt-2 w-full rounded-md border border-line bg-surface p-2 text-sm text-ink" value={mentions}
+            onChange={(event) => setMentions([...event.target.selectedOptions].map((option) => option.value))}>
+            {members.filter((member) => Number(member.id) !== Number(currentUserId)).map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+          </select>
+        </details>
+        <Textarea maxLength={5000} rows={2} aria-label="New comment" placeholder="Add a comment… (Enter to send, Shift+Enter for new line)"
+          value={newText} onChange={(event) => setNewText(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } }} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted">Enter to send · Shift+Enter for new line</span>
+          <Button size="sm" variant="primary" onClick={handleSend} disabled={!newText.trim() || sending}>{sending ? 'Sending…' : 'Send'}</Button>
         </div>
       </div>
     </div>

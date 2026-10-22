@@ -164,3 +164,57 @@ test('entries from another organization are not found', async (t) => {
   const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
   assert.equal((await send('/entries/42')).status, 404);
 });
+
+test('client names used on tasks are copied into timesheet clients without breaking the page', async (t) => {
+  let copy = null;
+  mockDb(t, (sql, params) => {
+    if (sql.startsWith('INSERT INTO timesheet_clients (org_id, name, created_by, source)')) { copy = { sql, params }; throw Object.assign(Error('dup'), { number: 2627 }); }
+    if (sql.startsWith('SELECT c.id, c.name, c.is_active, c.source')) return [[{ id: 4, name: 'Riverside Motors', is_active: true, source: 'task', entry_count: 0, total_hours: 0 }]];
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  }, { role: 'admin' });
+  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  const response = await send('/clients');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json())[0].source, 'task');
+  assert.match(copy.sql, /FROM tasks/);
+  assert.match(copy.sql, /NOT EXISTS \(SELECT 1 FROM timesheet_clients c WHERE c\.org_id = \? AND c\.name = src\.name\)/);
+  assert.deepEqual(copy.params, [1, 10, 1, 1], 'only this organization');
+});
+
+test('an entry can be linked to a task the person can see, but not to someone else\'s task', async (t) => {
+  let insert;
+  let visible = false;
+  let taskCheck;
+  mockDb(t, async (sql, params) => {
+    if (sql.startsWith('SELECT t.id FROM tasks t')) { taskCheck = { sql, params }; return [visible ? [{ id: 42 }] : []]; }
+    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('SET XACT_ABORT ON')) { insert = params; return [{ insertId: 78, rows: [{ insertId: 78 }] }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const refused = await send('/entries', 'POST', { ...validEntry, task_id: 42 });
+  assert.equal(refused.status, 422);
+  assert.ok((await refused.json()).fields.task_id);
+  assert.match(taskCheck.sql, /t\.assigned_to = \? OR EXISTS \(SELECT 1 FROM team_members/, 'employees only see their own or team tasks');
+  assert.deepEqual(taskCheck.params, [42, 1, 10, 10]);
+  visible = true;
+  assert.equal((await send('/entries', 'POST', { ...validEntry, task_id: 42 })).status, 201);
+  assert.equal(insert[15], 42, 'task saved on the entry');
+});
+
+test('the task picker lists only tasks in scope, open ones first', async (t) => {
+  let list;
+  mockDb(t, async (sql, params) => {
+    if (sql.includes('FROM tasks t LEFT JOIN users u')) { list = { sql, params }; return [[{ id: 42, title: 'Payroll Oct', client_name: 'Riverside', status: 'TODO' }]]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const rows = await (await send('/tasks?q=pay_roll')).json();
+  assert.equal(rows[0].id, 42);
+  assert.match(list.sql, /t\.org_id = \? AND t\.is_deleted = 0 AND \(t\.assigned_to = \?/);
+  assert.equal(list.params[3], '%pay[_]roll%', 'search wildcards are escaped');
+  assert.match(list.sql, /ORDER BY CASE WHEN t\.status = 'DONE'/);
+});

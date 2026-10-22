@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { notifications, users, timesheet } from '../services/api';
+import { updatesApi } from './Updates/updatesApi';
 import useWorkspaceSocket from './useWorkspaceSocket';
 import useShellUnread from './useShellUnread';
 import { clearAuthentication } from '../services/preferences';
-import { parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon } from './LayoutParts';
+import { parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon } from './LayoutParts';
 export default function useLayout() {
   const navigate = useNavigate();
   const hasCompanyToken = Boolean(localStorage.getItem('company_token'));
@@ -67,6 +68,17 @@ export default function useLayout() {
     loadOrgAccess();
   }, []);
 
+  // Unread product updates, shown as a badge on Settings (where "What's new" lives).
+  const [updatesUnread, setUpdatesUnread] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => updatesApi.summary().then(({ data }) => { if (active) setUpdatesUnread(Number(data.unread || 0)); }).catch(() => {});
+    refresh();
+    const timer = setInterval(refresh, 300000);
+    window.addEventListener('workspace-updates-changed', refresh);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('workspace-updates-changed', refresh); };
+  }, []);
+
   // Only organizations with the Timesheet add-on see its menu item.
   const [timesheetEnabled, setTimesheetEnabled] = useState(false);
   useEffect(() => {
@@ -88,6 +100,7 @@ export default function useLayout() {
     catch { alert('Could not mark notification as read.'); }
     setShowNotif(false);
     if (item.task_id) navigate(`/dashboard?task=${item.task_id}`);
+    else if (String(item.type || '').startsWith('calendar')) navigate('/calendar');
   };
   const handleLogout = () => {
     clearAuthentication();
@@ -133,6 +146,13 @@ export default function useLayout() {
         icon: <ListIcon />,
       },
       {
+        path: '/calendar',
+        label: 'Calendar',
+        note: 'Meetings, events and due dates',
+        section: 'Main',
+        icon: <CalendarIcon />,
+      },
+      {
         path: '/team',
         label: 'Team Management',
         note: 'Members, ownership, and structure',
@@ -167,8 +187,9 @@ export default function useLayout() {
       {
         path: '/settings',
         label: 'Settings',
-        note: 'Profile, security, and task options',
+        note: "Profile, appearance, teams and what's new",
         section: 'Control',
+        badge: updatesUnread,
         icon: <SettingsIcon />,
       },
       {
@@ -197,7 +218,7 @@ export default function useLayout() {
           ]
         : []),
     ],
-    [isAdmin, timesheetEnabled]
+    [isAdmin, timesheetEnabled, updatesUnread]
   );
 
   const formattedDate = new Date().toLocaleDateString('en-US', {

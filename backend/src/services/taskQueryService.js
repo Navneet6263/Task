@@ -223,4 +223,32 @@ const getTaskDetail = async (taskId, userId = 0) => {
   return task || null;
 };
 
-module.exports = { parseTaskQuery, listTeamTasks, getTaskDetail };
+const EXPORT_LIMIT = 5000;
+const EXPORT_ORDERS = {
+  newest: 't.created_at DESC, t.id DESC', oldest: 't.created_at ASC, t.id ASC',
+  due: 'CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END, t.due_date ASC, t.id DESC',
+  priority: "CASE t.priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, t.id DESC", title: 't.title ASC, t.id ASC',
+};
+
+// Full rows for reports and Excel export: same filters as the task list, no paging, capped.
+const exportTeamTasks = async (teamId, rawQuery) => {
+  const filters = parseTaskQuery({ ...rawQuery, page: 1, limit: 1 });
+  const { where, params } = buildWhere(teamId, filters);
+  const [rows] = await db.execute(`SELECT t.id, t.title, LEFT(t.description, 1000) AS description, t.status, t.priority, t.issue_type,
+      t.client_name, te.name AS team_name, u1.name AS assigned_to_name, u2.name AS created_by_name,
+      CONVERT(VARCHAR(19), t.created_at, 126) AS created_at, CONVERT(VARCHAR(10), t.start_date, 23) AS start_date,
+      CONVERT(VARCHAR(10), t.assigned_date, 23) AS assigned_date, CONVERT(VARCHAR(10), t.due_date, 23) AS due_date,
+      CONVERT(VARCHAR(19), t.completed_at, 126) AS completed_at, t.review_status, t.blocked_reason,
+      t.task_type, t.product, t.category,
+      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments
+    FROM tasks t
+    LEFT JOIN teams te ON te.id = t.team_id
+    LEFT JOIN users u1 ON t.assigned_to = u1.id
+    LEFT JOIN users u2 ON t.assigned_by = u2.id
+    WHERE ${where}
+    ORDER BY ${EXPORT_ORDERS[filters.sort]}
+    OFFSET 0 ROWS FETCH NEXT ${EXPORT_LIMIT + 1} ROWS ONLY`, params);
+  return { rows: rows.slice(0, EXPORT_LIMIT), truncated: rows.length > EXPORT_LIMIT, limit: EXPORT_LIMIT };
+};
+
+module.exports = { parseTaskQuery, listTeamTasks, getTaskDetail, exportTeamTasks };

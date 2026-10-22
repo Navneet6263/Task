@@ -38,20 +38,22 @@ router.get('/users', async (req, res) => {
     const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
     const offset = (page - 1) * limit;
 
-    const [[{ total }]] = await db.execute(
-      'SELECT COUNT(*) as total FROM users WHERE is_deleted = FALSE AND org_id = ?',
-      [req.orgId]
-    );
+    // Optional search (name, email, employee ID) and role filter.
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    const role = ['admin', 'manager', 'person'].includes(req.query.role) ? req.query.role : '';
+    const where = `u.is_deleted = FALSE AND u.org_id = ?${q ? ' AND (u.name LIKE ? OR u.email LIKE ? OR u.employee_id LIKE ?)' : ''}${role ? ' AND u.role = ?' : ''}`;
+    const params = [req.orgId, ...(q ? [`%${q}%`, `%${q}%`, `%${q}%`] : []), ...(role ? [role] : [])];
+    const [[{ total }]] = await db.execute(`SELECT COUNT(*) as total FROM users u WHERE ${where}`, params);
 
     const [users] = await db.execute(
-      `SELECT u.id, u.name, u.email, u.mobile, u.employee_id, u.role, u.org_id, u.created_at,
+      `SELECT u.id, u.name, u.email, u.mobile, u.employee_id, u.role, u.org_id, u.created_at, u.last_active,
         o.name as org_name, o.company_code
        FROM users u
        LEFT JOIN organizations o ON u.org_id = o.id
-       WHERE u.is_deleted = FALSE AND u.org_id = ?
+       WHERE ${where}
        ORDER BY u.created_at DESC
        LIMIT ? OFFSET ?`,
-      [req.orgId, limit, offset]
+      [...params, limit, offset]
     );
 
     res.json({
@@ -66,13 +68,15 @@ router.get('/users', async (req, res) => {
 router.put('/users/:id/role', async (req, res) => {
   try {
     const { role } = req.body;
+    if (!['admin', 'manager', 'person'].includes(role)) return res.status(422).json({ error: 'Role must be admin, manager or person' });
+    if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'You cannot change your own role. Ask another admin.' });
     const [[target]] = await db.execute(
       'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
     );
     if (!target) return res.status(404).json({ error: 'User not found in your organization' });
 
-    await db.execute('UPDATE users SET role = ? WHERE id = ?', [role, req.params.id]);
+    await db.execute('UPDATE users SET role = ? WHERE id = ? AND org_id = ?', [role, req.params.id, req.orgId]);
     res.json({ message: 'Role updated' });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -81,6 +85,7 @@ router.put('/users/:id/role', async (req, res) => {
 
 router.delete('/users/:id', async (req, res) => {
   try {
+    if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'You cannot delete your own account.' });
     const [[target]] = await db.execute(
       'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
@@ -88,8 +93,8 @@ router.delete('/users/:id', async (req, res) => {
     if (!target) return res.status(404).json({ error: 'User not found in your organization' });
 
     await db.execute(
-      'UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?',
-      [req.params.id]
+      'UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ? AND org_id = ?',
+      [req.params.id, req.orgId]
     );
     res.json({ message: 'User deleted' });
   } catch (error) {

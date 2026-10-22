@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useDialog from '../useDialog';
+import { Banner, Button, EmptyState, ErrorText, Loading, Tabs } from '../../ui';
 import UpdateEditor from './UpdateEditor';
 import ReportProblem from './ReportProblem';
 import PrivateReports from './PrivateReports';
-import { changed, dateTime, errorText, updatesApi } from './updatesApi';
+import UpdateCard from './UpdateCard';
+import { changed, errorText, updatesApi } from './updatesApi';
 import { groupUpdatesByDate } from './updateDates';
 
+// Product updates feed: dated release notes with guides, publishing for admins and private problem reports.
+// Renders as a page section (`fullPage`) or as a modal.
 export default function UpdatesDialog({ onClose, fullPage = false }) {
   const [tab, setTab] = useState('updates'), [mode, setMode] = useState(null), [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1), [revision, setRevision] = useState(0), [expanded, setExpanded] = useState(null);
@@ -38,39 +42,79 @@ export default function UpdatesDialog({ onClose, fullPage = false }) {
     } catch { setNotice('Could not mark this update as read. Open it again to retry.'); }
   };
   const back = () => { if (!busy) setMode(null); };
-  const content = <section ref={ref} role={fullPage ? undefined : 'dialog'} aria-modal={fullPage ? undefined : 'true'} aria-labelledby="updates-heading" tabIndex={-1} className={`updates-dialog ${fullPage ? 'updates-full-page' : ''}`}>
-      <header className="updates-modal-head"><div><span className="updates-kicker">GREENTASK · WHAT'S NEW</span>
-        <h2 id="updates-heading">{mode?.type === 'edit' ? mode.update ? 'Edit update' : 'Publish an update' : mode?.type === 'report' ? 'Report a problem' : 'Product updates'}</h2>
-        <p>Discover improvements. Learn the steps. Report a problem privately.</p></div>{!fullPage && <button type="button" onClick={close} disabled={busy} aria-label="Close updates">✕</button>}</header>
-      <div className="updates-toolbar">{mode ? <button type="button" onClick={back} disabled={busy}>← Back to updates</button> : <>
-        <div className="updates-tabs" role="group" aria-label="Updates sections"><button aria-pressed={tab === 'updates'} onClick={() => setTab('updates')}>Latest updates</button><button aria-pressed={tab === 'reports'} onClick={() => setTab('reports')}>My private reports</button></div>
-        {tab === 'updates' && canPublish && <button className="updates-primary" disabled={loading} onClick={() => { setNotice(''); setMode({ type: 'edit' }); }}>+ Publish update</button>}
-      </>}</div>
-      <div className="updates-body">
-        {notice && <p role="status" className="updates-notice">{notice}</p>}
-        {mode?.type === 'edit' && canPublish ? <UpdateEditor key={mode.update?.id || 'new'} initial={mode.update} onBusy={setBusy} onSaved={() => {
-          setMode(null); setNotice('Update published. Employees can now read it.'); setPage(1); setRevision(revision + 1);
-        }} /> : mode?.type === 'report' ? <ReportProblem key={mode.update.id} update={mode.update} onBusy={setBusy} onSent={message => { setMode(null); setNotice(message); }} />
-          : tab === 'reports' ? <PrivateReports /> : <>
-            {loading && <p role="status">Loading updates...</p>}
-            {error && <p className="updates-error" role="alert">{error} <button onClick={() => setRevision(revision + 1)}>Retry</button></p>}
-            {!loading && !error && !rows.length && <div className="updates-empty"><h3>No updates published yet</h3><p>{canPublish ? 'Publish your first feature guide using the button above.' : 'Your admins will share new features and instructions here.'}</p></div>}
-            {!loading && !error && total > 0 && <p className="updates-feed-note">{total} {total === 1 ? 'update' : 'updates'} · Newest first · Dates and times shown in your local timezone</p>}
-            {groupUpdatesByDate(rows).map(group => <section className="updates-day" key={group.label} aria-label={group.label}>
-              <h3 className="updates-day-heading">{group.label}<small>{group.updates.length} on this page</small></h3>
-              {group.updates.map(update => <article className="updates-card" key={update.id}>
-              <div className="updates-section-head"><span className="updates-kicker">{update.is_read ? 'FEATURE UPDATE' : 'NEW / UNREAD'}</span><time dateTime={update.published_at}>{dateTime(update.published_at)}</time></div>
-              <h3>{update.title}</h3><p className="updates-prose">{update.summary}</p>
-              {update.version > 1 && <small>Edited {dateTime(update.updated_at)} · Version {update.version}</small>}
-              <div className="updates-card-actions"><button type="button" aria-expanded={expanded === update.id} onClick={() => read(update)}>{expanded === update.id ? 'Hide guide' : 'Read guide & how to use'}</button>
-                {canPublish && update.can_edit && <button onClick={() => { setNotice(''); setMode({ type: 'edit', update }); }}>Edit update</button>}</div>
-              {expanded === update.id && <div className="updates-guide"><h4>Why it helps</h4><p className="updates-prose">{update.why_text}</p><h4>How to use it</h4><p className="updates-prose">{update.how_text}</p>
-                {update.performance_text && <><h4>Performance improvements</h4><p className="updates-prose">{update.performance_text}</p></>}</div>}
-              <button className="updates-report-link" onClick={() => { setNotice(''); setMode({ type: 'report', update }); }}>Something not working? Report a problem →</button>
-            </article>)}</section>)}
-            {total > 20 && <div className="updates-pagination"><button disabled={loading || page === 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {Math.ceil(total / 20)}</span><button disabled={loading || page * 20 >= total} onClick={() => setPage(page + 1)}>Next</button></div>}
-          </>}
+  const edit = update => { setNotice(''); setMode({ type: 'edit', update }); };
+  const title = mode?.type === 'edit' ? (mode.update ? 'Edit update' : 'Publish an update') : mode?.type === 'report' ? 'Report a problem' : 'Product updates';
+  const unread = rows.filter(row => !row.is_read).length;
+  const pages = Math.ceil(total / 20);
+
+  const feed = <>
+    {loading && <Loading>Loading updates...</Loading>}
+    {error && <div className="rounded-md bg-danger-soft px-3.5 py-2.5"><ErrorText onRetry={() => setRevision(revision + 1)}>{error}</ErrorText></div>}
+    {!loading && !error && !rows.length && (
+      <EmptyState title="No updates published yet">
+        {canPublish ? 'Publish your first feature guide with the button above.' : 'Your admins will share new features and how-to guides here.'}
+      </EmptyState>
+    )}
+    {!loading && !error && total > 0 && (
+      <p className="text-xs text-muted">{total} {total === 1 ? 'update' : 'updates'}{unread > 0 && ` · ${unread} unread on this page`} · Newest first · Times in your local timezone</p>
+    )}
+    {groupUpdatesByDate(rows).map(group => (
+      <section className="updates-day flex flex-col gap-3" key={group.label} aria-label={group.label}>
+        <h3 className="updates-day-heading flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          {group.label}<span className="font-normal normal-case tracking-normal">· {group.updates.length} on this page</span>
+          <span className="h-px flex-1 bg-line" />
+        </h3>
+        {group.updates.map(update => (
+          <UpdateCard key={update.id} update={update} expanded={expanded === update.id} canEdit={canPublish && update.can_edit}
+            onToggle={() => read(update)} onEdit={() => edit(update)} onReport={() => { setNotice(''); setMode({ type: 'report', update }); }} />
+        ))}
+      </section>
+    ))}
+    {total > 20 && (
+      <div className="flex items-center justify-center gap-3 pt-2 text-sm">
+        <Button size="sm" disabled={loading || page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
+        <span className="text-muted">Page {page} of {pages}</span>
+        <Button size="sm" disabled={loading || page * 20 >= total} onClick={() => setPage(page + 1)}>Next</Button>
       </div>
-    </section>;
-  return fullPage ? content : createPortal(<div className="updates-overlay" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>{content}</div>, document.body);
+    )}
+  </>;
+
+  const content = (
+    <section ref={ref} role={fullPage ? undefined : 'dialog'} aria-modal={fullPage ? undefined : 'true'} aria-labelledby="updates-heading" tabIndex={-1}
+      className={`updates-dialog flex flex-col text-ink outline-none ${fullPage ? '' : 'max-h-[90vh] w-full max-w-3xl rounded-xl border border-line bg-surface shadow-pop'}`}>
+      <header className={`flex items-start justify-between gap-3 ${fullPage ? 'pb-4' : 'border-b border-line px-5 py-4'}`}>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">GreenTask · What's new</p>
+          <h2 id="updates-heading" className="mt-0.5 text-[22px] font-bold tracking-tight">{title}</h2>
+          <p className="mt-0.5 text-sm text-muted">Discover improvements, learn the steps, and report a problem privately.</p>
+        </div>
+        {!fullPage && (
+          <button type="button" onClick={close} disabled={busy} aria-label="Close updates" className="grid h-8 w-8 place-items-center rounded-md text-lg text-muted hover:bg-subtle hover:text-ink">&times;</button>
+        )}
+      </header>
+      <div className={fullPage ? '' : 'px-5 pt-3'}>
+        {mode ? (
+          <button type="button" onClick={back} disabled={busy} className="mb-4 text-sm font-medium text-muted hover:text-ink">← Back to updates</button>
+        ) : (
+          <Tabs label="Updates sections" value={tab} onChange={setTab} tabs={[['updates', 'Latest updates'], ['reports', 'My private reports']]}
+            aside={tab === 'updates' && canPublish && <Button variant="primary" size="sm" disabled={loading} onClick={() => edit(undefined)}>+ Publish update</Button>} />
+        )}
+      </div>
+      <div className={`updates-body flex flex-col gap-5 ${fullPage ? '' : 'overflow-y-auto px-5 pb-5'}`}>
+        {notice && <Banner tone="ok"><span role="status">{notice}</span></Banner>}
+        {mode?.type === 'edit' && canPublish ? (
+          <UpdateEditor key={mode.update?.id || 'new'} initial={mode.update} onBusy={setBusy} onSaved={() => {
+            setMode(null); setNotice('Update published. Employees can now read it.'); setPage(1); setRevision(revision + 1);
+          }} />
+        ) : mode?.type === 'report' ? (
+          <ReportProblem key={mode.update.id} update={mode.update} onBusy={setBusy} onSent={message => { setMode(null); setNotice(message); }} />
+        ) : tab === 'reports' ? <PrivateReports /> : feed}
+      </div>
+    </section>
+  );
+  if (fullPage) return content;
+  return createPortal(
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-3 sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>{content}</div>,
+    document.body,
+  );
 }

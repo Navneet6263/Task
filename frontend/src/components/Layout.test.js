@@ -5,7 +5,6 @@ import Layout from './Layout';
 import useLayout from './useLayout';
 
 jest.mock('./useLayout');
-jest.mock('./GlobalSearch', () => () => <input aria-label="Search tasks or clients" />);
 jest.mock('./ToastHost', () => () => null);
 
 test('one larger logo stays in the full-width header through sidebar collapse and expand', () => {
@@ -36,8 +35,7 @@ test('one larger logo stays in the full-width header through sidebar collapse an
     render();
     expect(container.querySelector('.shell-sidebar-collapsed')).not.toBeNull();
     expect(container.querySelector('header .shell-header-brand').textContent).toBe('GreenTask');
-    expect(container.querySelector('header .shell-header-brand img').getAttribute('src'))
-      .toContain('greentask-mark-192.png');
+    expect(container.querySelector('header .shell-header-brand img')).toBeNull();
     act(() => container.querySelector('[aria-label="Expand sidebar"]').click());
     render();
     expect(container.querySelector('.shell-sidebar-collapsed')).toBeNull();

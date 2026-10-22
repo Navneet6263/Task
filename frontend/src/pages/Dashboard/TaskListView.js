@@ -1,256 +1,90 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import BulkTaskActions from './BulkTaskActions';
-import SnoozeMenu from './SnoozeMenu';
-import { tasks } from '../../services/api';
-import { readPreference, writePreference } from '../../services/preferences';
+import TaskRowActions from './TaskRowActions';
+import { EmptyRow, Td, Th } from '../../ui';
+import useTaskColumns from './taskColumns/useTaskColumns';
+import ColumnCustomizer, { GripIcon } from './taskColumns/ColumnCustomizer';
 
-const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
-const STATUS_LABEL = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
+// Header cell that can be dragged onto another header to reorder columns.
+function DraggableHeader({ column, dragId, overId, setDragId, setOverId, onDrop }) {
+  const movable = !column.pinned;
+  const isOver = overId === column.id && dragId && dragId !== column.id;
+  return (
+    <Th align={column.align}
+      draggable={movable}
+      onDragStart={(event) => { setDragId(column.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', column.id); }}
+      onDragOver={(event) => { if (dragId && movable) { event.preventDefault(); setOverId(column.id); } }}
+      onDragLeave={() => setOverId((current) => (current === column.id ? null : current))}
+      onDrop={(event) => { event.preventDefault(); onDrop(column.id); }}
+      onDragEnd={() => { setDragId(null); setOverId(null); }}
+      title={movable ? 'Drag to reorder' : undefined}
+      className={`group relative select-none ${movable ? 'cursor-grab active:cursor-grabbing' : ''} ${dragId === column.id ? 'opacity-40' : ''}`}>
+      {isOver && <span className="absolute inset-y-1 left-0 w-0.5 rounded bg-accent" />}
+      <span className="inline-flex items-center gap-1.5">
+        {movable && <span className="text-muted/0 transition-colors group-hover:text-muted"><GripIcon /></span>}
+        {column.label}
+      </span>
+    </Th>
+  );
+}
 
-const initials = (name) => {
-  if (!name) return '?';
-  const parts = String(name).split(' ').filter(Boolean);
-  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
-};
-
-const dateLabel = (value) => {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '-';
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-const dateTimeLabel = (value) => {
-  if (!value) return { date: '-', time: '' };
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return { date: '-', time: '' };
-  return {
-    date: parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
-    time: parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }),
-  };
-};
-
-const TaskListView = ({
-  paginated, selectedTask, setSelectedTask, setSheetTab,
-  handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete,
-  handlePickBug, handleResolveBug, onBulkDelete, members, onUpdated,
-}) => {
+const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, onBulkDelete, members, onUpdated, ...actions }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
-  const navigate = useNavigate();
-
+  const columns = useTaskColumns();
   const [selected, setSelected] = useState(new Set());
-  const [showCreated, setShowCreated] = useState(() => readPreference('columns-created', false));
-  const pageIds = paginated.map(task => task.id).join(',');
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const pageIds = paginated.map((task) => task.id).join(',');
   useEffect(() => { setSelected(new Set()); }, [pageIds]);
 
-  const allSelected = paginated.length > 0 && paginated.every(t => selected.has(t.id));
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected(prev => { const n = new Set(prev); paginated.forEach(t => n.delete(t.id)); return n; });
-    } else {
-      setSelected(prev => { const n = new Set(prev); paginated.forEach(t => n.add(t.id)); return n; });
-    }
-  };
-
-  const toggleOne = (id) => {
-    setSelected(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
-    });
-  };
-
-  const handleMailClick = async (e, task) => {
-    e.stopPropagation();
-    try { task = (await tasks.getDetail(task.id)).data; } catch { alert('Unable to load full task details. Please retry.'); return; }
-    e.stopPropagation();
-    localStorage.setItem('comm_task_context', JSON.stringify({
-      id: task.id, title: task.title, description: task.description,
-      issue_type: task.issue_type, priority: task.priority, status: task.status,
-      client_name: task.client_name || '', assigned_to_name: task.assigned_to_name || '',
-    }));
-    navigate('/communications');
-  };
+  const allSelected = paginated.length > 0 && paginated.every((task) => selected.has(task.id));
+  const toggleAll = () => setSelected((prev) => {
+    const next = new Set(prev);
+    paginated.forEach((task) => (allSelected ? next.delete(task.id) : next.add(task.id)));
+    return next;
+  });
+  const toggleOne = (id) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const open = (task) => { setSelectedTask(task); setSheetTab('details'); };
+  const dropOn = (targetId) => { if (dragId) columns.move(dragId, targetId); setDragId(null); setOverId(null); };
+  const visible = columns.visibleColumns;
 
   return (
     <div className="overflow-auto">
       <BulkTaskActions rows={paginated} members={members} onUpdated={onUpdated} selectedIds={[...selected]} onDelete={onBulkDelete} onClear={() => setSelected(new Set())} />
-
-      <label className="mb-2 flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" checked={showCreated} onChange={e => { setShowCreated(e.target.checked); writePreference('columns-created', e.target.checked); }} />Show creator and created date columns</label>
-      <table data-created={showCreated} className="task-list-table w-full min-w-[760px] border-collapse">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs text-muted">Drag a column header to move it.</p>
+        <ColumnCustomizer columns={columns} />
+      </div>
+      <table className="task-list-table w-full min-w-[760px] border-collapse text-sm">
         <thead>
           <tr>
-            {/* Checkbox header */}
-            <th className="p-2.5 border-b border-gray-200 w-10">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleAll}
-                title="Select all on this page"
-                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2f5dff' }}
-              />
-            </th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Task</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Created By</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Created At</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Assignee</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Due</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Priority</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Status</th>
-            <th className="p-2.5 border-b border-gray-200 text-gray-500 text-xs text-left">Actions</th>
+            <Th className="w-10"><input type="checkbox" className="h-4 w-4 accent-accent" checked={allSelected} onChange={toggleAll} title="Select all on this page" aria-label="Select all on this page" /></Th>
+            {visible.map((column) => (
+              <DraggableHeader key={column.id} column={column} dragId={dragId} overId={overId} setDragId={setDragId} setOverId={setOverId} onDrop={dropOn} />
+            ))}
+            <Th>Actions</Th>
           </tr>
         </thead>
-
         <tbody>
-          {paginated.map((task) => (
-            <tr
-              key={task.id}
-              className={`cursor-pointer ${
-                selected.has(task.id)
-                  ? 'bg-[rgba(220,38,38,0.06)]'
-                  : selectedTask?.id === task.id
-                  ? 'bg-[rgba(47,93,255,0.08)]'
-                  : ''
-              }`}
-              onClick={() => { setSelectedTask(task); setSheetTab('details'); }}
-            >
-              {/* Checkbox cell */}
-              <td className="p-2.5 border-b border-[#edf1fb] align-middle" onClick={e => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(task.id)}
-                  onChange={() => toggleOne(task.id)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#dc2626' }}
-                />
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[10px] font-extrabold rounded-full px-2 py-0.5 ${
-                    task.issue_type === 'bug' ? 'bg-red-100 text-red-700' :
-                    task.issue_type === 'story' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {(task.issue_type || 'task').toUpperCase()}
-                  </span>
-                  {task.manager_assigned && <span className="text-[10px] font-extrabold rounded-full px-2 py-0.5 bg-amber-100 text-amber-800">MANAGER</span>}
-                  <strong className="font-bold relative flex items-center gap-1.5">
-                    {task.title}
-                    {task.blocked_reason && <span title={task.blocked_reason} className="rounded bg-amber-100 px-1.5 text-xs text-amber-800">Blocked</span>}
-                    {task.unread_comments > 0 && (
-                      <span className="w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow-[0_2px_6px_rgba(239,68,68,0.35)] shrink-0">
-                        {task.unread_comments}
-                      </span>
-                    )}
-                  </strong>
-                </div>
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <span className="font-semibold">{task.created_by_name || task.assigned_by_name || 'System'}</span>
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle whitespace-nowrap">
-                {(() => {
-                  const created = dateTimeLabel(task.created_at);
-                  return (
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{created.date}</span>
-                      <span className="text-[11px] text-gray-500">{created.time}</span>
-                    </div>
-                  );
-                })()}
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-xl grid place-items-center text-white text-[11px] font-extrabold bg-gradient-to-br from-[#2f5dff] to-[#0ea5e9]">
-                    {initials(task.assigned_to_name)}
-                  </span>
-                  <span>{task.assigned_to_name || 'Unassigned'}</span>
-                </div>
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">{dateLabel(task.due_date)}</td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <span className={`text-[11px] font-extrabold rounded-full px-2 py-1 ${
-                  task.priority === 'HIGH' ? 'text-red-700 bg-red-100' :
-                  task.priority === 'LOW' ? 'text-green-700 bg-green-100' : 'text-amber-800 bg-amber-100'
-                }`}>
-                  {task.priority || 'MEDIUM'}
-                </span>
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <span className={`text-[11px] font-extrabold rounded-full px-2 py-1 inline-flex ${
-                  task.status === 'DONE' ? 'text-green-700 bg-green-100' :
-                  task.status === 'IN_PROGRESS' ? 'text-sky-700 bg-sky-100' :
-                  task.status === 'PENDING' ? 'text-amber-800 bg-amber-100' : 'text-blue-700 bg-blue-100'
-                }`}>
-                  {STATUS_LABEL[task.status] || task.status}
-                </span>
-              </td>
-
-              <td className="p-2.5 border-b border-[#edf1fb] text-sm text-gray-800 align-middle">
-                <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
-                  {/* Mail Icon */}
-                  <button
-                    type="button"
-                    title="Send email about this task"
-                    onClick={(e) => handleMailClick(e, task)}
-                    className="h-[38px] w-[38px] flex items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)] transition-all duration-200 cursor-pointer"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                    </svg>
-                  </button>
-
-                  {task.issue_type === 'bug' && task.status !== 'DONE' && !task.picked_by && (
-                    <button type="button" className="h-[38px] border border-gray-300 rounded-xl bg-white text-gray-700 text-sm font-bold px-3.5 cursor-pointer" onClick={() => handlePickBug(task.id)}>
-                      Pick
-                    </button>
-                  )}
-
-                  {task.issue_type === 'bug' && task.status !== 'DONE' && task.picked_by && (
-                    <button type="button" className="h-[38px] border border-gray-300 rounded-xl bg-white text-gray-700 text-sm font-bold px-3.5 cursor-pointer" onClick={() => handleResolveBug(task.id)}>
-                      Resolve
-                    </button>
-                  )}
-
-                  {task.issue_type !== 'bug' && (
-                    <select className="h-[38px] rounded-xl border border-gray-300 bg-white text-gray-800 text-sm px-2.5 min-w-[112px]" value={task.status} onChange={(e) => handleStatusChange(task, e.target.value)}>
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>{STATUS_LABEL[status]}</option>
-                      ))}
-                    </select>
-                  )}
-
-                  <SnoozeMenu task={task} onSnooze={handleSnooze} />
-
-                  {task.delete_requested_by ? (
-                    task.assigned_by === user.id ? (
-                      <div className="flex gap-1">
-                        <button type="button" className="h-[38px] border border-red-200 rounded-xl bg-red-500 text-white text-xs font-bold px-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleApproveDelete(task.id); }}>Approve Delete</button>
-                        <button type="button" className="h-[38px] border border-gray-300 rounded-xl bg-gray-500 text-white text-xs font-bold px-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleRejectDelete(task.id); }}>Reject</button>
-                      </div>
-                    ) : (
-                      <span className="text-[11px] font-bold text-red-500 px-2">Delete Pending</span>
-                    )
-                  ) : (
-                    <button type="button" className="h-[38px] border border-red-200 rounded-xl bg-red-100 text-red-700 text-sm font-bold px-3.5 cursor-pointer" onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}>Delete</button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-
-          {paginated.length === 0 && (
-            <tr>
-              <td colSpan={9} className="text-center text-gray-500 p-4">No tasks found for selected filters.</td>
-            </tr>
-          )}
+          {paginated.map((task) => {
+            const rowTone = selected.has(task.id) ? 'bg-danger-soft/60' : selectedTask?.id === task.id ? 'bg-accent-soft/60' : '';
+            return (
+              <tr key={task.id} className={`cursor-pointer hover:bg-subtle ${rowTone}`} onClick={() => open(task)}>
+                <Td className="align-middle" onClick={(event) => event.stopPropagation()}>
+                  <input type="checkbox" className="h-4 w-4 accent-danger" checked={selected.has(task.id)} onChange={() => toggleOne(task.id)} aria-label={`Select ${task.title}`} />
+                </Td>
+                {visible.map((column) => (
+                  <Td key={column.id} align={column.align} className={`align-middle ${column.nowrap ? 'whitespace-nowrap' : ''}`}>{column.cell(task)}</Td>
+                ))}
+                <Td className="align-middle"><TaskRowActions task={task} userId={user.id} {...actions} /></Td>
+              </tr>
+            );
+          })}
+          {paginated.length === 0 && <EmptyRow colSpan={visible.length + 2}>No tasks found for selected filters.</EmptyRow>}
         </tbody>
       </table>
     </div>
