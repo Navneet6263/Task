@@ -1,17 +1,12 @@
 import React, { useState } from 'react';
 import { timesheet } from '../../../services/api';
-import { exportCsv } from '../../../services/exportCsv';
+import { notify } from '../../../services/feedback';
+import { exportTimesheetReport } from './exportTimesheet';
 import { Banner, Button, Card, EmptyState, ErrorText, Field, Input, Select } from '../../../ui';
-import { errorOf, fmtDate, fmtHours } from '../format';
+import { errorOf } from '../format';
 import { ClientBreakdown, HoursByPerson, ReportStats } from './ReportSections';
 
-const CSV_COLUMNS = [
-  { key: 'client_name', label: 'Client' }, { key: 'job_type', label: 'Job Type' }, { key: 'work_type', label: 'Work Type' },
-  { key: 'period_type', label: 'Period Type' }, { key: 'period_ended', label: 'Period Ended' }, { key: 'user_name', label: 'Person' },
-  { key: 'work_date', label: 'Date' }, { key: 'hours', label: 'Hours' }, { key: 'note', label: 'Note' },
-];
 const monthStart = (today) => `${today.slice(0, 8)}01`;
-const slug = (text) => text.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
 
 export default function ReportsTab({ config }) {
   const [filters, setFilters] = useState({ client_id: '', user_id: '', from: monthStart(config.today), to: config.today });
@@ -30,10 +25,18 @@ export default function ReportsTab({ config }) {
   };
   const set = (key) => (event) => setFilters((prev) => ({ ...prev, [key]: event.target.value }));
 
-  const exportFile = () => {
-    const clientName = config.clients.find((client) => String(client.id) === filters.client_id)?.name || 'all-clients';
-    const rows = report.rows.map((row) => ({ ...row, period_ended: fmtDate(row.period_ended), work_date: fmtDate(row.work_date), hours: fmtHours(row.hours) }));
-    exportCsv(`timesheet-${slug(clientName)}-${report.from}-to-${report.to}.csv`, CSV_COLUMNS, rows);
+  const [exporting, setExporting] = useState(false);
+  const exportFile = async () => {
+    setExporting(true);
+    try {
+      await exportTimesheetReport({
+        report, config,
+        clientName: config.clients.find((client) => String(client.id) === filters.client_id)?.name,
+        personName: config.users.find((user) => String(user.id) === filters.user_id)?.name,
+      });
+      notify('Excel report downloaded.', 'success');
+    } catch { notify('Could not create the Excel file. Please retry.'); }
+    finally { setExporting(false); }
   };
 
   return (
@@ -53,7 +56,7 @@ export default function ReportsTab({ config }) {
             </Select>
           </Field>
           <Button type="submit" variant="primary" disabled={loading}>{loading ? 'Loading...' : 'Show report'}</Button>
-          <Button disabled={!report?.rows.length} onClick={exportFile}>Export CSV</Button>
+          <Button disabled={!report?.rows.length || exporting} onClick={exportFile}>{exporting ? 'Preparing…' : 'Download Excel'}</Button>
         </form>
       </Card>
       <ErrorText>{error}</ErrorText>

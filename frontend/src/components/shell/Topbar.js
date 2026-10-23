@@ -16,7 +16,9 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel }, ref) {
   const orgName = accessibleOrgs.find((org) => String(org.id) === String(activeOrgId))?.name;
 
   return (
-    <header ref={ref} className="sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b border-line bg-surface/95 px-3 py-2 backdrop-blur sm:px-4">
+    // z-[85]: above everything on the page (filter bars go up to z-80) so its menus never slide under page content,
+    // and below full-screen windows (z-90 and up).
+    <header ref={ref} className="sticky top-0 z-[85] flex flex-wrap items-center gap-2 border-b border-line bg-surface/95 px-3 py-2 backdrop-blur sm:px-4">
       <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Toggle menu" onClick={() => setSidebarOpen((prev) => !prev)}>
         <MenuIcon />
       </Button>

@@ -64,7 +64,11 @@ export default function FieldCard({ field, active, first, last, dragging, previe
               <Select aria-label="Answer type" value={field.type} onChange={(e) => onChange({ type: e.target.value, ...(e.target.value === 'dropdown' && !field.options?.length ? { options: ['Option 1'] } : {}) })}>
                 {CUSTOM_TYPES.map(([type]) => <option key={type} value={type}>{TYPE_META[type][0]}</option>)}
               </Select>
-            ) : <p className="self-center text-xs text-muted">Built-in field: saved in its own task column. Its type can't change.</p>}
+            ) : field.types?.length > 1 ? (
+              <Select aria-label="Answer type" value={field.type} onChange={(e) => onChange({ type: e.target.value, ...(e.target.value === 'dropdown' && !field.options?.length ? { options: ['Option 1'] } : {}) })}>
+                {field.types.map((type) => <option key={type} value={type}>{type === 'text' ? 'Short answer (type anything)' : TYPE_META[type][0]}</option>)}
+              </Select>
+            ) : <p className="self-center text-xs text-muted">{field.locked ? 'Always on the form and required — reports are built from it. You can rename it.' : 'Built-in field: saved in its own column. Its type can\'t change.'}</p>}
           </div>
           <Input aria-label="Help text" maxLength={200} placeholder="Help text shown under the field (optional)" value={field.help || ''} onChange={(e) => onChange({ help: e.target.value })} />
           {field.type === 'dropdown' && <OptionsEditor options={field.options || ['Option 1']} onChange={(options) => onChange({ options })} />}
@@ -85,9 +89,9 @@ export default function FieldCard({ field, active, first, last, dragging, previe
             <IconBtn label="Move up" disabled={first} onClick={() => onMove(-1)}>↑</IconBtn>
             <IconBtn label="Move down" disabled={last} onClick={() => onMove(1)}>↓</IconBtn>
             {custom && <IconBtn label="Duplicate" onClick={onDuplicate}>⧉</IconBtn>}
-            <IconBtn label="Hide from the form" onClick={onHide}>◌</IconBtn>
+            {!field.locked && <IconBtn label="Hide from the form" onClick={onHide}>◌</IconBtn>}
             {custom && <IconBtn label="Delete question" danger onClick={onDelete}>✕</IconBtn>}
-            {!NO_REQUIRED.includes(field.type) && (
+            {!NO_REQUIRED.includes(field.type) && !field.locked && (
               <label className="ml-1 flex items-center gap-2 border-l border-line pl-3 text-sm font-medium">Required
                 <Switch checked={Boolean(field.required)} onChange={(v) => onChange({ required: v })} label="Required" /></label>
             )}

@@ -35,7 +35,7 @@ export default function Settings() {
 
   const groups = [
     { label: 'Account', items: [['profile', 'Profile'], ['security', 'Password & security'], ['appearance', 'Appearance']] },
-    { label: 'Workspace', items: [['teams', 'Teams & join codes'], ...(canManageForm ? [['clients', 'Clients'], ['form-designer', 'Task form designer'], ['task-form', 'Task dropdown lists']] : [])] },
+    { label: 'Workspace', items: [['teams', 'Teams & join codes'], ...(canManageForm ? [['clients', 'Clients'], ['form-designer', 'Form designer'], ['task-form', 'Task dropdown lists']] : [])] },
     { label: 'Help', items: [['whats-new', "What's new & guides"]] },
   ];
   const ids = groups.flatMap((g) => g.items.map(([id]) => id));

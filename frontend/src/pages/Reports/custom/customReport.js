@@ -12,16 +12,20 @@ const weekOf = (value) => {
 const daysBetween = (a, b) => Math.max(0, (new Date(b.slice(0, 10)) - new Date(a.slice(0, 10))) / 86400000);
 
 export const DIMENSIONS = {
-  client: { label: 'Client', task: (r) => r.client_name || 'No client', time: (r) => r.client_name || 'No client' },
   person: { label: 'Person', task: (r) => r.assigned_to_name || 'Unassigned', time: (r) => r.user_name || 'Unknown' },
+  client: { label: 'Client', task: (r) => r.client_name || 'No client', time: (r) => r.client_name || 'No client' },
+  task: { label: 'Task', time: (r) => (r.task_title ? `${r.task_id ? `#${r.task_id} ` : ''}${r.task_title}` : 'No task') },
   status: { label: 'Status', task: (r) => statusText(r.status) },
   priority: { label: 'Priority', task: (r) => r.priority || 'MEDIUM' },
   type: { label: 'Type', task: (r) => (r.issue_type || 'task').toUpperCase() },
-  team: { label: 'Team', task: (r) => r.team_name || 'No team' },
+  team: { label: 'Team', task: (r) => r.team_name || 'No team', time: (r) => r.team_name || 'No team' },
+  createdBy: { label: 'Created by', task: (r) => r.created_by_name || 'Unknown' },
   jobType: { label: 'Job type', time: (r) => r.job_type || 'Not set' },
   workType: { label: 'Work type', time: (r) => r.work_type || 'Not set' },
-  month: { label: 'Month', task: (r) => monthOf(r.created_at), time: (r) => monthOf(r.work_date) },
+  source: { label: 'Logged in', time: (r) => r.source || 'Timesheet' },
+  day: { label: 'Day', time: (r) => (r.work_date ? String(r.work_date).slice(0, 10) : 'No date') },
   week: { label: 'Week starting', task: (r) => weekOf(r.created_at), time: (r) => weekOf(r.work_date) },
+  month: { label: 'Month', task: (r) => monthOf(r.created_at), time: (r) => monthOf(r.work_date) },
 };
 
 const completed = (rows) => rows.filter((r) => r.status === 'DONE');
@@ -37,20 +41,28 @@ export const METRICS = {
   completion: { label: 'Completion %', source: 'task', type: 'percent', calc: (rows) => (rows.length ? completed(rows).length / rows.length : 0) },
   totalDays: { label: 'Days to complete (total)', source: 'task', type: 'decimal', calc: (rows) => round(sum(timed(rows).map((r) => daysBetween(r.created_at, r.completed_at))), 1) },
   avgDays: { label: 'Days to complete (avg)', source: 'task', type: 'decimal', calc: (rows) => { const t = timed(rows); return t.length ? round(sum(t.map((r) => daysBetween(r.created_at, r.completed_at))) / t.length, 1) : 0; } },
+  taskHours: { label: 'Hours worked', source: 'task', type: 'decimal', calc: (rows) => round(sum(rows.map((r) => Number(r.hours_logged) || 0))) },
   hours: { label: 'Hours', source: 'time', type: 'decimal', calc: (rows) => round(sum(rows.map((r) => Number(r.hours) || 0))) },
   entries: { label: 'Entries', source: 'time', type: 'number', calc: (rows) => new Set(rows.map((r) => r.entry_id)).size },
   people: { label: 'People', source: 'time', type: 'number', calc: (rows) => new Set(rows.map((r) => r.user_id)).size },
   avgHours: { label: 'Hours per entry', source: 'time', type: 'decimal', calc: (rows) => { const n = new Set(rows.map((r) => r.entry_id)).size; return n ? round(sum(rows.map((r) => Number(r.hours) || 0)) / n) : 0; } },
+  // Average a person works on the days they logged time.
+  perDay: { label: 'Hours per working day', source: 'time', type: 'decimal', calc: (rows) => { const n = new Set(rows.map((r) => `${r.user_id}|${String(r.work_date).slice(0, 10)}`)).size; return n ? round(sum(rows.map((r) => Number(r.hours) || 0)) / n) : 0; } },
 };
 
 export const dimensionsFor = (source) => Object.entries(DIMENSIONS).filter(([, d]) => d[source]).map(([id, d]) => ({ id, label: d.label }));
 export const metricsFor = (source) => Object.entries(METRICS).filter(([, m]) => m.source === source).map(([id, m]) => ({ id, ...m }));
 
+// Ready-made reports, named the way people ask for them.
 export const TEMPLATES = [
-  { id: 'timePerClient', label: 'Time per client', needsTime: true, config: { source: 'time', rowDim: 'client', splitDim: '', metrics: ['hours', 'entries', 'people'], sort: 'metric', limit: 0 } },
-  { id: 'timePerPerson', label: 'Time per person', needsTime: true, config: { source: 'time', rowDim: 'person', splitDim: 'client', metrics: ['hours'], sort: 'metric', limit: 0 } },
-  { id: 'tasksPerClient', label: 'Tasks per client', config: { source: 'task', rowDim: 'client', splitDim: '', metrics: ['tasks', 'completed', 'overdue', 'completion', 'avgDays'], sort: 'metric', limit: 0 } },
+  { id: 'whoOnWhat', label: 'Who worked how much on which client', needsTime: true, config: { source: 'time', rowDim: 'person', splitDim: 'client', metrics: ['hours'], sort: 'metric', limit: 0 } },
+  { id: 'timePerClient', label: 'Hours per client', needsTime: true, config: { source: 'time', rowDim: 'client', splitDim: '', metrics: ['hours', 'people', 'entries'], sort: 'metric', limit: 0 } },
+  { id: 'timePerTask', label: 'Hours per task', needsTime: true, config: { source: 'time', rowDim: 'task', splitDim: 'person', metrics: ['hours'], sort: 'metric', limit: 0 } },
+  { id: 'timePerPerson', label: 'Hours per person', needsTime: true, config: { source: 'time', rowDim: 'person', splitDim: '', metrics: ['hours', 'perDay', 'entries'], sort: 'metric', limit: 0 } },
+  { id: 'weeklyHours', label: 'Weekly hours per person', needsTime: true, config: { source: 'time', rowDim: 'week', splitDim: 'person', metrics: ['hours'], sort: 'name', limit: 0 } },
+  { id: 'tasksPerClient', label: 'Tasks per client', config: { source: 'task', rowDim: 'client', splitDim: '', metrics: ['tasks', 'completed', 'overdue', 'completion', 'taskHours'], sort: 'metric', limit: 0 } },
   { id: 'workload', label: 'Workload by person', config: { source: 'task', rowDim: 'person', splitDim: 'status', metrics: ['tasks'], sort: 'metric', limit: 0 } },
+  { id: 'overdueByPerson', label: 'Overdue by person', config: { source: 'task', rowDim: 'person', splitDim: '', metrics: ['overdue', 'open', 'tasks'], sort: 'metric', limit: 0 } },
   { id: 'throughput', label: 'Monthly throughput', config: { source: 'task', rowDim: 'month', splitDim: '', metrics: ['tasks', 'completed', 'completion'], sort: 'name', limit: 0 } },
 ];
 

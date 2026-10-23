@@ -106,6 +106,18 @@ async function ensureTimesheetSchema() {
         detail NVARCHAR(2000) NULL,
         created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME());
   `);
+  // The organization's customised Timesheet form, and answers to its extra questions.
+  await db.query(`
+    IF OBJECT_ID('dbo.timesheet_form_layouts', 'U') IS NULL
+      CREATE TABLE dbo.timesheet_form_layouts (
+        org_id INT NOT NULL PRIMARY KEY REFERENCES dbo.organizations(id),
+        definition NVARCHAR(MAX) NOT NULL,
+        version INT NOT NULL DEFAULT 1,
+        updated_by INT NULL REFERENCES dbo.users(id),
+        updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        CONSTRAINT ck_timesheet_form_layouts_json CHECK (ISJSON(definition) = 1));
+  `);
+  await db.query(`IF COL_LENGTH('dbo.timesheet_entries', 'custom_fields') IS NULL ALTER TABLE dbo.timesheet_entries ADD custom_fields NVARCHAR(MAX) NULL;`);
   // Optional link to the task the work was done for (managers create the task, people log time against it).
   await db.query(`IF COL_LENGTH('dbo.timesheet_entries', 'task_id') IS NULL ALTER TABLE dbo.timesheet_entries ADD task_id INT NULL REFERENCES dbo.tasks(id);`);
   await db.query(`

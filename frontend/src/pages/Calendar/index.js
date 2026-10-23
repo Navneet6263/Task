@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { calendar } from '../../services/api';
 import { readPreference, writePreference } from '../../services/preferences';
 import { Banner, Button, Segmented } from '../../ui';
@@ -14,6 +15,7 @@ const VIEWS = [['month', 'Month'], ['week', 'Week'], ['day', 'Day']];
 const ALL_TYPES = { EVENT: true, MEETING: true, REMINDER: true, TASK: true };
 
 export default function CalendarPage() {
+  const navigate = useNavigate();
   const self = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const [view, setViewState] = useState(() => readPreference('calendar-view', 'month'));
   const [cursor, setCursor] = useState(() => new Date());
@@ -57,6 +59,7 @@ export default function CalendarPage() {
   const showDay = (day) => { setCursor(day); setView('day'); };
   const create = (day, start) => setForm({ defaults: { day: day || toKey(cursor), start } });
   const afterSave = () => { setForm(null); setDetail(null); reload(); };
+  const open = (item) => (item.kind === 'task' ? navigate(`/dashboard?task=${item.id}`) : setDetail(item));
 
   return (
     <div className="flex gap-5">
@@ -81,8 +84,8 @@ export default function CalendarPage() {
           </Banner>
         )}
         {view === 'month'
-          ? <MonthView days={days} cursor={cursor} items={items} onCreate={create} onOpen={setDetail} onShowDay={showDay} />
-          : <div className="flex h-[min(760px,calc(100vh-170px))] min-h-[480px] flex-col"><TimeGridView key={view} days={days} items={items} onCreate={create} onOpen={setDetail} onShowDay={showDay} /></div>}
+          ? <MonthView days={days} cursor={cursor} items={items} onCreate={create} onOpen={open} onShowDay={showDay} />
+          : <div className="flex h-[min(760px,calc(100vh-170px))] min-h-[480px] flex-col"><TimeGridView key={view} days={days} items={items} onCreate={create} onOpen={open} onShowDay={showDay} /></div>}
       </section>
 
       {detail && !form && <EventDetailModal item={detail} onClose={() => setDetail(null)} onEdit={(event) => setForm({ event })} onChanged={() => { setDetail(null); reload(); }} />}

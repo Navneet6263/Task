@@ -21,7 +21,7 @@ test('employees see only active names and cannot change the list', async (t) => 
   const writes = [];
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 5, role: 'person' }]];
-    if (sql.startsWith('INSERT INTO org_clients (org_id, name, created_by, source)')) return [{ affectedRows: 0 }];
+    if (sql.startsWith('INSERT INTO org_clients')) return [{ affectedRows: 0 }];
     if (sql.startsWith('SELECT id, name, is_active FROM org_clients WHERE org_id = ? AND is_active = 1')) return [[{ id: 1, name: 'Riverside', is_active: 1 }]];
     if (sql.startsWith('SELECT pick_only')) return [[{ pick_only: 1 }]];
     writes.push(sql); return [{ affectedRows: 1 }];

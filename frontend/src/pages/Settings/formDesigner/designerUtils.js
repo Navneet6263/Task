@@ -15,6 +15,7 @@ export const TYPE_META = {
   type_details: ['Bug / feature extras', '+'],
   image: ['Image upload', '▣'],
   hours: ['Hours worked', '◷'],
+  task: ['Task picker', '◆'],
 };
 export const CUSTOM_TYPES = [
   ['text', 'One line of text'], ['long_text', 'Several lines'], ['number', 'Counts, amounts'],
@@ -92,8 +93,8 @@ export function layoutProblems(layout) {
     if (f.type === 'dropdown' && !(f.options || []).some((o) => String(o).trim())) problems.push(`Add options to "${f.label}".`);
   });
   const title = layout.fields.find((f) => f.key === 'title');
-  if ((!title || title.hidden) && !String(layout.settings.title_pattern || '').trim()) problems.push('The title is hidden, so set how the title is built.');
-  const days = layout.settings.edit_window_days;
+  if (title && title.hidden && !String(layout.settings?.title_pattern || '').trim()) problems.push('The title is hidden, so set how the title is built.');
+  const days = layout.settings?.edit_window_days ?? null;
   if (days !== null && days !== '' && !(Number.isInteger(Number(days)) && Number(days) >= 1 && Number(days) <= 365)) problems.push('Edit window must be 1 to 365 days.');
   return [...new Set(problems)];
 }

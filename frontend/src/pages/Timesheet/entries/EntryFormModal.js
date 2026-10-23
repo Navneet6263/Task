@@ -2,36 +2,41 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
 import { Button, FormRow, Input, Modal, Select, Textarea } from '../../../ui';
+import LayoutField from '../../Dashboard/TaskComposer/LayoutField';
 import { errorOf, fieldsOf } from '../format';
 import TaskPicker from './TaskPicker';
 
-const REQUIRED = ['client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'count_type', 'count_number'];
-const FIELDS = [...REQUIRED, 'description', 'hours', 'task_id'];
+const CORE = ['task_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
 
 const blank = (config) => ({
-  ...Object.fromEntries(FIELDS.map((key) => [key, ''])),
+  ...Object.fromEntries(CORE.map((key) => [key, ''])),
   date_worked: config.today,
   agent_id: config.permissions.log_for_others ? '' : String(config.user_id),
+  custom_fields: {},
 });
-const fromEntry = (entry) => Object.fromEntries(FIELDS.map((key) => [key, entry[key] === null || entry[key] === undefined ? '' : String(entry[key])]));
+const fromEntry = (entry) => {
+  let custom = {};
+  try { custom = typeof entry.custom_fields === 'string' ? JSON.parse(entry.custom_fields) || {} : entry.custom_fields || {}; } catch { custom = {}; }
+  return { ...Object.fromEntries(CORE.map((key) => [key, entry[key] === null || entry[key] === undefined ? '' : String(entry[key])])), custom_fields: custom };
+};
+const emptyValue = (field, value) => (field.type === 'checkbox' ? !(value === true || value === 'true') : value === undefined || value === null || String(value).trim() === '');
 
-// Mirrors the client's "Add Timesheet" screen field for field.
+// The "Add Timesheet" form, built from the organization's customised form
+// (Settings → Form designer → Timesheet form): labels, order, required fields and extra questions.
 export default function EntryFormModal({ config, entry, initialTask, onClose, onSaved, onClientAdded }) {
   const isEdit = Boolean(entry);
+  const layout = config.form;
+  const visible = layout.fields.filter((f) => !f.hidden);
   const [form, setForm] = useState(() => (isEdit ? fromEntry(entry) : blank(config)));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
   const [added, setAdded] = useState([]);
   const [newClient, setNewClient] = useState(null); // null = closed, string = name being typed
   const [addingClient, setAddingClient] = useState(false);
   const [task, setTask] = useState(() => (entry?.task_id ? { id: entry.task_id, title: entry.task_title, status: entry.task_status } : null));
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  const setCustom = (key, value) => setForm((prev) => ({ ...prev, custom_fields: { ...(prev.custom_fields || {}), [key]: value } }));
 
-  // Keep an already saved value selectable even if an admin has since switched that option off.
-  const optionsFor = (group) => {
-    const labels = (config.options[group] || []).map((option) => option.label);
-    return form[group] && !labels.includes(form[group]) ? [form[group], ...labels] : labels;
-  };
   const clients = useMemo(() => {
     const list = [...config.clients, ...added.filter((a) => !config.clients.some((c) => c.id === a.id))]
       .map((client) => ({ id: String(client.id), name: client.name })).sort((a, b) => a.name.localeCompare(b.name));
@@ -54,7 +59,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   };
   useEffect(() => { if (initialTask && !isEdit) pickTask(initialTask); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Managers and admins can add a missing client without leaving the form.
+  // Managers and admins can add a missing client without leaving the form. It goes into Settings → Clients.
   const addClient = async () => {
     const name = String(newClient || '').trim();
     if (!name) return;
@@ -64,16 +69,19 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       setAdded((prev) => [...prev, data]);
       setForm((prev) => ({ ...prev, client_id: String(data.id) }));
       setNewClient(null);
-      notify(`${name} added and selected.`, 'success');
+      notify(`${data.name} added to your client list and selected.`, 'success');
       onClientAdded?.();
     } catch (error) { notify(errorOf(error, 'Could not add the client.')); }
     finally { setAddingClient(false); }
   };
 
   const check = (mode) => {
-    const required = mode === 'draft' ? ['client_id'] : [...REQUIRED, ...(isEdit ? [] : ['hours'])];
     const next = {};
-    required.forEach((key) => { if (!String(form[key] ?? '').trim()) next[key] = 'This field is required.'; });
+    const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id') : visible.filter((f) => f.required && (f.key !== 'hours' || !isEdit));
+    need.forEach((f) => {
+      const value = f.kind === 'custom' ? form.custom_fields?.[f.key] : form[f.key];
+      if (emptyValue(f, value)) next[f.key] = 'This field is required.';
+    });
     if (form.hours && !(Number(form.hours) > 0 && Number(form.hours) <= 24)) next.hours = 'Hours must be more than 0 and at most 24.';
     if (form.date_worked && form.date_worked > config.today) next.date_worked = 'Date worked cannot be in the future.';
     setErrors(next);
@@ -100,32 +108,59 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     } finally { setSaving(false); }
   };
 
-  const row = (key, label, required, control, hint) => (
-    <FormRow label={label} htmlFor={`ts-${key}`} required={required} error={errors[key]} hint={hint}>{control}</FormRow>
-  );
   const select = (key, list, placeholder = 'Select', disabled = false) => (
     <Select id={`ts-${key}`} value={form[key]} onChange={set(key)} disabled={disabled}>
       <option value="">{placeholder}</option>
       {list.map((item) => (typeof item === 'string' ? <option key={item} value={item}>{item}</option> : <option key={item.id} value={item.id}>{item.name}</option>))}
     </Select>
   );
-
+  // Keep an already saved value selectable even if it has since been removed from the list.
+  const optionsFor = (field) => (form[field.key] && !(field.options || []).includes(form[field.key]) ? [form[field.key], ...(field.options || [])] : field.options || []);
   const canAddClient = config.permissions.manage_clients;
-  const clientControl = (
-    <>
-      {select('client_id', clients, '-Select-')}
-      {canAddClient && (newClient === null
-        ? <button type="button" className="mt-1.5 text-xs font-semibold text-accent hover:underline" onClick={() => setNewClient('')}>+ New client</button>
-        : (
-          <div className="mt-2 flex gap-2">
-            <Input aria-label="New client name" autoFocus maxLength={255} placeholder="Client name" value={newClient}
-              onChange={(event) => setNewClient(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addClient(); } }} />
-            <Button size="sm" variant="primary" disabled={addingClient || !newClient.trim()} onClick={addClient}>{addingClient ? 'Adding…' : 'Add'}</Button>
-            <Button size="sm" onClick={() => setNewClient(null)}>Cancel</Button>
-          </div>
-        ))}
-    </>
-  );
+  const canPickAgent = config.permissions.log_for_others;
+
+  const control = (field) => {
+    const { key } = field;
+    if (field.kind === 'custom') {
+      return <LayoutField field={field} value={form.custom_fields?.[key]} onChange={(value) => setCustom(key, value)} ctx={{ idPrefix: 'ts' }} />;
+    }
+    switch (key) {
+      case 'task_id': return <TaskPicker id="ts-task_id" value={task} onPick={pickTask} />;
+      case 'client_id': return (
+        <>
+          {select('client_id', clients, '-Select-')}
+          {canAddClient && (newClient === null
+            ? <button type="button" className="mt-1.5 text-xs font-semibold text-accent hover:underline" onClick={() => setNewClient('')}>+ New client</button>
+            : (
+              <div className="mt-2 flex gap-2">
+                <Input aria-label="New client name" autoFocus maxLength={255} placeholder="Client name" value={newClient}
+                  onChange={(event) => setNewClient(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addClient(); } }} />
+                <Button size="sm" variant="primary" disabled={addingClient || !newClient.trim()} onClick={addClient}>{addingClient ? 'Adding…' : 'Add'}</Button>
+                <Button size="sm" onClick={() => setNewClient(null)}>Cancel</Button>
+              </div>
+            ))}
+        </>
+      );
+      case 'date_worked': return <Input id="ts-date_worked" type="date" max={config.today} value={form.date_worked} onChange={set('date_worked')} />;
+      case 'period_ended': return <Input id="ts-period_ended" type="date" value={form.period_ended} onChange={set('period_ended')} />;
+      case 'agent_id': return select('agent_id', config.users.map((user) => ({ id: String(user.id), name: user.name })), 'Select', !canPickAgent);
+      case 'description': return <Textarea id="ts-description" rows={3} maxLength={2000} value={form.description} onChange={set('description')} />;
+      case 'count_number': return <Input id="ts-count_number" type="number" min="0" step="1" value={form.count_number} onChange={set('count_number')} />;
+      case 'hours': return isEdit
+        ? <p className="text-sm text-muted sm:pt-2">Hours are kept in the time log on the entry, so each person adds their own.</p>
+        : <Input id="ts-hours" type="number" min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" value={form.hours} onChange={set('hours')} />;
+      default: return field.type === 'dropdown'
+        ? select(key, optionsFor(field))
+        : <Input id={`ts-${key}`} maxLength={120} value={form[key]} onChange={set(key)} />;
+    }
+  };
+  const hint = (field) => {
+    if (field.help) return field.help;
+    if (field.key === 'task_id' && !task) return 'Pick the task your manager created. Client, agent and description fill in for you.';
+    if (field.key === 'client_id') return canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
+    if (field.key === 'agent_id' && !canPickAgent) return 'Your entries are logged under your own name.';
+    return null;
+  };
 
   const footer = isEdit
     ? <><Button variant="primary" disabled={saving} onClick={() => save('edit')}>Save changes</Button><Button onClick={onClose}>Cancel</Button></>
@@ -135,29 +170,16 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
         <Button disabled={saving} onClick={() => save('draft')}>Save Draft</Button>
         <Button onClick={onClose}>Cancel</Button>
       </>;
-  const canPickAgent = config.permissions.log_for_others;
 
   return (
-    <Modal title={isEdit ? 'Edit Timesheet' : 'Add Timesheet'} onClose={onClose} footer={footer} size="lg">
+    <Modal title={isEdit ? `Edit ${layout.name || 'Timesheet'}` : `Add ${layout.name || 'Timesheet'}`} onClose={onClose} footer={footer} size="lg">
       <p className="mb-4 border-b border-line pb-3 text-sm font-semibold">Job Configuration Details</p>
-      {row('task_id', 'Task', false, <TaskPicker id="ts-task_id" value={task} onPick={pickTask} />,
-        task ? null : 'Pick the task your manager created. Client, agent and description fill in for you.')}
-      {row('client_id', 'Client', true, clientControl,
-        canAddClient ? 'Client names used on tasks appear here automatically.' : 'Client names used on tasks appear here automatically. Still missing? Ask your manager or admin to add it.')}
-      {row('job_type', 'Job Type', true, select('job_type', optionsFor('job_type')))}
-      {row('work_type', 'Work Type', true, select('work_type', optionsFor('work_type')))}
-      {row('date_worked', 'Date worked', true, <Input id="ts-date_worked" type="date" max={config.today} value={form.date_worked} onChange={set('date_worked')} />)}
-      {row('agent_id', 'Agent', true, select('agent_id', config.users.map((user) => ({ id: String(user.id), name: user.name })), 'Select', !canPickAgent),
-        canPickAgent ? null : 'Your entries are logged under your own name.')}
-      {row('period_type', 'Period Type', true, select('period_type', optionsFor('period_type')))}
-      {row('period_ended', 'Period Ended', true, <Input id="ts-period_ended" type="date" value={form.period_ended} onChange={set('period_ended')} />)}
-      {row('registration_status', 'Registration Status', true, select('registration_status', optionsFor('registration_status')))}
-      {row('description', 'Description', false, <Textarea id="ts-description" rows={3} maxLength={2000} value={form.description} onChange={set('description')} />)}
-      {row('count_type', 'Count Type', true, select('count_type', optionsFor('count_type')))}
-      {row('count_number', 'Count number', true, <Input id="ts-count_number" type="number" min="0" step="1" value={form.count_number} onChange={set('count_number')} />)}
-      {isEdit
-        ? row('hours', 'Hours worked', false, <p className="text-sm text-muted sm:pt-2">Hours are kept in the time log on the entry, so each person adds their own.</p>)
-        : row('hours', 'Hours worked', true, <Input id="ts-hours" type="number" min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" value={form.hours} onChange={set('hours')} />)}
+      {visible.map((field) => (
+        <FormRow key={field.key} label={field.type === 'checkbox' ? '' : field.label} htmlFor={`ts-${field.key}`}
+          required={field.required && !(field.key === 'hours' && isEdit)} error={errors[field.key]} hint={hint(field)}>
+          {control(field)}
+        </FormRow>
+      ))}
     </Modal>
   );
 }

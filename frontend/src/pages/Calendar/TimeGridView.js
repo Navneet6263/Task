@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { hourLabel, minutesOf, pad, timeLabel, toKey, todayKey } from './dates';
 import { byStart, onDay, toneOf } from './items';
 import ItemChip from './ItemChip';
+import HoverCard from './HoverCard';
+import ItemDetails from './ItemDetails';
 
 const HOUR_PX = 48;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -72,12 +74,15 @@ export default function TimeGridView({ days, items, onCreate, onOpen, onShowDay 
               {layout(items.filter((item) => !item.allDay && onDay(item, key)), key).map(({ item, start, end, lane, lanes }) => {
                 const tone = toneOf(item);
                 return (
-                  <button key={item.key} type="button" onClick={() => onOpen(item)} title={item.title}
-                    className={`absolute overflow-hidden rounded-md border px-1.5 py-1 text-left text-xs shadow-sm hover:brightness-95 ${tone.block} ${item.declined ? 'opacity-60' : ''}`}
+                  <HoverCard key={item.key} content={<ItemDetails item={item} />} className="absolute"
                     style={{ top: (start / 60) * HOUR_PX + 1, height: Math.max(20, ((end - start) / 60) * HOUR_PX - 2), left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)` }}>
-                    <span className={`block truncate font-semibold ${item.declined ? 'line-through' : ''}`}>{item.title}</span>
-                    {end - start >= 45 && <span className="block truncate text-[10px] text-muted">{timeLabel(item.start)} – {timeLabel(item.end)}</span>}
-                  </button>
+                    <button type="button" onClick={() => onOpen(item)} aria-label={item.title}
+                      className={`h-full w-full overflow-hidden rounded-md border px-1.5 py-1 text-left text-xs shadow-sm hover:brightness-95 ${tone.block} ${item.declined ? 'opacity-60' : ''}`}>
+                      <span className={`block truncate font-semibold ${item.declined ? 'line-through' : ''}`}>{item.title}</span>
+                      {end - start >= 45 && <span className="block truncate text-[10px] text-muted">{timeLabel(item.start)} – {timeLabel(item.end)}</span>}
+                      {end - start >= 45 && item.raw?.created_by_name && <span className="block truncate text-[10px] text-muted">by {item.raw.is_organizer ? 'you' : item.raw.created_by_name}</span>}
+                    </button>
+                  </HoverCard>
                 );
               })}
               {key === today && (

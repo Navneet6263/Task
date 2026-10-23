@@ -128,36 +128,39 @@ function parseHours(raw, errors, key = 'hours', required = true) {
 }
 
 // mode: 'draft' (only client required), 'submit' (all required, hours too), 'edit' (all required, no hours).
-function validateEntry(body, mode, today) {
+// `required` (optional Set) comes from the organization's customised form; without it every field is required on submit.
+function validateEntry(body, mode, today, required) {
   const errors = {};
   const full = mode !== 'draft';
+  const need = (key) => full && (required ? required.has(key) : true);
   const entry = {
     client_id: id(body, 'client_id', 'Client', errors, true),
     task_id: id(body, 'task_id', 'Task', errors, false),
-    job_type: text(body, 'job_type', 120, 'Job Type', errors, full),
-    work_type: text(body, 'work_type', 120, 'Work Type', errors, full),
+    job_type: text(body, 'job_type', 120, 'Job Type', errors, need('job_type')),
+    work_type: text(body, 'work_type', 120, 'Work Type', errors, need('work_type')),
     date_worked: date(body, 'date_worked', 'Date worked', errors, full, today, true),
-    agent_id: id(body, 'agent_id', 'Agent', errors, full),
-    period_type: text(body, 'period_type', 120, 'Period Type', errors, full),
-    period_ended: date(body, 'period_ended', 'Period Ended', errors, full, today, false),
-    registration_status: text(body, 'registration_status', 120, 'Registration Status', errors, full),
-    description: text(body, 'description', 2000, 'Description', errors, false),
-    count_type: text(body, 'count_type', 120, 'Count Type', errors, full),
+    agent_id: id(body, 'agent_id', 'Agent', errors, need('agent_id')),
+    period_type: text(body, 'period_type', 120, 'Period Type', errors, need('period_type')),
+    period_ended: date(body, 'period_ended', 'Period Ended', errors, need('period_ended'), today, false),
+    registration_status: text(body, 'registration_status', 120, 'Registration Status', errors, need('registration_status')),
+    description: text(body, 'description', 2000, 'Description', errors, Boolean(required) && need('description')),
+    count_type: text(body, 'count_type', 120, 'Count Type', errors, need('count_type')),
     count_number: null,
   };
   const count = body.count_number;
   if (count === undefined || count === null || count === '') {
-    if (full) errors.count_number = 'Count number is required.';
+    if (need('count_number')) errors.count_number = 'Count number is required.';
   } else if (!Number.isSafeInteger(Number(count)) || Number(count) < 0 || Number(count) > 2000000000) {
     errors.count_number = 'Count number must be a whole number, 0 or more.';
   } else entry.count_number = Number(count);
   entry.hours = mode === 'edit' ? null : parseHours(body.hours, errors, 'hours', mode === 'submit');
+  if (required?.has('task_id') && full && !entry.task_id) errors.task_id = 'Task is required.';
   if (Object.keys(errors).length) throw fail(422, Object.values(errors)[0], errors);
   return entry;
 }
 
 // Fields a draft must have before it can be submitted.
-const missingForSubmit = (entry) => ['job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'count_type', 'count_number']
+const missingForSubmit = (entry, required) => (required ? [...required].filter((key) => key !== 'client_id') : ['job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'count_type', 'count_number'])
   .filter((key) => entry[key] === null || entry[key] === undefined || entry[key] === '');
 
 function summarizeReport(rows) {

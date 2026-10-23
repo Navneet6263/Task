@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { calendar } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Modal } from '../../ui';
@@ -18,23 +17,9 @@ function Row({ label, children }) {
   );
 }
 
-function TaskDetail({ item, onClose }) {
-  const navigate = useNavigate();
-  const task = item.raw;
-  return (
-    <Modal title={task.title} subtitle="Task due date" onClose={onClose}
-      footer={<><span className="flex-1" /><Button onClick={onClose}>Close</Button><Button variant="primary" onClick={() => navigate(`/dashboard?task=${task.id}`)}>Open task</Button></>}>
-      <Row label="Due">{whenText(item).replace(' · All day', '')}</Row>
-      <Row label="Status">{task.status.replaceAll('_', ' ')}{item.overdue && <span className="ml-2"><Chip tone="danger">Overdue</Chip></span>}</Row>
-      <Row label="Priority">{task.priority}</Row>
-    </Modal>
-  );
-}
-
 export default function EventDetailModal({ item, onClose, onEdit, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  if (item.kind === 'task') return <TaskDetail item={item} onClose={onClose} />;
   const event = item.raw;
 
   const act = async (fn, message) => {

@@ -114,7 +114,7 @@ test('employees cannot add clients, change setup or open reports', async (t) => 
 test('creating an entry uses the token organization and forces an employee to be their own agent', async (t) => {
   let insert;
   mockDb(t, async (sql, params) => {
-    if (sql.startsWith('SELECT id FROM timesheet_clients')) { assert.deepEqual(params, [5, 1]); return [[{ id: 5 }]]; }
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) { assert.deepEqual(params, [5, 1]); return [[{ id: 5 }]]; }
     if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
     if (sql.startsWith('SELECT id, option_group')) return [optionRows];
     if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
@@ -131,7 +131,7 @@ test('creating an entry uses the token organization and forces an employee to be
 
 test('a person cannot log more than 24 hours on one day across entries', async (t) => {
   mockDb(t, async (sql) => {
-    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
     if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
     if (sql.startsWith('SELECT id, option_group')) return [optionRows];
     if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 22 }]];
@@ -145,7 +145,7 @@ test('a person cannot log more than 24 hours on one day across entries', async (
 
 test('dropdown values outside the organization list are rejected', async (t) => {
   mockDb(t, async (sql) => {
-    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
     if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
     if (sql.startsWith('SELECT id, option_group')) return [optionRows];
     throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
@@ -165,20 +165,23 @@ test('entries from another organization are not found', async (t) => {
   assert.equal((await send('/entries/42')).status, 404);
 });
 
-test('client names used on tasks are copied into timesheet clients without breaking the page', async (t) => {
-  let copy = null;
+test('"+ New client" in the timesheet adds to the one client list and refuses clients turned off there', async (t) => {
+  const writes = [];
+  let active = 1;
   mockDb(t, (sql, params) => {
-    if (sql.startsWith('INSERT INTO timesheet_clients (org_id, name, created_by, source)')) { copy = { sql, params }; throw Object.assign(Error('dup'), { number: 2627 }); }
-    if (sql.startsWith('SELECT c.id, c.name, c.is_active, c.source')) return [[{ id: 4, name: 'Riverside Motors', is_active: true, source: 'task', entry_count: 0, total_hours: 0 }]];
+    if (sql.startsWith('INSERT INTO org_clients')) { writes.push(sql); throw Object.assign(Error('dup'), { number: 2627 }); }
+    if (sql.startsWith('SELECT name, is_active FROM org_clients')) return [[{ name: 'ABC Ltd', is_active: active }]];
+    if (sql.startsWith('INSERT INTO timesheet_clients')) { writes.push(sql); return [{ affectedRows: 1 }]; }
+    if (sql.startsWith('SELECT id, name FROM timesheet_clients')) return [[{ id: 140, name: 'ABC Ltd' }]];
     throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
-  }, { role: 'admin' });
-  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
-  const response = await send('/clients');
-  assert.equal(response.status, 200);
-  assert.equal((await response.json())[0].source, 'task');
-  assert.match(copy.sql, /FROM tasks/);
-  assert.match(copy.sql, /NOT EXISTS \(SELECT 1 FROM timesheet_clients c WHERE c\.org_id = \? AND c\.name = src\.name\)/);
-  assert.deepEqual(copy.params, [1, 10, 1, 1], 'only this organization');
+  }, { role: 'manager' });
+  const send = await client(t, { id: 10, role: 'manager', org_id: 1 });
+  const ok = await send('/clients', 'POST', { name: 'abc ltd' });
+  assert.equal(ok.status, 200, 'already in Settings → Clients, so it is reused');
+  assert.deepEqual(await ok.json(), { id: 140, name: 'ABC Ltd', is_active: true });
+  assert.ok(writes[0].startsWith('INSERT INTO org_clients'), 'added to the main list first');
+  active = 0;
+  assert.equal((await send('/clients', 'POST', { name: 'ABC Ltd' })).status, 409);
 });
 
 test('an entry can be linked to a task the person can see, but not to someone else\'s task', async (t) => {
@@ -187,7 +190,7 @@ test('an entry can be linked to a task the person can see, but not to someone el
   let taskCheck;
   mockDb(t, async (sql, params) => {
     if (sql.startsWith('SELECT t.id FROM tasks t')) { taskCheck = { sql, params }; return [visible ? [{ id: 42 }] : []]; }
-    if (sql.startsWith('SELECT id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
     if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
     if (sql.startsWith('SELECT id, option_group')) return [optionRows];
     if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];

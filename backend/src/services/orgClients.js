@@ -31,6 +31,37 @@ async function syncFromTasks(orgId, userId) {
   }
 }
 
+// Settings → Clients is the one client list. Timesheet entries still point at timesheet_clients rows,
+// so those rows mirror the main list by name. Never blocks the caller.
+async function syncClientLists(orgId, userId, { toTimesheet = false } = {}) {
+  await syncFromTasks(orgId, userId);
+  const run = async (sql, params, what) => {
+    try { await db.execute(sql, params); }
+    catch (error) { if (!isDuplicateKey(error)) console.error(`[clients] could not ${what}`, error.message); }
+  };
+  // Clients that were only ever added in the timesheet join the main list (keeping on/off).
+  await run(
+    `INSERT INTO org_clients (org_id, name, is_active, created_by, source)
+     SELECT ?, tc.name, tc.is_active, ?, 'timesheet' FROM timesheet_clients tc
+     WHERE tc.org_id = ? AND NOT EXISTS (SELECT 1 FROM org_clients c WHERE c.org_id = ? AND c.name = tc.name)`,
+    [orgId, userId || null, orgId, orgId], 'copy timesheet clients');
+  if (toTimesheet) {
+    await run(
+      `INSERT INTO timesheet_clients (org_id, name, created_by, source)
+       SELECT ?, c.name, ?, 'list' FROM org_clients c
+       WHERE c.org_id = ? AND NOT EXISTS (SELECT 1 FROM timesheet_clients tc WHERE tc.org_id = ? AND tc.name = c.name)`,
+      [orgId, userId || null, orgId, orgId], 'mirror clients into the timesheet');
+  }
+}
+
+// The timesheet row for a client of the main list (created when missing).
+async function timesheetClientId(orgId, name, userId) {
+  try { await db.execute("INSERT INTO timesheet_clients (org_id, name, created_by, source) VALUES (?, ?, ?, 'list')", [orgId, name, userId || null]); }
+  catch (error) { if (!isDuplicateKey(error)) throw error; }
+  const [[row]] = await db.execute('SELECT id, name FROM timesheet_clients WHERE org_id = ? AND name = ?', [orgId, name]);
+  return row;
+}
+
 async function pickOnly(orgId) {
   try {
     const [[row]] = await db.execute('SELECT pick_only FROM org_client_settings WHERE org_id = ?', [orgId]);
@@ -60,4 +91,4 @@ async function resolveTaskClient(orgId, rawName, role, userId) {
   return name;
 }
 
-module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, pickOnly, resolveTaskClient };
+module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, syncClientLists, timesheetClientId, pickOnly, resolveTaskClient };

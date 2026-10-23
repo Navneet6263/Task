@@ -25,20 +25,26 @@ export function exportCustomReport({ pivot, config, name, scopeLabel, from, to, 
     : pivot.totals;
 
   const rawSheet = config.source === 'time'
-    ? { name: 'Time entries', columns: [
-        { key: 'work_date', label: 'Date', type: 'date', width: 14 }, { key: 'client_name', label: 'Client', width: 26 },
-        { key: 'user_name', label: 'Person', width: 22 }, { key: 'job_type', label: 'Job type', width: 18 }, { key: 'work_type', label: 'Work type', width: 18 },
-        { key: 'hours', label: 'Hours', type: 'decimal', width: 10 }, { key: 'note', label: 'Note', width: 40, wrap: true }], rows: rawRows, totals: { hours: 'sum' } }
-    : { name: 'Tasks', columns: [
-        { key: 'id', label: 'ID', type: 'number', width: 9 }, { key: 'title', label: 'Task', width: 44, wrap: true }, { key: 'client_name', label: 'Client', width: 22 },
-        { key: 'assigned_to_name', label: 'Assignee', width: 22 }, { key: 'status', label: 'Status', width: 14 }, { key: 'priority', label: 'Priority', width: 11 },
-        { key: 'created_at', label: 'Created', type: 'datetime', width: 18 }, { key: 'completed_at', label: 'Completed', type: 'datetime', width: 18 }], rows: rawRows };
+    ? { name: 'Hours detail', title: 'Every time entry in this report', columns: [
+        { key: 'work_date', label: 'Date', type: 'date', width: 13 }, { key: 'user_name', label: 'Person', width: 20 },
+        { key: 'client_name', label: 'Client', width: 24 }, { key: 'task_title', label: 'Task', width: 34, value: (r) => (r.task_title ? `${r.task_id ? `#${r.task_id} ` : ''}${r.task_title}` : null) },
+        { key: 'job_type', label: 'Job type', width: 16 }, { key: 'work_type', label: 'Work type', width: 16 }, { key: 'source', label: 'Logged in', width: 12 },
+        { key: 'hours', label: 'Hours', type: 'decimal', width: 10 }, { key: 'note', label: 'Note', width: 40, wrap: true }],
+      rows: [...rawRows].sort((a, b) => String(a.work_date).localeCompare(String(b.work_date)) || String(a.user_name).localeCompare(String(b.user_name))), totals: { hours: 'sum' } }
+    : { name: 'Tasks detail', title: 'Every task in this report', columns: [
+        { key: 'id', label: 'ID', type: 'number', width: 8 }, { key: 'title', label: 'Task', width: 42, wrap: true }, { key: 'client_name', label: 'Client', width: 22 },
+        { key: 'assigned_to_name', label: 'Assignee', width: 20 }, { key: 'created_by_name', label: 'Created by', width: 20 }, { key: 'team_name', label: 'Team', width: 18 },
+        { key: 'status', label: 'Status', width: 13 }, { key: 'priority', label: 'Priority', width: 10 },
+        { key: 'due_date', label: 'Due', type: 'date', width: 13 }, { key: 'created_at', label: 'Created', type: 'datetime', width: 17 }, { key: 'completed_at', label: 'Completed', type: 'datetime', width: 17 },
+        { key: 'hours_logged', label: 'Hours worked', type: 'decimal', width: 12 }],
+      rows: rawRows, totals: { hours_logged: 'sum' } };
 
+  const grouping = `Rows: ${dim.label}${split ? ` · Columns: ${DIMENSIONS[config.splitDim].label}` : ''} · Numbers: ${config.metrics.map((id) => METRICS[id].label).join(', ')}`;
   const title = name || reportTitle(config);
   return downloadWorkbook({
     fileName: `${fileSlug(title)}-${from || 'all'}-to-${to || 'today'}`,
     title,
-    lines: [`${scopeLabel} · Period: ${periodLabel(from, to)}`, `Generated: ${new Date().toLocaleString('en-GB')}`],
+    lines: [`${scopeLabel} · Period: ${periodLabel(from, to)}`, grouping, `Generated: ${new Date().toLocaleString('en-GB')}`],
     sheets: [{ name: 'Report', columns, rows, totals }, rawSheet],
   });
 }

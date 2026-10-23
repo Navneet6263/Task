@@ -56,6 +56,8 @@ export default function LayoutField({ field, value, onChange, ctx, disabled = fa
       );
     case 'client':
       return <ClientPicker id={id} value={v} onChange={onChange} disabled={disabled} preview={ctx.clientPreview || null} />;
+    case 'task':
+      return <Select id={id} disabled value="" onChange={() => {}}><option value="">Search and pick a task…</option></Select>;
     case 'date':
       return <Input id={id} type="date" disabled={disabled} value={v ? String(v).slice(0, 10) : ''} onChange={set} />;
     case 'task_option': {

@@ -4,8 +4,10 @@ const { isModuleEnabled } = require('../services/orgModules');
 const { OPTION_GROUPS, fail, todayLocal, permissionsFor } = require('../services/timesheetRules');
 const {
   db, isDuplicateKey, route, positive, resolveRole, requireTimesheet, requirePermission, getSettings,
-  ensureDefaultOptions, getOptions, orgMembers, syncTaskClients, taskScope,
+  ensureDefaultOptions, getOptions, orgMembers, taskScope, effectiveLayout,
 } = require('./timesheetSupport');
+const { syncClientLists, timesheetClientId } = require('../services/orgClients');
+const { normalizeTimesheetLayout } = require('../services/timesheetFormLayout');
 
 router.use(authenticate);
 
@@ -26,12 +28,16 @@ const canManageClients = (role) => permissionsFor(role).manage_clients;
 const canSetup = (role) => permissionsFor(role).setup;
 
 router.get('/config', route(async (req, res) => {
-  await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncTaskClients(req.orgId, req.userId)]);
-  const [settings, options, members, clientRows] = await Promise.all([
+  await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncClientLists(req.orgId, req.userId, { toTimesheet: true })]);
+  const [settings, options, members, clientRows, form] = await Promise.all([
     getSettings(req.orgId),
     getOptions(req.orgId),
     orgMembers(req.orgId),
-    db.execute('SELECT id, name FROM timesheet_clients WHERE org_id = ? AND is_active = 1 ORDER BY name ASC', [req.orgId]),
+    // Only clients that are on in Settings → Clients.
+    db.execute(
+      `SELECT tc.id, tc.name FROM timesheet_clients tc JOIN org_clients oc ON oc.org_id = tc.org_id AND oc.name = tc.name
+       WHERE tc.org_id = ? AND oc.is_active = 1 ORDER BY tc.name ASC`, [req.orgId]),
+    effectiveLayout(req.orgId),
   ]);
   let pendingUnlocks = 0;
   if (permissionsFor(req.tsRole).approve_unlocks) {
@@ -48,6 +54,7 @@ router.get('/config', route(async (req, res) => {
     clients: clientRows[0],
     users: members.map(({ id, name }) => ({ id, name })),
     pending_unlocks: pendingUnlocks,
+    form,
   });
 }));
 
@@ -72,57 +79,53 @@ router.get('/tasks', route(async (req, res) => {
   res.json(rows);
 }));
 
-/* Clients: managers and admins only. Employees only see active clients through /config. */
-router.get('/clients', requirePermission(canManageClients, 'Only managers and admins can manage clients'), route(async (req, res) => {
-  await syncTaskClients(req.orgId, req.userId);
-  const [rows] = await db.execute(
-    `SELECT c.id, c.name, c.is_active, c.source,
-       (SELECT COUNT(*) FROM timesheet_entries e WHERE e.client_id = c.id AND e.org_id = c.org_id AND e.is_deleted = 0) AS entry_count,
-       (SELECT COALESCE(SUM(l.hours), 0) FROM timesheet_time_logs l JOIN timesheet_entries e ON e.id = l.entry_id
-          WHERE e.client_id = c.id AND e.org_id = c.org_id AND e.is_deleted = 0 AND l.is_deleted = 0) AS total_hours
-     FROM timesheet_clients c WHERE c.org_id = ? ORDER BY c.is_active DESC, c.name ASC`,
-    [req.orgId]
-  );
-  res.json(rows);
-}));
-
 function clientName(value) {
   if (typeof value !== 'string' || !value.trim()) throw fail(422, 'Client name is required');
   if (value.trim().length > 255) throw fail(422, 'Client name must be at most 255 characters');
-  return value.trim();
+  return value.trim().replace(/\s+/g, ' ');
 }
 
+// "+ New client" in the timesheet form adds to Settings → Clients (the one list) and returns the timesheet row.
 router.post('/clients', requirePermission(canManageClients, 'Only managers and admins can add clients'), route(async (req, res) => {
   const name = clientName(req.body.name);
-  try {
-    const [result] = await db.execute('INSERT INTO timesheet_clients (org_id, name, created_by) VALUES (?, ?, ?)', [req.orgId, name, req.userId]);
-    res.status(201).json({ id: result.insertId, name, is_active: true });
-  } catch (error) {
-    if (isDuplicateKey(error)) throw fail(409, 'A client with this name already exists');
-    throw error;
-  }
+  let created = true;
+  try { await db.execute('INSERT INTO org_clients (org_id, name, created_by) VALUES (?, ?, ?)', [req.orgId, name, req.userId]); }
+  catch (error) { if (!isDuplicateKey(error)) throw error; created = false; }
+  const [[listed]] = await db.execute('SELECT name, is_active FROM org_clients WHERE org_id = ? AND name = ?', [req.orgId, name]);
+  if (listed && !Number(listed.is_active)) throw fail(409, `${listed.name} is turned off in Settings → Clients. Turn it on there first.`);
+  const row = await timesheetClientId(req.orgId, listed?.name || name, req.userId);
+  res.status(created ? 201 : 200).json({ id: row.id, name: row.name, is_active: true });
 }));
 
-router.put('/clients/:id', requirePermission(canManageClients, 'Only managers and admins can change clients'), route(async (req, res) => {
-  const id = positive(req.params.id, 'client');
-  const updates = [], params = [];
-  if (req.body.name !== undefined) { updates.push('name = ?'); params.push(clientName(req.body.name)); }
-  if (req.body.is_active !== undefined) {
-    if (typeof req.body.is_active !== 'boolean') throw fail(422, 'is_active must be true or false');
-    updates.push('is_active = ?'); params.push(req.body.is_active);
-  }
-  if (!updates.length) throw fail(422, 'Nothing to update');
-  try {
+/* The customised Timesheet form (Settings → Form designer → Timesheet form). Managers and admins. */
+router.get('/form', route(async (req, res) => {
+  const layout = await effectiveLayout(req.orgId);
+  res.json({ layout, version: layout.version || 0, saved: !layout.is_default, can_edit: canManageClients(req.tsRole) });
+}));
+
+router.put('/form', requirePermission(canManageClients, 'Only managers and admins can change the timesheet form'), route(async (req, res) => {
+  const layout = normalizeTimesheetLayout(req.body?.layout);
+  const definition = JSON.stringify(layout);
+  const expected = Number(req.body?.version || 0);
+  const [[existing]] = await db.execute('SELECT version FROM timesheet_form_layouts WHERE org_id = ?', [req.orgId]);
+  const conflict = 'Someone else changed the form while you were editing. Reload to see their version.';
+  if ((existing ? Number(existing.version) : 0) !== expected) throw fail(409, conflict);
+  if (existing) {
     const [result] = await db.execute(
-      `UPDATE timesheet_clients SET ${updates.join(', ')}, updated_at = SYSDATETIME() WHERE id = ? AND org_id = ?`,
-      [...params, id, req.orgId]
-    );
-    if (!result.affectedRows) throw fail(404, 'Client not found');
-    res.json({ id });
-  } catch (error) {
-    if (isDuplicateKey(error)) throw fail(409, 'A client with this name already exists');
-    throw error;
+      'UPDATE timesheet_form_layouts SET definition = ?, version = version + 1, updated_by = ?, updated_at = SYSDATETIME() WHERE org_id = ? AND version = ?',
+      [definition, req.userId, req.orgId, expected]);
+    if (!result.affectedRows) throw fail(409, conflict);
+  } else {
+    // Keyed by org_id (no id column), so return that instead of the default INSERTED.id.
+    await db.execute('INSERT INTO timesheet_form_layouts (org_id, definition, updated_by) OUTPUT INSERTED.org_id AS insertId VALUES (?, ?, ?)', [req.orgId, definition, req.userId]);
   }
+  res.json({ layout: { ...layout, version: expected + 1 }, version: expected + 1, saved: true });
+}));
+
+router.delete('/form', requirePermission(canManageClients, 'Only managers and admins can change the timesheet form'), route(async (req, res) => {
+  await db.execute('DELETE FROM timesheet_form_layouts WHERE org_id = ?', [req.orgId]);
+  const layout = await effectiveLayout(req.orgId);
+  res.json({ layout, version: 0, saved: false });
 }));
 
 /* Setup: dropdown options and the edit-lock window. Admins only. */

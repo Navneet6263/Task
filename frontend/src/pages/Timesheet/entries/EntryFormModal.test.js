@@ -12,6 +12,10 @@ const config = {
   options: {}, settings: { lock_days: 7 },
   users: [{ id: 10, name: 'Manager' }, { id: 12, name: 'Asha' }],
   clients: [{ id: 4, name: 'Riverside Motors' }, { id: 5, name: 'Acme' }],
+  form: { name: 'Timesheet', fields: [
+    ['task_id', 'task', false], ['client_id', 'client', true], ['job_type', 'dropdown', true], ['date_worked', 'date', true],
+    ['agent_id', 'person', true], ['description', 'long_text', false], ['hours', 'hours', true],
+  ].map(([key, type, required]) => ({ key, kind: 'core', type, label: key, required, hidden: false, ...(type === 'dropdown' ? { options: ['Payroll'] } : {}) })) },
 };
 const task = { id: 42, title: 'October payroll', client_name: 'riverside motors', status: 'TODO', assigned_to: 12, assigned_to_name: 'Asha' };
 let c, r;

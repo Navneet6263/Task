@@ -5,8 +5,9 @@ const {
 } = require('../services/timesheetRules');
 const {
   db, isDuplicateKey, route, positive, requirePermission, getSettings, getOptions, isOrgMember, ENTRY_COLUMNS, ENTRY_FROM,
-  loadEntry, audit, canUseTask,
+  loadEntry, audit, canUseTask, getFormLayout, parseCustom,
 } = require('./timesheetSupport');
+const { requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys } = require('../services/timesheetFormLayout');
 
 const PAGE_SIZE = 50;
 const REPORT_ROW_LIMIT = 10000;
@@ -34,10 +35,13 @@ async function viewableEntry(req, entryId) {
 
 // Client, agent and dropdown values must belong to this organization. A value that was
 // already saved stays valid even if an admin later switched that option or client off.
-async function checkReferences(req, entry, current) {
+async function checkReferences(req, entry, current, layout) {
   const errors = {};
   if (entry.client_id && entry.client_id !== current?.client_id) {
-    const [[client]] = await db.execute('SELECT id FROM timesheet_clients WHERE id = ? AND org_id = ? AND is_active = 1', [entry.client_id, req.orgId]);
+    // The client must be active in Settings → Clients (the one client list).
+    const [[client]] = await db.execute(
+      `SELECT tc.id FROM timesheet_clients tc JOIN org_clients oc ON oc.org_id = tc.org_id AND oc.name = tc.name
+       WHERE tc.id = ? AND tc.org_id = ? AND oc.is_active = 1`, [entry.client_id, req.orgId]);
     if (!client) errors.client_id = 'Pick a client from the list.';
   }
   if (entry.task_id && entry.task_id !== current?.task_id && !(await canUseTask(req, entry.task_id))) {
@@ -45,6 +49,11 @@ async function checkReferences(req, entry, current) {
   }
   if (entry.agent_id && entry.agent_id !== current?.agent_id && !(await isOrgMember(req.orgId, entry.agent_id))) {
     errors.agent_id = 'Pick an agent from your organization.';
+  }
+  if (layout) {
+    Object.assign(errors, checkChoices(layout, entry, current));
+    if (Object.keys(errors).length) throw fail(422, Object.values(errors)[0], errors);
+    return;
   }
   const options = await getOptions(req.orgId);
   OPTION_GROUPS.forEach((group) => {
@@ -144,8 +153,10 @@ router.post('/entries', route(async (req, res) => {
   const today = todayLocal();
   const body = { ...req.body };
   if (req.tsRole === 'person') body.agent_id = req.userId;
-  const entry = validateEntry(body, mode, today);
-  await checkReferences(req, entry, null);
+  const layout = await getFormLayout(req.orgId);
+  const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode) : undefined);
+  const custom = layout ? cleanTimesheetCustom(layout, body.custom_fields, mode) : null;
+  await checkReferences(req, entry, null, layout);
   const logUser = entry.agent_id || req.userId;
   const logDate = entry.date_worked || today;
   if (entry.hours !== null) await assertDailyCap(req.orgId, logUser, logDate, entry.hours);
@@ -154,8 +165,8 @@ router.post('/entries', route(async (req, res) => {
      BEGIN TRAN;
      DECLARE @entry_id INT;
      INSERT INTO timesheet_entries (org_id, client_id, job_type, work_type, date_worked, agent_id, period_type, period_ended,
-       registration_status, description, count_type, count_number, status, submitted_on, created_by, task_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+       registration_status, description, count_type, count_number, status, submitted_on, created_by, task_id, custom_fields)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
      SET @entry_id = SCOPE_IDENTITY();
      IF ? IS NOT NULL
        INSERT INTO timesheet_time_logs (org_id, entry_id, user_id, work_date, hours, note, created_by)
@@ -164,7 +175,7 @@ router.post('/entries', route(async (req, res) => {
      SELECT @entry_id AS insertId;`,
     [req.orgId, entry.client_id, entry.job_type, entry.work_type, entry.date_worked, entry.agent_id, entry.period_type, entry.period_ended,
       entry.registration_status, entry.description, entry.count_type, entry.count_number, mode === 'draft' ? 'DRAFT' : 'SUBMITTED',
-      mode === 'draft' ? null : today, req.userId, entry.task_id,
+      mode === 'draft' ? null : today, req.userId, entry.task_id, custom && Object.keys(custom).length ? JSON.stringify(custom) : null,
       entry.hours, req.orgId, logUser, logDate, entry.hours, 'Initial entry', req.userId]
   );
   await audit(req, result.insertId, mode === 'draft' ? 'CREATE_DRAFT' : 'CREATE', entry.hours ? `${entry.hours}h initial` : null);
@@ -183,16 +194,28 @@ router.put('/entries/:id', route(async (req, res) => {
   }
   const body = { ...req.body };
   if (req.tsRole === 'person') body.agent_id = current.agent_id || req.userId;
-  const entry = validateEntry(body, current.status === 'DRAFT' ? 'draft' : 'edit', today);
-  await checkReferences(req, entry, current);
+  const layout = await getFormLayout(req.orgId);
+  const editMode = current.status === 'DRAFT' ? 'draft' : 'edit';
+  // Fields hidden from the form keep whatever an older entry already had.
+  if (layout) {
+    const shown = visibleCoreKeys(layout);
+    ENTRY_FIELDS.filter((key) => !shown.has(key)).forEach((key) => { body[key] = current[key]; });
+  }
+  const entry = validateEntry(body, editMode, today, layout ? requiredKeys(layout, editMode) : undefined);
+  let customJson = current.custom_fields || null;
+  if (layout && body.custom_fields !== undefined) {
+    const merged = { ...parseCustom(current.custom_fields), ...cleanTimesheetCustom(layout, body.custom_fields, editMode) };
+    customJson = Object.keys(merged).length ? JSON.stringify(merged) : null;
+  }
+  await checkReferences(req, entry, current, layout);
   const changed = ENTRY_FIELDS.filter((key) => String(entry[key] ?? '') !== String(current[key] ?? ''));
   const [result] = await db.execute(
     `UPDATE timesheet_entries SET client_id = ?, job_type = ?, work_type = ?, date_worked = ?, agent_id = ?, period_type = ?,
-       period_ended = ?, registration_status = ?, description = ?, count_type = ?, count_number = ?, task_id = ?,
+       period_ended = ?, registration_status = ?, description = ?, count_type = ?, count_number = ?, task_id = ?, custom_fields = ?,
        updated_by = ?, version = version + 1, updated_at = SYSDATETIME()
      WHERE id = ? AND org_id = ? AND version = ? AND is_deleted = 0`,
     [entry.client_id, entry.job_type, entry.work_type, entry.date_worked, entry.agent_id, entry.period_type, entry.period_ended,
-      entry.registration_status, entry.description, entry.count_type, entry.count_number, entry.task_id, req.userId, current.id, req.orgId, version]
+      entry.registration_status, entry.description, entry.count_type, entry.count_number, entry.task_id, customJson, req.userId, current.id, req.orgId, version]
   );
   if (!result.affectedRows) throw fail(409, 'Someone else changed this entry. Reload it and try again.');
   await audit(req, current.id, lock.locked ? 'EDIT_LOCKED_AS_ADMIN' : 'EDIT', changed.length ? `Changed: ${changed.join(', ')}` : 'No field changes');
@@ -203,7 +226,9 @@ router.post('/entries/:id/submit', route(async (req, res) => {
   const current = await viewableEntry(req, positive(req.params.id, 'entry'));
   if (current.status !== 'DRAFT') throw fail(409, 'This entry is already submitted');
   if (!canEditEntry(req.tsRole, req.userId, current, { locked: false })) throw fail(403, 'You can only submit your own drafts');
-  const missing = missingForSubmit(current);
+  const layout = await getFormLayout(req.orgId);
+  const missing = missingForSubmit(current, layout ? requiredKeys(layout, 'submit') : undefined);
+  if (layout) cleanTimesheetCustom(layout, parseCustom(current.custom_fields), 'submit');
   if (missing.length) throw fail(422, 'Fill all required fields before submitting', Object.fromEntries(missing.map((key) => [key, 'This field is required.'])));
   const [[logs]] = await db.execute('SELECT COUNT(*) AS total FROM timesheet_time_logs WHERE entry_id = ? AND org_id = ? AND is_deleted = 0', [current.id, req.orgId]);
   if (!Number(logs.total)) throw fail(422, 'Add at least one time log before submitting');
@@ -356,7 +381,7 @@ router.get('/reports', requirePermission((role) => permissionsFor(role).view_rep
     `SELECT l.id, CONVERT(VARCHAR(10), l.work_date, 23) AS work_date, l.hours, l.note, l.user_id, u.name AS user_name,
        e.id AS entry_id, e.client_id, c.name AS client_name, e.job_type, e.work_type, e.period_type,
        CONVERT(VARCHAR(10), e.period_ended, 23) AS period_ended, CONVERT(VARCHAR(10), e.date_worked, 23) AS date_worked,
-       e.registration_status, e.count_type, e.count_number, e.task_id, tk.title AS task_title
+       e.registration_status, e.count_type, e.count_number, e.task_id, tk.title AS task_title, e.custom_fields
      FROM timesheet_time_logs l
      JOIN timesheet_entries e ON e.id = l.entry_id AND e.org_id = l.org_id
      JOIN timesheet_clients c ON c.id = e.client_id AND c.org_id = e.org_id
@@ -368,7 +393,7 @@ router.get('/reports', requirePermission((role) => permissionsFor(role).view_rep
     params
   );
   const truncated = rows.length > REPORT_ROW_LIMIT;
-  const data = rows.slice(0, REPORT_ROW_LIMIT).map((row) => ({ ...row, hours: Number(row.hours) }));
+  const data = rows.slice(0, REPORT_ROW_LIMIT).map(({ custom_fields: custom, ...row }) => ({ ...parseCustom(custom), ...row, hours: Number(row.hours) }));
   res.json({ from, to, truncated, rows: data, summary: summarizeReport(data) });
 }));
 

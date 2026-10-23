@@ -35,5 +35,11 @@ test('task metrics: completion is computed from raw rows, overdue and days to co
 test('dimensions and metrics are offered only for the matching source', () => {
   expect(dimensionsFor('time').map((d) => d.id)).not.toContain('status');
   expect(dimensionsFor('task').map((d) => d.id)).not.toContain('jobType');
-  expect(metricsFor('time').map((m) => m.id)).toEqual(['hours', 'entries', 'people', 'avgHours']);
+  expect(metricsFor('time').map((m) => m.id)).toEqual(['hours', 'entries', 'people', 'avgHours', 'perDay']);
+  expect(metricsFor('task').map((m) => m.id)).toContain('taskHours');
+});
+
+test('hours per working day divides by the days each person actually logged', () => {
+  const result = buildPivot(logs, { source: 'time', rowDim: 'person', metrics: ['hours', 'perDay'] });
+  expect(result.groups.find((g) => g.label === 'Rahul').values).toEqual({ hours: 5.5, perDay: 2.75 });
 });

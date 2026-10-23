@@ -231,6 +231,7 @@ const EXPORT_ORDERS = {
 };
 
 // Full rows for reports and Excel export: same filters as the task list, no paging, capped.
+// hours_logged = the task's own time log plus submitted timesheet entries linked to it.
 const exportTeamTasks = async (teamId, rawQuery) => {
   const filters = parseTaskQuery({ ...rawQuery, page: 1, limit: 1 });
   const { where, params } = buildWhere(teamId, filters);
@@ -240,7 +241,10 @@ const exportTeamTasks = async (teamId, rawQuery) => {
       CONVERT(VARCHAR(10), t.assigned_date, 23) AS assigned_date, CONVERT(VARCHAR(10), t.due_date, 23) AS due_date,
       CONVERT(VARCHAR(19), t.completed_at, 126) AS completed_at, t.review_status, t.blocked_reason,
       t.task_type, t.product, t.category,
-      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments
+      (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
+      (SELECT COALESCE(SUM(l.hours), 0) FROM task_time_logs l WHERE l.task_id = t.id AND l.is_deleted = 0)
+      + (SELECT COALESCE(SUM(tl.hours), 0) FROM timesheet_time_logs tl JOIN timesheet_entries e ON e.id = tl.entry_id AND e.org_id = tl.org_id
+          WHERE e.task_id = t.id AND e.is_deleted = 0 AND e.status = 'SUBMITTED' AND tl.is_deleted = 0) AS hours_logged
     FROM tasks t
     LEFT JOIN teams te ON te.id = t.team_id
     LEFT JOIN users u1 ON t.assigned_to = u1.id

@@ -6,7 +6,6 @@ import { errorOf } from './format';
 import EntriesTab from './entries/EntriesTab';
 import EntryFormModal from './entries/EntryFormModal';
 import EntryDetailModal from './entries/EntryDetailModal';
-import ClientsTab from './clients/ClientsTab';
 import ReportsTab from './reports/ReportsTab';
 import SetupTab from './setup/SetupTab';
 import UnlockRequestsModal from './setup/UnlockRequestsModal';
@@ -42,7 +41,6 @@ export default function Timesheet() {
 
   const { permissions } = config;
   const tabs = [['entries', 'Entries'],
-    ...(permissions.manage_clients ? [['clients', 'Clients']] : []),
     ...(permissions.view_reports ? [['reports', 'Reports']] : []),
     ...(permissions.setup ? [['setup', 'Setup']] : [])];
 
@@ -68,7 +66,6 @@ export default function Timesheet() {
       />
 
       {tab === 'entries' && <EntriesTab config={config} refreshKey={refreshKey} onOpen={setDetailId} />}
-      {tab === 'clients' && <ClientsTab onChanged={loadConfig} />}
       {tab === 'reports' && <ReportsTab config={config} />}
       {tab === 'setup' && <SetupTab config={config} onChanged={loadConfig} />}
 

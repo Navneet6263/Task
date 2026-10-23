@@ -76,12 +76,14 @@ async function isOrgMember(orgId, userId) {
   return Boolean(row);
 }
 
+const { defaultLayout, normalizeTimesheetLayout } = require('../services/timesheetFormLayout');
+
 const ENTRY_COLUMNS = `e.id, e.org_id, e.client_id, c.name AS client_name, e.job_type, e.work_type,
   CONVERT(VARCHAR(10), e.date_worked, 23) AS date_worked, e.agent_id, a.name AS agent_name,
   e.period_type, CONVERT(VARCHAR(10), e.period_ended, 23) AS period_ended, e.registration_status,
   e.description, e.count_type, e.count_number, e.status,
   CONVERT(VARCHAR(10), e.submitted_on, 23) AS submitted_on, CONVERT(VARCHAR(10), e.unlocked_until, 23) AS unlocked_until,
-  e.created_by, cb.name AS created_by_name, e.version, e.task_id, tk.title AS task_title, tk.status AS task_status`;
+  e.created_by, cb.name AS created_by_name, e.version, e.task_id, tk.title AS task_title, tk.status AS task_status, e.custom_fields`;
 const ENTRY_FROM = `FROM timesheet_entries e
   JOIN timesheet_clients c ON c.id = e.client_id AND c.org_id = e.org_id
   LEFT JOIN users a ON a.id = e.agent_id
@@ -106,25 +108,6 @@ async function audit(req, entryId, action, detail) {
   } catch (error) { console.error('[timesheet] audit write failed', error.message); }
 }
 
-// Client names typed on tasks also appear as timesheet clients, so people log time against the same names.
-// Deactivated clients are matched by name and stay deactivated. Never blocks the caller.
-async function syncTaskClients(orgId, userId) {
-  try {
-    await db.execute(
-      `INSERT INTO timesheet_clients (org_id, name, created_by, source)
-       SELECT ?, src.name, ?, 'task' FROM (
-         SELECT DISTINCT LTRIM(RTRIM(client_name)) AS name FROM tasks
-         WHERE org_id = ? AND is_deleted = 0 AND client_name IS NOT NULL
-           AND LEN(LTRIM(RTRIM(client_name))) BETWEEN 1 AND 255
-       ) src
-       WHERE NOT EXISTS (SELECT 1 FROM timesheet_clients c WHERE c.org_id = ? AND c.name = src.name)`,
-      [orgId, userId, orgId, orgId]
-    );
-  } catch (error) {
-    if (!isDuplicateKey(error)) console.error('[timesheet] could not copy task clients', error.message);
-  }
-}
-
 // Tasks a person may log time against: managers and admins see every task in the organization;
 // employees see tasks assigned to them or in their teams.
 function taskScope(req, alias = 't') {
@@ -143,8 +126,30 @@ async function canUseTask(req, taskId) {
   return Boolean(task);
 }
 
+// The saved customised form, or null when the organization still uses the original form.
+async function getFormLayout(orgId) {
+  let row;
+  try { [[row]] = await db.execute('SELECT definition, version FROM timesheet_form_layouts WHERE org_id = ?', [orgId]); }
+  catch (error) { return null; }
+  if (!row) return null;
+  try { return { ...normalizeTimesheetLayout(JSON.parse(row.definition)), version: Number(row.version) }; }
+  catch (error) { console.error('[timesheet] stored form is invalid for org', orgId, error.message); return null; }
+}
+
+// What the form looks like right now: the saved one, or the original form with today's dropdown options.
+async function effectiveLayout(orgId) {
+  return (await getFormLayout(orgId)) || { ...defaultLayout(await getOptions(orgId)), version: 0, is_default: true };
+}
+
+const parseCustom = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; }
+};
+
 module.exports = {
-  syncTaskClients, taskScope, canUseTask,
+  getFormLayout, effectiveLayout, parseCustom,
+  taskScope, canUseTask,
   db, memberClause, isDuplicateKey, route, positive, resolveRole, requireTimesheet, requirePermission, getSettings,
   ensureDefaultOptions, getOptions, orgMembers, isOrgMember, ENTRY_COLUMNS, ENTRY_FROM, loadEntry, audit,
 };

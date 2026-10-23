@@ -31,11 +31,29 @@ function cellValue(column, row) {
   return String(raw);
 }
 
+// Column widths follow the content (header and the longest of the first 500 values), within 8–60
+// characters. Text longer than its column wraps instead of spilling over the next cell.
+function layoutColumns(cols, rows) {
+  const sample = rows.slice(0, 500).filter((row) => !row.__group);
+  return cols.map((column) => {
+    const longest = sample.reduce((max, row) => {
+      const value = cellValue(column, row);
+      const text = value instanceof Date ? 'dd-mmm-yyyy hh:mm' : value === null ? '' : String(value);
+      return Math.max(max, ...text.split(/\r?\n/).map((line) => line.length));
+    }, 0);
+    const numeric = column.type && column.type !== 'text';
+    const natural = Math.max(column.label.length + 2, longest + 2, numeric ? 10 : 8);
+    const width = Math.min(60, column.width ? Math.max(column.width, numeric ? Math.min(natural, 18) : 0) : natural);
+    return { width, wrap: column.wrap === true || (!numeric && longest + 2 > width) };
+  });
+}
+
 function addSheet(workbook, sheet, meta) {
   const ws = workbook.addWorksheet(sheet.name.slice(0, 31), { views: [{ showGridLines: false }] });
   const cols = sheet.columns;
   const last = columnLetter(cols.length);
-  ws.columns = cols.map((column) => ({ width: column.width || Math.min(48, Math.max(10, column.label.length + 4)) }));
+  const layout = layoutColumns(cols, sheet.rows);
+  ws.columns = layout.map(({ width }) => ({ width }));
 
   ws.mergeCells(`A1:${last}1`);
   Object.assign(ws.getCell('A1'), { value: sheet.title || meta.title, font: { bold: true, size: 15, color: { argb: BRAND } } });
@@ -56,7 +74,8 @@ function addSheet(workbook, sheet, meta) {
     cell.alignment = { vertical: 'middle', horizontal: column.type && column.type !== 'text' ? 'right' : 'left', wrapText: true };
     cell.border = box;
   });
-  header.height = 22;
+  // Tall enough for headers that wrap onto a second or third line.
+  header.height = Math.max(22, 15 * Math.max(...cols.map((column, i) => Math.ceil((column.label.length + 1) / Math.max(1, layout[i].width - 1)))) + 6);
 
   sheet.rows.forEach((row, index) => {
     const excelRow = ws.getRow(headerIndex + 1 + index);
@@ -65,7 +84,7 @@ function addSheet(workbook, sheet, meta) {
       const cell = excelRow.getCell(i + 1);
       cell.value = row.__group ? (i === 0 ? row.__group : null) : cellValue(column, row);
       cell.border = box;
-      cell.alignment = { vertical: 'top', wrapText: column.wrap === true, horizontal: column.type && column.type !== 'text' ? 'right' : 'left' };
+      cell.alignment = { vertical: 'top', wrapText: layout[i].wrap, horizontal: column.type && column.type !== 'text' ? 'right' : 'left' };
       if (FORMATS[column.type]) cell.numFmt = FORMATS[column.type];
       const tone = !row.__group && column.tone ? TONES[column.tone(row)] : null;
       if (tone) { cell.fill = fill(tone.fill); cell.font = { bold: true, color: { argb: tone.font } }; }
@@ -94,6 +113,9 @@ function addSheet(workbook, sheet, meta) {
 
   if (sheet.rows.length) ws.autoFilter = { from: { row: headerIndex, column: 1 }, to: { row: headerIndex + sheet.rows.length, column: cols.length } };
   ws.views = [{ state: 'frozen', ySplit: headerIndex, showGridLines: false }];
+  // Prints landscape, one page wide, with the header row repeated on every page.
+  ws.pageSetup = { orientation: cols.length > 5 ? 'landscape' : 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: `${headerIndex}:${headerIndex}`, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+  ws.headerFooter = { oddFooter: `&L${String(meta.title || '').replace(/&/g, '&&')}&RPage &P of &N` };
   if (sheet.note) {
     const r = lastRow + 2;
     ws.mergeCells(`A${r}:${last}${r}`);

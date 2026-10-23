@@ -2,7 +2,7 @@ const router = require('express').Router();
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { currentOrgRole } = require('../utils/orgMember');
-const { isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, pickOnly } = require('../services/orgClients');
+const { isManagerRole, fail, isDuplicateKey, cleanName, syncClientLists, pickOnly } = require('../services/orgClients');
 
 // Settings → Clients. Everyone can read the active list (task forms need it);
 // only managers and admins add, rename, switch clients on/off or change the pick-only rule.
@@ -27,7 +27,7 @@ const positiveId = (value) => {
 router.get('/', route(async (req, res) => {
   const role = await currentOrgRole(req);
   const manager = isManagerRole(role);
-  await syncFromTasks(req.orgId, req.userId);
+  await syncClientLists(req.orgId, req.userId);
   const [rows] = manager
     ? await db.execute(
       `SELECT c.id, c.name, c.is_active, c.source, c.created_at,
@@ -35,7 +35,11 @@ router.get('/', route(async (req, res) => {
          (SELECT COUNT(*) FROM tasks t WHERE t.org_id = c.org_id AND t.client_name = c.name AND t.is_deleted = 0 AND t.status <> 'DONE') AS open_tasks,
          (SELECT MAX(t.created_at) FROM tasks t WHERE t.org_id = c.org_id AND t.client_name = c.name AND t.is_deleted = 0) AS last_used,
          (SELECT COALESCE(SUM(l.hours), 0) FROM task_time_logs l JOIN tasks t ON t.id = l.task_id
-            WHERE t.org_id = c.org_id AND t.client_name = c.name AND t.is_deleted = 0 AND l.is_deleted = 0) AS hours
+            WHERE t.org_id = c.org_id AND t.client_name = c.name AND t.is_deleted = 0 AND l.is_deleted = 0)
+         + (SELECT COALESCE(SUM(tl.hours), 0) FROM timesheet_time_logs tl
+            JOIN timesheet_entries e ON e.id = tl.entry_id AND e.org_id = tl.org_id
+            JOIN timesheet_clients tc ON tc.id = e.client_id AND tc.org_id = e.org_id
+            WHERE tc.org_id = c.org_id AND tc.name = c.name AND e.is_deleted = 0 AND tl.is_deleted = 0) AS hours
        FROM org_clients c WHERE c.org_id = ? ORDER BY c.is_active DESC, c.name ASC`,
       [req.orgId])
     : await db.execute('SELECT id, name, is_active FROM org_clients WHERE org_id = ? AND is_active = 1 ORDER BY name ASC', [req.orgId]);
@@ -72,6 +76,9 @@ router.patch('/:id', route(async (req, res) => {
       catch (error) { if (isDuplicateKey(error)) throw fail(409, `${name} is already in your client list`, { name: 'Already in the list' }); throw error; }
       const [result] = await db.execute('UPDATE tasks SET client_name = ? WHERE org_id = ? AND client_name = ? AND is_deleted = 0', [name, req.orgId, client.name]);
       renamedTasks = Number(result?.affectedRows || 0);
+      // The timesheet's copy follows the new name, so its entries and reports show it too.
+      try { await db.execute('UPDATE timesheet_clients SET name = ?, updated_at = SYSDATETIME() WHERE org_id = ? AND name = ?', [name, req.orgId, client.name]); }
+      catch (error) { if (!isDuplicateKey(error)) throw error; }
     }
   }
   if (req.body?.is_active !== undefined) {

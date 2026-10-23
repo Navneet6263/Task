@@ -34,8 +34,12 @@ router.get('/events', route(async (req, res) => {
       : 'EXISTS (SELECT 1 FROM team_members tm WHERE tm.team_id = t.team_id AND tm.user_id = ?)';
   const scopeParams = !teamScope ? [req.userId, req.userId] : orgWide ? [] : [req.userId];
   const [tasks] = await db.execute(
-    `SELECT t.id, t.title, t.status, t.priority, t.team_id, u.name AS assigned_to_name, CONVERT(VARCHAR(10), t.due_date, 23) AS due_date
+    `SELECT t.id, t.title, t.status, t.priority, t.team_id, t.issue_type, t.client_name, u.name AS assigned_to_name,
+       cb.name AS created_by_name, te.name AS team_name, CONVERT(VARCHAR(10), t.due_date, 23) AS due_date,
+       CONVERT(VARCHAR(16), t.created_at, 126) AS created_at
      FROM tasks t LEFT JOIN users u ON u.id = t.assigned_to
+     LEFT JOIN users cb ON cb.id = t.assigned_by
+     LEFT JOIN teams te ON te.id = t.team_id
      WHERE t.org_id = ? AND t.is_deleted = 0 AND t.due_date >= ? AND t.due_date < ? AND ${scopeSql}
      ORDER BY t.due_date ASC, t.id ASC OFFSET 0 ROWS FETCH NEXT 500 ROWS ONLY`,
     [req.orgId, from, toExclusive, ...scopeParams]

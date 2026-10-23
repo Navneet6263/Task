@@ -58,3 +58,18 @@ test('group header rows and a SUM totals row are written', async () => {
   expect(members.getCell('A6').value).toBe('Total');
   expect(members.getCell('B6').value.formula).toBe('SUM(B4:B5)');
 });
+
+test('columns size to their content, long text wraps instead of overlapping, and pages print one wide', async () => {
+  const long = 'Prepared October payroll for all 48 staff including arrears, bonuses and statutory deductions';
+  const book = await roundTrip({ title: 'Hours', sheets: [{ name: 'Entries', columns: [
+    { key: 'person', label: 'Person' }, { key: 'note', label: 'Note' }, { key: 'hours', label: 'Hours', type: 'decimal' },
+  ], rows: [{ person: 'Asha Rao', note: long, hours: 2.5 }, { person: 'Rahul Verma Kumar', note: 'Short', hours: 1 }] }] });
+  const ws = book.getWorksheet('Entries');
+  expect(ws.getColumn(1).width).toBeGreaterThanOrEqual('Rahul Verma Kumar'.length);
+  expect(ws.getColumn(2).width).toBeLessThanOrEqual(60);
+  const noteCell = ws.getRow(4).getCell(2);
+  expect(noteCell.value).toBe(long);
+  expect(noteCell.alignment.wrapText).toBe(true);
+  expect(ws.getRow(4).getCell(1).alignment.wrapText).toBeFalsy();
+  expect(ws.pageSetup.fitToWidth).toBe(1);
+});
