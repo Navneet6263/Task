@@ -83,12 +83,14 @@ const ENTRY_COLUMNS = `e.id, e.org_id, e.client_id, c.name AS client_name, e.job
   e.period_type, CONVERT(VARCHAR(10), e.period_ended, 23) AS period_ended, e.registration_status,
   e.description, e.count_type, e.count_number, e.status,
   CONVERT(VARCHAR(10), e.submitted_on, 23) AS submitted_on, CONVERT(VARCHAR(10), e.unlocked_until, 23) AS unlocked_until,
-  e.created_by, cb.name AS created_by_name, e.version, e.task_id, tk.title AS task_title, tk.status AS task_status, e.custom_fields`;
+  e.created_by, cb.name AS created_by_name, e.version, e.task_id, tk.title AS task_title, tk.status AS task_status, e.custom_fields,
+  e.agent_firm_id, af.name AS agent_firm_name`;
 const ENTRY_FROM = `FROM timesheet_entries e
   JOIN timesheet_clients c ON c.id = e.client_id AND c.org_id = e.org_id
   LEFT JOIN users a ON a.id = e.agent_id
   LEFT JOIN users cb ON cb.id = e.created_by
-  LEFT JOIN tasks tk ON tk.id = e.task_id AND tk.org_id = e.org_id`;
+  LEFT JOIN tasks tk ON tk.id = e.task_id AND tk.org_id = e.org_id
+  LEFT JOIN org_agents af ON af.id = e.agent_firm_id`;
 
 async function loadEntry(orgId, entryId) {
   const [[entry]] = await db.execute(

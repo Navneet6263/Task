@@ -29,15 +29,16 @@ const canSetup = (role) => permissionsFor(role).setup;
 
 router.get('/config', route(async (req, res) => {
   await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncClientLists(req.orgId, req.userId, { toTimesheet: true })]);
-  const [settings, options, members, clientRows, form] = await Promise.all([
+  const [settings, options, members, clientRows, form, agentRows] = await Promise.all([
     getSettings(req.orgId),
     getOptions(req.orgId),
     orgMembers(req.orgId),
     // Only clients that are on in Settings → Clients.
     db.execute(
-      `SELECT tc.id, tc.name FROM timesheet_clients tc JOIN org_clients oc ON oc.org_id = tc.org_id AND oc.name = tc.name
+      `SELECT tc.id, tc.name, oc.agent_id FROM timesheet_clients tc JOIN org_clients oc ON oc.org_id = tc.org_id AND oc.name = tc.name
        WHERE tc.org_id = ? AND oc.is_active = 1 ORDER BY tc.name ASC`, [req.orgId]),
     effectiveLayout(req.orgId),
+    db.execute('SELECT id, name FROM org_agents WHERE org_id = ? AND is_active = 1 ORDER BY name ASC', [req.orgId]),
   ]);
   let pendingUnlocks = 0;
   if (permissionsFor(req.tsRole).approve_unlocks) {
@@ -52,6 +53,7 @@ router.get('/config', route(async (req, res) => {
     settings,
     options,
     clients: clientRows[0],
+    agents: agentRows[0],
     users: members.map(({ id, name }) => ({ id, name })),
     pending_unlocks: pendingUnlocks,
     form,
@@ -89,7 +91,12 @@ function clientName(value) {
 router.post('/clients', requirePermission(canManageClients, 'Only managers and admins can add clients'), route(async (req, res) => {
   const name = clientName(req.body.name);
   let created = true;
-  try { await db.execute('INSERT INTO org_clients (org_id, name, created_by) VALUES (?, ?, ?)', [req.orgId, name, req.userId]); }
+  const agentId = req.body.agent_id ? positive(req.body.agent_id, 'agent') : null;
+  if (agentId) {
+    const [[agent]] = await db.execute('SELECT id FROM org_agents WHERE id = ? AND org_id = ? AND is_active = 1', [agentId, req.orgId]);
+    if (!agent) throw fail(422, 'Pick an agent from the list');
+  }
+  try { await db.execute('INSERT INTO org_clients (org_id, name, created_by, agent_id) VALUES (?, ?, ?, ?)', [req.orgId, name, req.userId, agentId]); }
   catch (error) { if (!isDuplicateKey(error)) throw error; created = false; }
   const [[listed]] = await db.execute('SELECT name, is_active FROM org_clients WHERE org_id = ? AND name = ?', [req.orgId, name]);
   if (listed && !Number(listed.is_active)) throw fail(409, `${listed.name} is turned off in Settings → Clients. Turn it on there first.`);

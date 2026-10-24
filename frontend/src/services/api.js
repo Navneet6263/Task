@@ -120,7 +120,7 @@ export const timesheet = {
   requestUnlock: (id, reason) => api.post(`/timesheet/entries/${id}/unlock-requests`, { reason }),
   unlockRequests: (status = 'PENDING') => api.get('/timesheet/unlock-requests', { params: { status } }),
   decideUnlock: (id, decision) => api.patch(`/timesheet/unlock-requests/${id}`, { decision }),
-  createClient: (name) => api.post('/timesheet/clients', { name }),
+  createClient: (name, agentId) => api.post('/timesheet/clients', { name, ...(agentId ? { agent_id: agentId } : {}) }),
   form: () => api.get('/timesheet/form'),
   saveForm: (layout, version) => api.put('/timesheet/form', { layout, version }),
   resetForm: () => api.delete('/timesheet/form'),
@@ -131,8 +131,10 @@ export const timesheet = {
 // Settings → Clients: the organization's client list and the "pick only from the list" rule.
 export const clients = {
   list: () => api.get('/clients'),
-  create: (name) => api.post('/clients', { name }),
+  create: (name, agentId) => api.post('/clients', { name, ...(agentId ? { agent_id: agentId } : {}) }),
   update: (id, data) => api.patch(`/clients/${id}`, data),
+  createAgent: (name) => api.post('/clients/agents', { name }),
+  updateAgent: (id, data) => api.patch(`/clients/agents/${id}`, data),
   setPickOnly: (pickOnly) => api.put('/clients/settings', { pick_only: pickOnly }),
 };
 

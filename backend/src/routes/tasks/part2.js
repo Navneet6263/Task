@@ -1,7 +1,7 @@
 const { express, db, authenticate, canAccessTeam, requireTeamAccess, getTaskDetail, listTeamTasks, ws, TASK_STATUSES, TASK_ISSUE_TYPES, normalizeText, normalizeDate, normalizeIssueType, normalizeReferenceImage, normalizeUserId, normalizeTaskPayload, canManageTaskForm, formatTaskFormOptions, ensureDefaultTaskFormOptions, TASK_OPTION_GROUPS, logActivity } = require('./taskSupport');
 const router = express.Router();
 const { getOrgLayout } = require('../../services/taskFormStore');
-const { resolveTaskClient } = require('../../services/orgClients');
+const { resolveTaskClient, resolveAgent } = require('../../services/orgClients');
 const { cleanCustomValues, missingCoreFields, buildTitle } = require('../../services/taskFormLayout');
 const timeLogs = require('./timeLogs');
 
@@ -61,6 +61,7 @@ router.post('/', authenticate, async (req, res) => {
     // The client must come from the organization's list when it is "pick only" (Settings → Clients).
     try {
       taskPayload.clientName = await resolveTaskClient(resolvedOrgId, taskPayload.clientName, req.userRole, req.userId);
+      taskPayload.agentFirmId = await resolveAgent(resolvedOrgId, req.body.agent_firm_id, taskPayload.clientName);
     } catch (error) {
       return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
     }
@@ -72,7 +73,7 @@ router.post('/', authenticate, async (req, res) => {
     if (layout) {
       try {
         customFields = cleanCustomValues(layout, req.body.custom_fields);
-        missingCoreFields(layout, { ...req.body, client_name: taskPayload.clientName, assigned_to: assignedTo });
+        missingCoreFields(layout, { ...req.body, client_name: taskPayload.clientName, assigned_to: assignedTo, agent_firm_id: taskPayload.agentFirmId });
       } catch (error) {
         return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
       }
@@ -123,8 +124,8 @@ router.post('/', authenticate, async (req, res) => {
         client_name, severity, bug_type, environment, affected_module, steps_to_reproduce,
         feature_area, story_points, feature_priority, acceptance_criteria,
         enhancement_type, impact_level, effort_estimate, improvement_detail,
-        story_role, epic, persona, story_notes, custom_fields)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        story_role, epic, persona, story_notes, custom_fields, agent_firm_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         taskPayload.title, taskPayload.description, taskPayload.priority, taskStatus,
         assignedTo, req.userId, team_id,
@@ -137,7 +138,7 @@ router.post('/', authenticate, async (req, res) => {
         taskPayload.acceptanceCriteria, taskPayload.enhancementType, taskPayload.impactLevel,
         taskPayload.effortEstimate, taskPayload.improvementDetail,
         taskPayload.storyRole, taskPayload.epic, taskPayload.persona, taskPayload.storyNotes,
-        customFields && Object.keys(customFields).length ? JSON.stringify(customFields) : null,
+        customFields && Object.keys(customFields).length ? JSON.stringify(customFields) : null, taskPayload.agentFirmId ?? null,
       ]
     );
 

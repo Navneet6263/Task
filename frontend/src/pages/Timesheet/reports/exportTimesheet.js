@@ -17,6 +17,10 @@ export function exportTimesheetReport({ report, config, clientName, personName }
     entries: new Set(items.map((r) => r.entry_id)).size, people: new Set(items.map((r) => r.user_id)).size,
   })).sort(byHours);
 
+  const agents = Object.entries(groupBy(rows, (r) => r.agent_firm_name || 'No agent')).map(([name, items]) => ({
+    label: name, hours: sum(items), clients: new Set(items.map((r) => r.client_name)).size, people: new Set(items.map((r) => r.user_id)).size,
+  })).sort(byHours);
+
   const people = Object.entries(groupBy(rows, (r) => r.user_name || 'Unknown')).map(([name, items]) => {
     const days = new Set(items.map((r) => String(r.work_date).slice(0, 10))).size;
     return {
@@ -44,6 +48,9 @@ export function exportTimesheetReport({ report, config, clientName, personName }
       { name: `By ${clientLabel}`.slice(0, 31), title: `Hours by ${clientLabel.toLowerCase()}`, rows: clients, totals: { hours: 'sum', share: 'sum', entries: 'sum' }, columns: [
         { key: 'label', label: clientLabel }, { key: 'hours', label: 'Hours', type: 'decimal' }, { key: 'share', label: 'Share of hours', type: 'percent' },
         { key: 'entries', label: 'Entries', type: 'number' }, { key: 'people', label: 'People', type: 'number' }] },
+      ...(rows.some((r) => r.agent_firm_name) ? [{ name: `By ${label('agent_firm_id', 'Agent')}`.slice(0, 31), title: `Hours by ${label('agent_firm_id', 'agent').toLowerCase()}`, rows: agents, totals: { hours: 'sum' }, columns: [
+        { key: 'label', label: label('agent_firm_id', 'Agent') }, { key: 'hours', label: 'Hours', type: 'decimal' },
+        { key: 'clients', label: `${clientLabel}s`, type: 'number' }, { key: 'people', label: 'People', type: 'number' }] }] : []),
       { name: 'By person', title: 'Hours by person', rows: people, totals: { hours: 'sum', entries: 'sum', days: 'sum' }, columns: [
         { key: 'label', label: 'Person' }, { key: 'hours', label: 'Hours', type: 'decimal' }, { key: 'days', label: 'Days worked', type: 'number' },
         { key: 'per_day', label: 'Hours per day', type: 'decimal' }, { key: 'entries', label: 'Entries', type: 'number' }, { key: 'clients', label: `${clientLabel}s`, type: 'number' }] },
@@ -51,7 +58,8 @@ export function exportTimesheetReport({ report, config, clientName, personName }
         totals: { ...Object.fromEntries(clientNames.map((c, i) => [`c${i}`, 'sum'])), total: 'sum' },
         columns: [{ key: 'label', label: 'Person' }, ...clientNames.map((c, i) => ({ key: `c${i}`, label: c, type: 'decimal' })), { key: 'total', label: 'Total hours', type: 'decimal' }] },
       { name: 'Entries', title: 'Every time entry', rows: entries, totals: { hours: 'sum' }, columns: [
-        { key: 'work_date', label: 'Date', type: 'date' }, { key: 'user_name', label: 'Person' }, { key: 'client_name', label: clientLabel },
+        { key: 'work_date', label: 'Date', type: 'date' }, { key: 'user_name', label: 'Person' },
+        { key: 'agent_firm_name', label: label('agent_firm_id', 'Agent') }, { key: 'client_name', label: clientLabel },
         { key: 'task_title', label: label('task_id', 'Task'), value: (r) => (r.task_title ? `#${r.task_id} ${r.task_title}` : null) },
         { key: 'job_type', label: label('job_type', 'Job Type') }, { key: 'work_type', label: label('work_type', 'Work Type') },
         { key: 'period_type', label: label('period_type', 'Period Type') }, { key: 'period_ended', label: label('period_ended', 'Period Ended'), type: 'date' },

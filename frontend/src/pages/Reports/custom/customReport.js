@@ -13,6 +13,7 @@ const daysBetween = (a, b) => Math.max(0, (new Date(b.slice(0, 10)) - new Date(a
 
 export const DIMENSIONS = {
   person: { label: 'Person', task: (r) => r.assigned_to_name || 'Unassigned', time: (r) => r.user_name || 'Unknown' },
+  agent: { label: 'Agent', task: (r) => r.agent_name || 'No agent', time: (r) => r.agent_firm_name || 'No agent' },
   client: { label: 'Client', task: (r) => r.client_name || 'No client', time: (r) => r.client_name || 'No client' },
   task: { label: 'Task', time: (r) => (r.task_title ? `${r.task_id ? `#${r.task_id} ` : ''}${r.task_title}` : 'No task') },
   status: { label: 'Status', task: (r) => statusText(r.status) },
@@ -56,6 +57,7 @@ export const metricsFor = (source) => Object.entries(METRICS).filter(([, m]) => 
 // Ready-made reports, named the way people ask for them.
 export const TEMPLATES = [
   { id: 'whoOnWhat', label: 'Who worked how much on which client', needsTime: true, config: { source: 'time', rowDim: 'person', splitDim: 'client', metrics: ['hours'], sort: 'metric', limit: 0 } },
+  { id: 'hoursPerAgent', label: 'Hours per agent and client', needsTime: true, config: { source: 'time', rowDim: 'agent', splitDim: 'client', metrics: ['hours'], sort: 'metric', limit: 0 } },
   { id: 'timePerClient', label: 'Hours per client', needsTime: true, config: { source: 'time', rowDim: 'client', splitDim: '', metrics: ['hours', 'people', 'entries'], sort: 'metric', limit: 0 } },
   { id: 'timePerTask', label: 'Hours per task', needsTime: true, config: { source: 'time', rowDim: 'task', splitDim: 'person', metrics: ['hours'], sort: 'metric', limit: 0 } },
   { id: 'timePerPerson', label: 'Hours per person', needsTime: true, config: { source: 'time', rowDim: 'person', splitDim: '', metrics: ['hours', 'perDay', 'entries'], sort: 'metric', limit: 0 } },

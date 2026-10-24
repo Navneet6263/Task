@@ -11,6 +11,7 @@ const CORE_FIELDS = {
   description: { type: 'long_text', label: 'Description' },
   priority: { type: 'priority', label: 'Priority' },
   assigned_to: { type: 'person', label: 'Assignee' },
+  agent_firm_id: { type: 'agent', label: 'Agent' },
   client_name: { type: 'client', label: 'Client' },
   assigned_date: { type: 'date', label: 'Assigned date' },
   start_date: { type: 'date', label: 'Start date' },
@@ -42,7 +43,7 @@ const TEMPLATES = {
       core('priority', { required: true }),
       core('assigned_to'),
       core('assigned_date'), core('start_date'), core('due_date', { required: true }),
-      core('client_name'),
+      core('agent_firm_id', { hidden: true }), core('client_name'),
       core('task_type'), core('product'), core('category'),
       core('type_details', { width: 'full' }),
       core('reference_image', { width: 'full' }),
@@ -54,7 +55,8 @@ const TEMPLATES = {
     description: 'For service teams that log work per client: job, period, counts and hours worked.',
     settings: { time_tracking: true, edit_window_days: 7, title_pattern: '{client_name} · {job_type} · {date_worked}', submit_label: 'Submit' },
     fields: [
-      core('client_name', { required: true, width: 'full', restrict_new: true }),
+      core('agent_firm_id'),
+      core('client_name', { required: true, restrict_new: true }),
       custom('job_type', 'Job Type', 'dropdown', { required: true, options: ['Bookkeeping', 'Payroll', 'Tax Return', 'BAS / GST', 'Audit'] }),
       custom('work_type', 'Work Type', 'dropdown', { required: true, options: ['Preparation', 'Review', 'Lodgement', 'Client query'] }),
       custom('date_worked', 'Date worked', 'date', { required: true, default: 'today' }),
@@ -79,6 +81,7 @@ const TEMPLATES = {
     fields: [
       core('title', { required: true, width: 'full', help: 'Start with a verb: "Design the pricing page".' }),
       core('client_name', { label: 'Client / project' }),
+      core('agent_firm_id', { hidden: true }),
       custom('stage', 'Stage', 'dropdown', { options: ['Planning', 'Design', 'Build', 'Review', 'Launch'] }),
       core('assigned_to', { label: 'Owner', required: true }),
       core('priority', { required: true }),
@@ -202,6 +205,7 @@ function missingCoreFields(layout, payload) {
   const missing = {};
   for (const field of layout.fields.filter((f) => f.kind === 'core' && f.required && !f.hidden)) {
     if (['type_details', 'reference_image', 'hours', 'issue_type', 'priority'].includes(field.key)) continue;
+    if (field.key === 'agent_firm_id' && payload.agent_firm_id) continue;
     const value = payload[field.key];
     if (value === undefined || value === null || String(value).trim() === '') missing[field.key] = `${field.label} is required`;
   }

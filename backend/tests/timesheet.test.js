@@ -34,6 +34,10 @@ function mockDb(t, handle, { role = 'person', enabled = true } = {}) {
     if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role }]];
     if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: enabled }]];
     if (sql.startsWith('INSERT INTO timesheet_audit')) return [{}];
+    // Client-agent lookups: a test can answer them itself; otherwise the client has no agent.
+    if (sql.startsWith('SELECT name FROM timesheet_clients') || sql.startsWith('SELECT c.agent_id')) {
+      try { return await handle(sql, params); } catch { return sql.startsWith('SELECT name') ? [[{ name: 'Acme' }]] : [[]]; }
+    }
     return handle(sql, params);
   });
   return calls;
@@ -220,4 +224,25 @@ test('the task picker lists only tasks in scope, open ones first', async (t) => 
   assert.match(list.sql, /t\.org_id = \? AND t\.is_deleted = 0 AND \(t\.assigned_to = \?/);
   assert.equal(list.params[3], '%pay[_]roll%', 'search wildcards are escaped');
   assert.match(list.sql, /ORDER BY CASE WHEN t\.status = 'DONE'/);
+});
+
+test('a client under an agent brings that agent; another agent for it is refused', async (t) => {
+  let insert;
+  mockDb(t, async (sql, params) => {
+    if (sql.startsWith('SELECT name FROM timesheet_clients')) return [[{ name: 'ABC One Ltd' }]];
+    if (sql.startsWith('SELECT id FROM org_agents')) return [[{ id: params[0] }]];
+    if (sql.startsWith('SELECT c.agent_id')) return [[{ agent_id: 3, agent_name: 'ABR Accountants' }]];
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('SET XACT_ABORT ON')) { insert = params; return [{ insertId: 79, rows: [{ insertId: 79 }] }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const wrong = await send('/entries', 'POST', { ...validEntry, agent_firm_id: 4 });
+  assert.equal(wrong.status, 422);
+  assert.match((await wrong.json()).error, /belongs to ABR Accountants/);
+  assert.equal((await send('/entries', 'POST', validEntry)).status, 201);
+  assert.equal(insert[17], 3, 'agent filled in from the client');
 });

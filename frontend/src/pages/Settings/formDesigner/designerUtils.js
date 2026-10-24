@@ -16,6 +16,7 @@ export const TYPE_META = {
   image: ['Image upload', '▣'],
   hours: ['Hours worked', '◷'],
   task: ['Task picker', '◆'],
+  agent: ['Agent list', '◈'],
 };
 export const CUSTOM_TYPES = [
   ['text', 'One line of text'], ['long_text', 'Several lines'], ['number', 'Counts, amounts'],

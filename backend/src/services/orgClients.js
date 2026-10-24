@@ -91,4 +91,27 @@ async function resolveTaskClient(orgId, rawName, role, userId) {
   return name;
 }
 
-module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, syncClientLists, timesheetClientId, pickOnly, resolveTaskClient };
+// The agent to store with a task or timesheet entry. A client that sits under an agent brings that agent;
+// picking a different agent for it is refused. Returns the agent id or null.
+async function resolveAgent(orgId, rawAgentId, clientName) {
+  let agentId = rawAgentId === undefined || rawAgentId === null || rawAgentId === '' ? null : Number(rawAgentId);
+  if (agentId !== null && (!Number.isInteger(agentId) || agentId < 1)) throw fail(422, 'Pick an agent from the list', { agent_firm_id: 'Pick an agent from the list' });
+  if (agentId !== null) {
+    const [[agent]] = await db.execute('SELECT id FROM org_agents WHERE id = ? AND org_id = ? AND is_active = 1', [agentId, orgId]);
+    if (!agent) throw fail(422, 'Pick an agent from the list', { agent_firm_id: 'Pick an agent from the list' });
+  }
+  if (clientName) {
+    const [[client]] = await db.execute(
+      'SELECT c.agent_id, a.name AS agent_name FROM org_clients c LEFT JOIN org_agents a ON a.id = c.agent_id WHERE c.org_id = ? AND c.name = ?',
+      [orgId, clientName]);
+    if (client?.agent_id) {
+      if (agentId !== null && Number(client.agent_id) !== agentId) {
+        throw fail(422, `${clientName} belongs to ${client.agent_name}. Pick that agent or another client.`, { client_name: 'Client is under another agent', client_id: 'Client is under another agent' });
+      }
+      agentId = Number(client.agent_id);
+    }
+  }
+  return agentId;
+}
+
+module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, syncClientLists, timesheetClientId, pickOnly, resolveTaskClient, resolveAgent };

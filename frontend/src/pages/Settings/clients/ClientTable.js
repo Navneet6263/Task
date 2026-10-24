@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Button, Chip, EmptyRow, Input, Switch, Table, TableWrap, Td, Th } from '../../../ui';
+import { Button, Chip, EmptyRow, Input, Select, Switch, Table, TableWrap, Td, Th } from '../../../ui';
 
 const fmtHours = (h) => (Number(h) ? `${Number(h).toLocaleString('en-IN', { maximumFractionDigits: 1 })} h` : '—');
 const fmtDate = (v) => { const d = new Date(v); return v && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
 const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
 // The client list with inline rename and an on/off switch per client.
-export default function ClientTable({ rows, busyId, onRename, onToggle, emptyText }) {
+export default function ClientTable({ rows, busyId, onRename, onToggle, emptyText, agents = [], onMoveAgent }) {
   const [editing, setEditing] = useState(null);
   const save = async (client) => { if (await onRename(client, editing.name)) setEditing(null); };
 
@@ -14,7 +14,7 @@ export default function ClientTable({ rows, busyId, onRename, onToggle, emptyTex
     <TableWrap>
       <Table>
         <thead>
-          <tr><Th>Client</Th><Th align="right">Tasks</Th><Th align="right">Hours</Th><Th>Last task</Th><Th align="center">Active</Th><Th><span className="sr-only">Actions</span></Th></tr>
+          <tr><Th>Client</Th><Th>Agent</Th><Th align="right">Tasks</Th><Th align="right">Hours</Th><Th>Last task</Th><Th align="center">Active</Th><Th><span className="sr-only">Actions</span></Th></tr>
         </thead>
         <tbody>
           {rows.map((client, i) => {
@@ -39,6 +39,13 @@ export default function ClientTable({ rows, busyId, onRename, onToggle, emptyTex
                     </span>
                   )}
                 </Td>
+                <Td>
+                  <Select aria-label={`Agent for ${client.name}`} className="!w-auto min-w-[150px] !py-1 text-xs" value={client.agent_id || ''} disabled={busyId === client.id}
+                    onChange={(e) => onMoveAgent(client, e.target.value)}>
+                    <option value="">No agent</option>
+                    {agents.filter((a) => a.is_active || String(a.id) === String(client.agent_id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </Select>
+                </Td>
                 <Td align="right" mono>{client.task_count ? <>{client.task_count}{client.open_tasks > 0 && <span className="block text-[11px] font-sans text-muted">{client.open_tasks} open</span>}</> : '—'}</Td>
                 <Td align="right" mono>{fmtHours(client.hours)}</Td>
                 <Td className="whitespace-nowrap text-muted">{fmtDate(client.last_used)}</Td>
@@ -52,7 +59,7 @@ export default function ClientTable({ rows, busyId, onRename, onToggle, emptyTex
               </tr>
             );
           })}
-          {!rows.length && <EmptyRow colSpan={6}>{emptyText}</EmptyRow>}
+          {!rows.length && <EmptyRow colSpan={7}>{emptyText}</EmptyRow>}
         </tbody>
       </Table>
     </TableWrap>

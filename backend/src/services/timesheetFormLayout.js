@@ -8,11 +8,12 @@ const fail = (status, message, fields) => Object.assign(new Error(message), { st
 // reports group by them, so they are always shown and required (they can still be renamed).
 const CORE = {
   task_id: { type: 'task', label: 'Task' },
+  agent_firm_id: { type: 'agent', label: 'Agent' },
   client_id: { type: 'client', label: 'Client', locked: true },
   job_type: { type: 'dropdown', label: 'Job Type', choice: true },
   work_type: { type: 'dropdown', label: 'Work Type', choice: true },
   date_worked: { type: 'date', label: 'Date worked', locked: true },
-  agent_id: { type: 'person', label: 'Agent' },
+  agent_id: { type: 'person', label: 'Done by' },
   period_type: { type: 'dropdown', label: 'Period Type', choice: true },
   period_ended: { type: 'date', label: 'Period Ended' },
   registration_status: { type: 'dropdown', label: 'Registration Status', choice: true },
@@ -43,7 +44,7 @@ function defaultLayout(optionsByGroup = {}) {
   return {
     name: 'Timesheet',
     fields: CORE_KEYS.map((key) => coreField(key, {
-      required: !['task_id', 'description'].includes(key),
+      required: !['task_id', 'agent_firm_id', 'description'].includes(key),
       ...(key === 'date_worked' ? { default: 'today' } : {}),
       ...(CORE[key].choice ? { options: options(key) } : {}),
     })),
@@ -68,7 +69,8 @@ function normalizeTimesheetLayout(input) {
       if (!CUSTOM_TYPES.includes(type)) throw fail(422, `Field "${raw.label || key}" has an unsupported type`);
       customCount += 1;
     }
-    const label = text(raw.label, 80, 'Field label') || (core ? core.label : '');
+    // Older layouts called the employee field "Agent"; that name now belongs to the agent firm.
+    const label = (key === 'agent_id' && String(raw.label || '').trim() === 'Agent' ? 'Done by' : text(raw.label, 80, 'Field label')) || (core ? core.label : '');
     if (!label) throw fail(422, `Field ${index + 1} needs a label`);
     const locked = Boolean(core?.locked);
     const hidden = locked ? false : Boolean(raw.hidden);
@@ -93,6 +95,12 @@ function normalizeTimesheetLayout(input) {
   });
   if (customCount > MAX_CUSTOM) throw fail(422, `Use at most ${MAX_CUSTOM} extra questions`);
   // Built-in fields missing from an older layout come back as hidden, so new columns never break saving.
+  // The Agent field is new: older layouts get it visible, just above Client.
+  if (!seen.has('agent_firm_id')) {
+    const at = fields.findIndex((f) => f.key === 'client_id');
+    fields.splice(at < 0 ? 0 : at, 0, coreField('agent_firm_id', { required: false }));
+    seen.add('agent_firm_id');
+  }
   CORE_KEYS.filter((key) => !seen.has(key)).forEach((key) => fields.push(coreField(key, { hidden: !CORE[key].locked, required: Boolean(CORE[key].locked) })));
   return { name: text(input.name, 80, 'Form name') || 'Timesheet', fields };
 }

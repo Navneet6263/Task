@@ -8,6 +8,7 @@ import useTaskFormLayout from '../../components/taskForm/useTaskFormLayout';
 import { CustomFieldsDetail, CustomFieldsEdit } from './TaskCustomFields';
 import TaskTimeLog from './TaskTimeLog';
 import ClientPicker from '../../components/clients/ClientPicker';
+import AgentPicker from '../../components/clients/AgentPicker';
 import TimesheetLink from './TimesheetLink';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Tabs } from '../../ui';
@@ -69,6 +70,7 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
                   <Row label="Priority"><Chip tone={PRIORITY_TONE[t.priority] || 'warn'}>{t.priority || 'MEDIUM'}</Chip></Row>
                   <Row label="Assignee">{val(t.assigned_to_name)}</Row>
                   <Row label="Created By">{val(t.created_by_name || t.assigned_by_name)}</Row>
+                  {t.agent_name && <Row label="Agent">{t.agent_name}</Row>}
                   {t.client_name && <Row label="Client Name">{t.client_name}</Row>}
                 </Sec>
 
@@ -113,8 +115,12 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
                   {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </Sel>
 
-                <div className="flex flex-col gap-1"><label htmlFor="edit-client" className="text-xs font-medium text-muted">Client Name</label>
-                  <ClientPicker id="edit-client" value={t.client_name || ''} onChange={value => up('client_name', value)} /></div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1"><label htmlFor="edit-agent" className="text-xs font-medium text-muted">Agent</label>
+                    <AgentPicker id="edit-agent" value={t.agent_firm_id || ''} onChange={value => up('agent_firm_id', value)} /></div>
+                  <div className="flex flex-col gap-1"><label htmlFor="edit-client" className="text-xs font-medium text-muted">Client Name</label>
+                    <ClientPicker id="edit-client" value={t.client_name || ''} onChange={value => up('client_name', value)} agentId={t.agent_firm_id || null} /></div>
+                </div>
                 {layout && <CustomFieldsEdit layout={layout} task={t} up={up} />}
 
                 {/* Issue-type specific edit fields */}

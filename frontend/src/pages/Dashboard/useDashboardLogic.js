@@ -49,7 +49,7 @@ const buildInitialTaskForm = () => {
     // story fields
     story_role: '', epic: '', persona: '', story_notes: '',
     // designed-form fields
-    custom_fields: {}, hours: '',
+    custom_fields: {}, hours: '', agent_firm_id: '',
   };
 };
 

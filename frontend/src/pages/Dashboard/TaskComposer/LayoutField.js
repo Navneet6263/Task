@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Input, Select, Textarea } from '../../../ui';
 import { BugFields, EnhancementFields, FeatureFields, StoryFields } from './TypeFields';
 import ClientPicker from '../../../components/clients/ClientPicker';
+import AgentPicker from '../../../components/clients/AgentPicker';
 
 const ISSUE_TYPES = [['task', 'Task'], ['bug', 'Bug'], ['story', 'Story'], ['feature', 'Feature'], ['enhancement', 'Enhancement']];
 const PRIORITIES = [['LOW', 'Low'], ['MEDIUM', 'Medium'], ['HIGH', 'High']];
@@ -55,7 +56,9 @@ export default function LayoutField({ field, value, onChange, ctx, disabled = fa
         </Select>
       );
     case 'client':
-      return <ClientPicker id={id} value={v} onChange={onChange} disabled={disabled} preview={ctx.clientPreview || null} />;
+      return <ClientPicker id={id} value={v} onChange={onChange} disabled={disabled} preview={ctx.clientPreview || null} agentId={ctx.form?.agent_firm_id || null} />;
+    case 'agent':
+      return <AgentPicker id={id} value={v} onChange={onChange} disabled={disabled} agents={ctx.clientPreview ? [{ id: 1, name: 'ABR Accountants' }, { id: 2, name: 'Alpha Accountants' }] : undefined} />;
     case 'task':
       return <Select id={id} disabled value="" onChange={() => {}}><option value="">Search and pick a task…</option></Select>;
     case 'date':

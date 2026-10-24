@@ -3,14 +3,16 @@ import { clients as clientsApi } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Input, Select } from '../../ui';
 import useClients, { announceClientsChange } from './useClients';
+import { clientsForAgent } from './AgentPicker';
 
 // The client field on task forms. Follows Settings → Clients:
 // "pick only" → a dropdown of active clients (managers can add one inline);
 // otherwise free typing with suggestions from the list.
-export default function ClientPicker({ id, value, onChange, disabled = false, preview = null }) {
+// `agentId` narrows the list to that agent's clients; a new client added here goes under that agent.
+export default function ClientPicker({ id, value, onChange, disabled = false, preview = null, agentId = null }) {
   const live = useClients();
   const { clients, pick_only: pickOnly, can_manage: canManage } = preview || live;
-  const names = clients.filter((c) => c.is_active !== false).map((c) => c.name);
+  const names = clientsForAgent(clients.filter((c) => c.is_active !== false), agentId).map((c) => c.name);
   const [adding, setAdding] = useState(null);
   const [busy, setBusy] = useState(false);
   const v = value || '';
@@ -20,7 +22,7 @@ export default function ClientPicker({ id, value, onChange, disabled = false, pr
     if (!name || preview) return;
     setBusy(true);
     try {
-      const { data } = await clientsApi.create(name);
+      const { data } = await clientsApi.create(name, agentId);
       announceClientsChange(); onChange(data.name); setAdding(null);
       notify(`${data.name} added to your client list.`, 'success');
     } catch (err) {

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { localToday } from '../../../components/taskForm/useTaskFormLayout';
+import useClients from '../../../components/clients/useClients';
 import LayoutField, { FieldShell, WIDE_TYPES } from './LayoutField';
 
 // Where each field's value lives in the task form state.
@@ -24,6 +25,12 @@ export function missingFields(layout, form) {
 // The "Create task" form built from the organization's layout.
 export default function CustomComposer({ layout, form, update, ctx, errors = {}, applyDefaults = true }) {
   const visible = layout.fields.filter((f) => !f.hidden);
+  const { clients } = useClients();
+  // A client that sits under an agent fills the agent in.
+  const change = (field, value) => {
+    writeValue(form, update, field, value);
+    if (field.key === 'client_name') { const agent = clients.find((c) => c.name === value)?.agent_id; if (agent) update('agent_firm_id', String(agent)); }
+  };
 
   // Fill "Today" and "Me" defaults once, only where nothing has been entered yet.
   useEffect(() => {
@@ -48,7 +55,7 @@ export default function CustomComposer({ layout, form, update, ctx, errors = {},
         return (
           <div key={field.key} className={`motion-safe:animate-fade-up ${wide ? 'sm:col-span-2' : ''}`} style={{ animationDelay: `${Math.min(index, 12) * 25}ms` }}>
             <FieldShell field={field} id={`${ctx.idPrefix || 'tf'}-${field.key}`} error={errors[field.key]}>
-              <LayoutField field={field} value={readValue(form, field)} onChange={(value) => writeValue(form, update, field, value)} ctx={{ ...ctx, form, update }} />
+              <LayoutField field={field} value={readValue(form, field)} onChange={(value) => change(field, value)} ctx={{ ...ctx, form, update }} />
             </FieldShell>
           </div>
         );

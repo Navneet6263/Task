@@ -5,8 +5,9 @@ import { Button, FormRow, Input, Modal, Select, Textarea } from '../../../ui';
 import LayoutField from '../../Dashboard/TaskComposer/LayoutField';
 import { errorOf, fieldsOf } from '../format';
 import TaskPicker from './TaskPicker';
+import AgentPicker from '../../../components/clients/AgentPicker';
 
-const CORE = ['task_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
+const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
 
 const blank = (config) => ({
   ...Object.fromEntries(CORE.map((key) => [key, ''])),
@@ -39,10 +40,21 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
 
   const clients = useMemo(() => {
     const list = [...config.clients, ...added.filter((a) => !config.clients.some((c) => c.id === a.id))]
-      .map((client) => ({ id: String(client.id), name: client.name })).sort((a, b) => a.name.localeCompare(b.name));
-    if (isEdit && !list.some((client) => client.id === String(entry.client_id))) list.unshift({ id: String(entry.client_id), name: entry.client_name });
+      .map((client) => ({ id: String(client.id), name: client.name, agent_id: client.agent_id ? String(client.agent_id) : '' })).sort((a, b) => a.name.localeCompare(b.name));
+    if (isEdit && !list.some((client) => client.id === String(entry.client_id))) list.unshift({ id: String(entry.client_id), name: entry.client_name, agent_id: entry.agent_firm_id ? String(entry.agent_firm_id) : '' });
     return list;
   }, [config.clients, added, entry, isEdit]);
+
+  // Agent first narrows the clients; a client that sits under an agent fills the agent in.
+  const agentClients = form.agent_firm_id ? clients.filter((c) => c.agent_id === String(form.agent_firm_id) || c.id === form.client_id) : clients;
+  const chooseAgent = (value) => setForm((prev) => {
+    const client = clients.find((c) => c.id === prev.client_id);
+    return { ...prev, agent_firm_id: value, client_id: value && client?.agent_id && client.agent_id !== value ? '' : prev.client_id };
+  });
+  const chooseClient = (value) => setForm((prev) => {
+    const client = clients.find((c) => c.id === value);
+    return { ...prev, client_id: value, agent_firm_id: client?.agent_id || prev.agent_firm_id };
+  });
 
   // Picking a task fills in what we already know: its client, who it is assigned to, and a description.
   const pickTask = (picked) => {
@@ -51,7 +63,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       if (!picked) return { ...prev, task_id: '' };
       const next = { ...prev, task_id: String(picked.id) };
       const match = picked.client_name && clients.find((c) => c.name.toLowerCase() === String(picked.client_name).trim().toLowerCase());
-      if (match) next.client_id = match.id;
+      if (match) { next.client_id = match.id; if (match.agent_id) next.agent_firm_id = match.agent_id; }
       if (config.permissions.log_for_others && picked.assigned_to) next.agent_id = String(picked.assigned_to);
       if (!prev.description) next.description = picked.title;
       return next;
@@ -65,8 +77,8 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     if (!name) return;
     setAddingClient(true);
     try {
-      const { data } = await timesheet.createClient(name);
-      setAdded((prev) => [...prev, data]);
+      const { data } = await timesheet.createClient(name, form.agent_firm_id || undefined);
+      setAdded((prev) => [...prev, { ...data, agent_id: form.agent_firm_id || null }]);
       setForm((prev) => ({ ...prev, client_id: String(data.id) }));
       setNewClient(null);
       notify(`${data.name} added to your client list and selected.`, 'success');
@@ -126,9 +138,13 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     }
     switch (key) {
       case 'task_id': return <TaskPicker id="ts-task_id" value={task} onPick={pickTask} />;
+      case 'agent_firm_id': return <AgentPicker id="ts-agent_firm_id" agents={config.agents || []} value={form.agent_firm_id} onChange={chooseAgent} />;
       case 'client_id': return (
         <>
-          {select('client_id', clients, '-Select-')}
+          <Select id="ts-client_id" value={form.client_id} onChange={(e) => chooseClient(e.target.value)}>
+            <option value="">-Select-</option>
+            {agentClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
           {canAddClient && (newClient === null
             ? <button type="button" className="mt-1.5 text-xs font-semibold text-accent hover:underline" onClick={() => setNewClient('')}>+ New client</button>
             : (
@@ -157,7 +173,8 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const hint = (field) => {
     if (field.help) return field.help;
     if (field.key === 'task_id' && !task) return 'Pick the task your manager created. Client, agent and description fill in for you.';
-    if (field.key === 'client_id') return canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
+    if (field.key === 'agent_firm_id') return 'Pick the agent first to see only its clients.';
+    if (field.key === 'client_id') return form.agent_firm_id ? `Showing ${agentClients.length} client${agentClients.length === 1 ? '' : 's'} of this agent.` : canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
     if (field.key === 'agent_id' && !canPickAgent) return 'Your entries are logged under your own name.';
     return null;
   };

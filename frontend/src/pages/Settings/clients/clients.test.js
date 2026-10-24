@@ -30,8 +30,8 @@ test('managers add clients and switch the pick-only rule from Settings', async (
   expect(c.textContent).toContain('Riverside Motors');
   expect(c.textContent).not.toContain('Old Co');
   act(() => type(c.querySelector('[aria-label="Client name"]'), 'Acme Pvt Ltd'));
-  await act(async () => c.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(h.create).toHaveBeenCalledWith('Acme Pvt Ltd');
+  await act(async () => c.querySelector('[aria-label="Client name"]').closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  expect(h.create).toHaveBeenCalledWith('Acme Pvt Ltd', undefined);
   await act(async () => button('Yes — only from this list').click());
   expect(h.setPickOnly).toHaveBeenCalledWith(true);
 });

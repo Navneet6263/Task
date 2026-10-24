@@ -136,6 +136,7 @@ function validateEntry(body, mode, today, required) {
   const entry = {
     client_id: id(body, 'client_id', 'Client', errors, true),
     task_id: id(body, 'task_id', 'Task', errors, false),
+    agent_firm_id: id(body, 'agent_firm_id', 'Agent', errors, Boolean(required) && need('agent_firm_id')),
     job_type: text(body, 'job_type', 120, 'Job Type', errors, need('job_type')),
     work_type: text(body, 'work_type', 120, 'Work Type', errors, need('work_type')),
     date_worked: date(body, 'date_worked', 'Date worked', errors, full, today, true),

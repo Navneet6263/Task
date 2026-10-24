@@ -5,7 +5,7 @@ import { clients as clientsApi } from '../../services/api';
 // Settings → Clients announces changes so open forms refresh.
 let cache = null;
 const orgKey = () => localStorage.getItem('active_org_id') || 'default';
-const EMPTY = { clients: [], pick_only: false, can_manage: false };
+const EMPTY = { clients: [], agents: [], pick_only: false, can_manage: false };
 
 export function announceClientsChange() {
   cache = null;
@@ -28,5 +28,6 @@ export default function useClients() {
     window.addEventListener('clients-changed', onChange);
     return () => { active = false; window.removeEventListener('clients-changed', onChange); };
   }, []);
-  return state || EMPTY;
+  // Older servers send no agents; always hand back every list.
+  return state ? { ...EMPTY, ...state, agents: state.agents || [], clients: state.clients || [] } : EMPTY;
 }

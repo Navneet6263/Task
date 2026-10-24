@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../src/config/database');
-const { resolveTaskClient } = require('../src/services/orgClients');
+const { resolveTaskClient, resolveAgent } = require('../src/services/orgClients');
 
 async function client(t, identity) {
   process.env.JWT_SECRET = 'clients-test-only';
@@ -22,13 +22,14 @@ test('employees see only active names and cannot change the list', async (t) => 
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 5, role: 'person' }]];
     if (sql.startsWith('INSERT INTO org_clients')) return [{ affectedRows: 0 }];
-    if (sql.startsWith('SELECT id, name, is_active FROM org_clients WHERE org_id = ? AND is_active = 1')) return [[{ id: 1, name: 'Riverside', is_active: 1 }]];
+    if (sql.startsWith('SELECT id, name, is_active, agent_id FROM org_clients WHERE org_id = ? AND is_active = 1')) return [[{ id: 1, name: 'Riverside', is_active: 1 }]];
     if (sql.startsWith('SELECT pick_only')) return [[{ pick_only: 1 }]];
+    if (sql.includes('FROM org_agents a')) return [[{ id: 3, name: 'ABR Accountants', is_active: 1, client_count: 2 }]];
     writes.push(sql); return [{ affectedRows: 1 }];
   });
   const send = await client(t, { id: 5, role: 'person', org_id: 3 });
   const list = await (await send('/')).json();
-  assert.deepEqual(list, { pick_only: true, can_manage: false, clients: [{ id: 1, name: 'Riverside', is_active: true }] });
+  assert.deepEqual(list, { pick_only: true, can_manage: false, agents: [{ id: 3, name: 'ABR Accountants', is_active: true, client_count: 2 }], clients: [{ id: 1, name: 'Riverside', is_active: true }] });
   assert.equal((await send('/', 'POST', { name: 'New Co' })).status, 403);
   assert.equal((await send('/1', 'PATCH', { is_active: false })).status, 403);
   assert.equal((await send('/settings', 'PUT', { pick_only: false })).status, 403);
@@ -70,4 +71,24 @@ test('pick-only lists stop employees from typing a new client, but managers add 
   pick = 0;
   assert.equal(await resolveTaskClient(3, 'Another', 'person', 5), 'Another', 'open lists accept new names from anyone');
   assert.equal(await resolveTaskClient(3, '   ', 'person', 5), null);
+});
+
+test('agents: managers add them, clients sit under one, and a task takes its client\'s agent', async (t) => {
+  const writes = [];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 5, role: 'manager' }]];
+    if (sql.startsWith('SELECT id FROM org_agents')) return [[3, 4].includes(params[0]) ? [{ id: params[0] }] : []];
+    if (sql.startsWith('SELECT id, name, is_active FROM org_clients WHERE id = ?')) return [[{ id: 8, name: 'ABC One Ltd', is_active: 1 }]];
+    if (sql.startsWith('SELECT c.agent_id')) return [[{ agent_id: 3, agent_name: 'ABR Accountants' }]];
+    writes.push({ sql, params });
+    return [{ affectedRows: 1, insertId: 3 }];
+  });
+  const send = await client(t, { id: 5, role: 'manager', org_id: 1 });
+  assert.equal((await send('/agents', 'POST', { name: 'ABR Accountants' })).status, 201);
+  assert.equal((await send('/', 'POST', { name: 'ABC One Ltd', agent_id: 99 })).status, 422, 'unknown agent refused');
+  assert.equal((await send('/', 'POST', { name: 'ABC One Ltd', agent_id: 3 })).status, 201);
+  assert.deepEqual(writes.find((w) => w.sql.startsWith('INSERT INTO org_clients')).params, [1, 'ABC One Ltd', 5, 3]);
+  assert.equal((await send('/8', 'PATCH', { agent_id: null })).status, 200, 'a client can be taken off its agent');
+  assert.equal(await resolveAgent(1, null, 'ABC One Ltd'), 3);
+  await assert.rejects(resolveAgent(1, 4, 'ABC One Ltd'), /belongs to ABR Accountants/);
 });
