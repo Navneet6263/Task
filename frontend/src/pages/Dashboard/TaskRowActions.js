@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { tasks } from '../../services/api';
 import { Button, Select } from '../../ui';
 import SnoozeMenu from './SnoozeMenu';
+import useCommunicationsEnabled from '../Communications/useCommunicationsEnabled';
 import { STATUS_LABEL } from './tones';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
@@ -16,6 +17,7 @@ const SendIcon = () => (
 // The actions cell of one task row. Clicks never open the task itself.
 export default function TaskRowActions({ task, userId, handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug }) {
   const navigate = useNavigate();
+  const canEmail = useCommunicationsEnabled();
 
   const handleMailClick = async () => {
     let detail;
@@ -31,9 +33,11 @@ export default function TaskRowActions({ task, userId, handleStatusChange, handl
 
   return (
     <div className="flex items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
-      <Button variant="ghost" size="icon" className="h-8 w-8" title="Send email about this task" aria-label="Send email about this task" onClick={handleMailClick}>
-        <SendIcon />
-      </Button>
+      {canEmail && (
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Send email about this task" aria-label="Send email about this task" onClick={handleMailClick}>
+          <SendIcon />
+        </Button>
+      )}
       {isOpenBug && !task.picked_by && <Button size="sm" onClick={() => handlePickBug(task.id)}>Pick</Button>}
       {isOpenBug && task.picked_by && <Button size="sm" onClick={() => handleResolveBug(task.id)}>Resolve</Button>}
       {task.issue_type !== 'bug' && (

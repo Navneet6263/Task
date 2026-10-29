@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { notifications, users, timesheet } from '../services/api';
+import { notifications, users, timesheet, communications } from '../services/api';
 import { updatesApi } from './Updates/updatesApi';
 import useWorkspaceSocket from './useWorkspaceSocket';
 import useShellUnread from './useShellUnread';
@@ -81,9 +81,13 @@ export default function useLayout() {
 
   // Only organizations with the Timesheet add-on see its menu item.
   const [timesheetEnabled, setTimesheetEnabled] = useState(false);
+  // Communications (email from GreenTask's mail server) also needs the super admin to turn it on.
+  const [communicationsEnabled, setCommunicationsEnabled] = useState(false);
   useEffect(() => {
     let active = true;
     timesheet.status().then(response => { if (active) setTimesheetEnabled(Boolean(response.data?.enabled)); }).catch(() => {});
+    Promise.resolve().then(() => communications.status())
+      .then(response => { if (active) setCommunicationsEnabled(Boolean(response.data?.enabled)); }).catch(() => {});
     return () => { active = false; };
   }, [activeOrgId]);
 
@@ -166,13 +170,17 @@ export default function useLayout() {
         section: 'Main',
         icon: <ReportsIcon />,
       },
-      {
-        path: '/communications',
-        label: 'Communications',
-        note: 'Client emails and messages',
-        section: 'Main',
-        icon: <MailIcon />,
-      },
+      ...(communicationsEnabled
+        ? [
+            {
+              path: '/communications',
+              label: 'Communications',
+              note: 'Client emails and messages',
+              section: 'Main',
+              icon: <MailIcon />,
+            },
+          ]
+        : []),
       ...(timesheetEnabled
         ? [
             {
@@ -218,7 +226,7 @@ export default function useLayout() {
           ]
         : []),
     ],
-    [isAdmin, timesheetEnabled, updatesUnread]
+    [isAdmin, timesheetEnabled, communicationsEnabled, updatesUnread]
   );
 
   const formattedDate = new Date().toLocaleDateString('en-US', {

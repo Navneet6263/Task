@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { notify } from '../../services/feedback';
-import { Button, Card, Input } from '../../ui';
+import { Button, Card, Chip, Input, Modal } from '../../ui';
+import { updateStoredUser } from '../../services/accountState';
+import EmailVerifyForm from '../../components/account/EmailVerifyForm';
 import Section, { SettingRow } from './Section';
 
 const initials = (name) => {
@@ -25,6 +27,7 @@ export default function ProfileSection({ user, teamCount }) {
   const [profile, setProfile] = useState({ name: '', email: '', mobile: '', employee_id: '', role: '', created_at: '' });
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
 
   useEffect(() => {
     api.get('/users/me').then((r) => { setProfile((p) => ({ ...p, ...r.data })); setLoaded(true); }).catch(() => notify('Could not load your profile.'));
@@ -43,13 +46,20 @@ export default function ProfileSection({ user, teamCount }) {
   };
 
   const role = user.role === 'company_admin' ? 'company_admin' : profile.role || user.role;
+  const canChangeEmail = loaded && role !== 'company_admin';
+  const emailSaved = (email) => {
+    setProfile((p) => ({ ...p, email, needs_email: false }));
+    updateStoredUser({ email, needs_email: false });
+    setChangingEmail(false);
+    notify('Email saved. You can sign in with it too.', 'success');
+  };
   return (
-    <Section title="Profile" description="Your name and contact details as your team sees them. Email and employee ID are managed by your admin.">
+    <Section title="Profile" description="Your name and contact details as your team sees them. Employee ID is managed by your admin.">
       <Card className="flex flex-wrap items-center gap-4 p-4">
         <span className="grid h-14 w-14 place-items-center rounded-full bg-accent text-lg font-bold text-accent-fg">{initials(profile.name || user.name)}</span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-semibold">{profile.name || user.name || 'User'}</p>
-          <p className="truncate text-sm text-muted">{profile.email}</p>
+          <p className="truncate text-sm text-muted">{profile.email || (profile.login_code ? `Employee code ${profile.login_code}` : '')}</p>
         </div>
         <dl className="grid grid-cols-3 gap-6 text-sm">
           <div><dt className="text-xs text-muted">Role</dt><dd className="font-semibold">{roleText(role)}</dd></div>
@@ -65,11 +75,26 @@ export default function ProfileSection({ user, teamCount }) {
           <SettingRow label="Mobile number" help="Optional. Used by your admin to reach you.">
             <Input aria-label="Mobile number" value={profile.mobile || ''} placeholder="e.g. +91 98765 43210" onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} disabled={!loaded} />
           </SettingRow>
-          <SettingRow label="Email" help="Your sign-in address. Ask an admin to change it."><Input aria-label="Email" value={profile.email || ''} disabled /></SettingRow>
+          <SettingRow label="Email" help={profile.needs_email ? 'Not added yet. Add it to sign in with email and reset your password yourself.' : 'Your sign-in address. We send a code to confirm a new one.'}>
+            <div className="flex items-center gap-2">
+              {profile.needs_email
+                ? <span className="flex-1"><Chip tone="warn">Not registered</Chip></span>
+                : <Input aria-label="Email" value={profile.email || ''} disabled />}
+              {canChangeEmail && <Button size="sm" variant={profile.needs_email ? 'primary' : 'secondary'} onClick={() => setChangingEmail(true)}>{profile.needs_email ? 'Add email' : 'Change'}</Button>}
+            </div>
+          </SettingRow>
+          {profile.login_code && (
+            <SettingRow label="Employee code" help="You can also sign in with this code and your password."><Input aria-label="Employee code" value={profile.login_code} disabled /></SettingRow>
+          )}
           <SettingRow label="Employee ID" help="Set by your company."><Input aria-label="Employee ID" value={profile.employee_id || '—'} disabled /></SettingRow>
           <div className="flex justify-end py-4"><Button type="submit" variant="primary" disabled={saving || !loaded}>{saving ? 'Saving…' : 'Save profile'}</Button></div>
         </form>
       </Card>
+      {changingEmail && (
+        <Modal title={profile.needs_email ? 'Add your email' : 'Change your email'} onClose={() => setChangingEmail(false)}>
+          <EmailVerifyForm current={profile.needs_email ? '' : profile.email} onDone={emailSaved} />
+        </Modal>
+      )}
     </Section>
   );
 }

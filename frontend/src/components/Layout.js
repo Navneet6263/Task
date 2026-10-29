@@ -8,6 +8,7 @@ import Sidebar from './shell/Sidebar';
 import QuickChat from './chat/QuickChat';
 import NotesPanel from './notes/NotesPanel';
 import ScreenShare from './screenShare/ScreenShare';
+import EmailReminder from './account/EmailReminder';
 
 // Screens already rebuilt on the shared UI kit. Every other screen renders inside a
 // light island so it stays readable in dark mode until it is redesigned.
@@ -45,6 +46,7 @@ const Layout = () => {
       />
       <div className={`shell-main transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'}`}>
         <main className="shell-content min-w-0 px-4 py-5 sm:px-6" onClick={closeTransientUi}>
+          <EmailReminder />
           {redesigned ? <Outlet /> : <div className="theme-light min-h-[60vh] rounded-xl bg-canvas text-ink"><Outlet /></div>}
         </main>
       </div>

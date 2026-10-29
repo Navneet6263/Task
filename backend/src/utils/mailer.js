@@ -6,17 +6,20 @@ const nodemailer = require('nodemailer');
  */
 const createTransporter = (type = 'reset') => {
   const isReset = type === 'reset';
+  const port = Number(
+    isReset
+      ? (process.env.RESET_MAIL_PORT || process.env.SMTP_PORT || 587)
+      : (process.env.SMTP_PORT || 587)
+  );
   return nodemailer.createTransport({
     host: isReset
       ? (process.env.RESET_MAIL_HOST || process.env.SMTP_HOST || 'smtp.office365.com')
       : (process.env.SMTP_HOST || 'smtp.office365.com'),
-    port: Number(
-      isReset
-        ? (process.env.RESET_MAIL_PORT || process.env.SMTP_PORT || 587)
-        : (process.env.SMTP_PORT || 587)
-    ),
-    secure: false, // Outlook uses STARTTLS on 587
-    tls: { ciphers: 'SSLv3', rejectUnauthorized: false },
+    port,
+    // Microsoft 365 (smtp.office365.com) and Gmail use STARTTLS on 587; 465 is TLS from the start.
+    secure: port === 465,
+    requireTLS: port !== 465,
+    tls: { minVersion: 'TLSv1.2' },
     auth: {
       user: isReset
         ? (process.env.RESET_MAIL_USER || process.env.SMTP_USER)
@@ -133,5 +136,22 @@ const sendConsoleInvite = async (toEmail, name, setupUrl) => {
   });
 };
 
-module.exports = { createTransporter, sendResetOtp, sendResetLink, sendConsoleCode, sendConsoleInvite };
+/** Sends the 6-digit code that confirms a person's new sign-in email. */
+const sendEmailCode = async (toEmail, name, code) => {
+  const fromAddr = process.env.RESET_MAIL_USER || process.env.SMTP_USER;
+  await createTransporter('reset').sendMail({
+    from: `"GreenTask" <${fromAddr}>`,
+    to: toEmail,
+    subject: `${code} is your GreenTask email code`,
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:28px;border:1px solid #eaf0ed;border-radius:14px">
+      <p style="margin:0 0 18px;font-size:16px;font-weight:700;color:#17775a">GreenTask</p>
+      <h2 style="margin:0 0 12px;font-size:19px;color:#0f1f18">Hi ${escapeHtml(name || 'there')}, confirm your email</h2>
+      <p style="color:#56665e;font-size:14px;line-height:1.6">Enter this code in GreenTask to add this email to your account. It expires in <strong>10 minutes</strong>.</p>
+      <p style="font-family:Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#0f1f18;background:#f5f8f6;border-radius:12px;padding:16px;text-align:center;margin:20px 0">${code}</p>
+      <p style="color:#8a9891;font-size:12px;line-height:1.6">Did not ask for this? You can ignore this email.</p>
+    </div>`,
+  });
+};
+
+module.exports = { createTransporter, sendResetOtp, sendResetLink, sendConsoleCode, sendConsoleInvite, sendEmailCode };
 

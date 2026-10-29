@@ -37,10 +37,14 @@ export default function EntriesTab({ config, refreshKey, onOpen }) {
             <option value="">All</option><option value="OPEN">Editable</option><option value="LOCKED">Locked</option><option value="DRAFT">Draft</option>
           </Select>
         </Field>
-        <label className="flex items-center gap-2 pb-2 text-sm text-ink">
-          <input type="checkbox" className="accent-accent" checked={filters.mine} onChange={(event) => setFilter('mine', event.target.checked)} />
-          Only entries I worked on
-        </label>
+        {config.permissions?.view_reports ? (
+          <label className="flex items-center gap-2 pb-2 text-sm text-ink">
+            <input type="checkbox" className="accent-accent" checked={filters.mine} onChange={(event) => setFilter('mine', event.target.checked)} />
+            Only entries I worked on
+          </label>
+        ) : (
+          <p className="pb-2 text-sm text-muted">You see only your own entries.</p>
+        )}
       </div>
       <ErrorText onRetry={() => setRetry((value) => value + 1)}>{error}</ErrorText>
       <TableWrap>

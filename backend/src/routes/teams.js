@@ -6,6 +6,7 @@ const router = express.Router();
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 const { canAccessTeam } = require('../utils/teamAccess');
+const { syncQuietly } = require('../services/employeeAccounts');
 
 const MANAGER_ROLES = ['admin', 'manager', 'company_admin'];
 const teamRoleText = (value) => {
@@ -95,6 +96,7 @@ router.post('/', authenticate, async (req, res) => {
       'INSERT INTO team_members (team_id, user_id, role, is_reporting_manager) VALUES (?, ?, ?, ?)',
       [result.insertId, req.userId, 'Reporting Manager', true]
     );
+    await syncQuietly(resolvedOrgId);
     res.json({ id: result.insertId, name, type, team_code: code });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -147,6 +149,12 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
       [req.params.teamId, byId ? Number(userId) : normalizeEmail(email)]
     );
     if (users.length === 0) return res.status(404).json({ error: 'No one with that email works in this organization' });
+    // Already in the team only through "show all tasks": make the membership permanent instead.
+    const [kept] = await db.execute(
+      'UPDATE team_members SET auto_added = 0, role = ? WHERE team_id = ? AND user_id = ? AND auto_added = 1',
+      [teamRole, req.params.teamId, users[0].id]
+    );
+    if (Number(kept?.affectedRows) > 0) return res.json({ message: 'Member added' });
     const [[existing]] = await db.execute('SELECT id FROM team_members WHERE team_id = ? AND user_id = ?', [req.params.teamId, users[0].id]);
     if (existing) return res.status(409).json({ error: 'This person is already in the team' });
     await db.execute(

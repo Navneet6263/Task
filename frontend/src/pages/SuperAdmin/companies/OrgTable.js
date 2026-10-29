@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import { EmptyState, Switch, Table, TableWrap, Td, Th } from '../../../ui';
 
-const MODULES = [['timesheet', 'Timesheet']];
+const MODULES = [['timesheet', 'Timesheet'], ['hrms_login', 'Employee code login'], ['all_tasks', 'Show all tasks'], ['communications', 'Communications'], ['email_to_task', 'Email to task']];
+const MODULE_HELP = {
+  timesheet: 'Timesheet: time entries, locks and timesheet reports.',
+  hrms_login: 'Employee code login: staff sign in with their HRMS employee code; the admin imports them from the HRMS sheet.',
+  all_tasks: 'Show all tasks: the company admin can let everyone see and get every task, whatever their team.',
+  communications: 'Communications: send emails to clients from GreenTask\'s own mail server. Off by default.',
+  email_to_task: 'Email to task: emails to the organization\'s inbox become tasks. Set the inbox in the "Email to task" tab. Off by default.',
+};
 
 // Organizations of one company, with paid add-on modules that can be switched per organization.
 export default function OrgTable({ orgs, onToggle }) {
@@ -19,7 +26,8 @@ export default function OrgTable({ orgs, onToggle }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-muted">Modules are paid add-ons. Turning one off hides it for everyone in that organization; their data is kept.</p>
+      <p className="text-xs text-muted">Modules are add-ons for one organization only — other companies do not change. Turning one off hides it for everyone in that organization; their data is kept.</p>
+      <ul className="flex flex-col gap-0.5 text-xs text-muted">{MODULES.map(([key]) => <li key={key}>• {MODULE_HELP[key]}</li>)}</ul>
       <TableWrap>
         <Table>
           <thead><tr><Th>Organization</Th><Th>Company code</Th><Th align="right">Managers</Th><Th align="right">Staff</Th>{MODULES.map(([key, label]) => <Th key={key} align="center">{label}</Th>)}</tr></thead>

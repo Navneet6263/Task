@@ -57,9 +57,10 @@ function lockState(entry, lockDays, today) {
 
 const isOwner = (entry, userId) => Number(entry.created_by) === Number(userId) || Number(entry.agent_id) === Number(userId);
 
+// Employees see only their own work (entries they made or that are in their name);
+// managers and admins see everyone's.
 function canViewEntry(role, userId, entry) {
-  if (entry.status === 'SUBMITTED') return true;
-  return role === 'admin' || role === 'manager' || Number(entry.created_by) === Number(userId);
+  return role === 'admin' || role === 'manager' || isOwner(entry, userId);
 }
 
 function canEditEntry(role, userId, entry, lock) {

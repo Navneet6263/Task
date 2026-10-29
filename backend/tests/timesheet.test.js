@@ -64,6 +64,11 @@ test('only admins bypass the lock; employees edit only their own open entries', 
   assert.equal(rules.canRequestUnlock('person', 3, entry, locked), true);
   assert.equal(rules.canRequestUnlock('admin', 1, entry, locked), false);
   assert.equal(rules.canViewEntry('person', 9, { ...entry, status: 'DRAFT' }), false);
+  // Employees never see colleagues' work, even once submitted; managers and admins see everything.
+  assert.equal(rules.canViewEntry('person', 9, entry), false);
+  assert.equal(rules.canViewEntry('person', 4, entry), true);
+  assert.equal(rules.canViewEntry('person', 3, entry), true);
+  assert.equal(rules.canViewEntry('manager', 2, entry), true);
 });
 
 test('submit requires every field and valid hours; drafts need only a client', () => {

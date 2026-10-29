@@ -47,6 +47,7 @@ test('adding someone already in the team is refused with a clear message', async
     if (sql.startsWith('SELECT id FROM teams')) return [[{ id: 7 }]];
     if (sql.startsWith('SELECT tm.id')) return [[{ id: 1 }]];
     if (sql.includes('FROM users u')) return [[{ id: 3 }]];
+    if (sql.startsWith('UPDATE team_members SET auto_added = 0')) return [{ affectedRows: 0 }];
     if (sql.startsWith('SELECT id FROM team_members')) return [[{ id: 1 }]];
     throw Error(`Unexpected query: ${sql.slice(0, 50)}`);
   });

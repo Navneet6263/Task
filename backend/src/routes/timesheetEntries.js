@@ -30,7 +30,13 @@ function decorate(entry, req, settings, today) {
 async function viewableEntry(req, entryId) {
   const entry = await loadEntry(req.orgId, entryId);
   // Drafts belonging to someone else are reported as missing, not forbidden, so ids cannot be probed.
-  if (!canViewEntry(req.tsRole, req.userId, entry)) throw fail(404, 'Timesheet entry not found');
+  if (!canViewEntry(req.tsRole, req.userId, entry)) {
+    // An employee may also open an entry where a manager logged hours under their name.
+    const [[logged]] = await db.execute(
+      'SELECT TOP 1 id FROM timesheet_time_logs WHERE entry_id = ? AND user_id = ? AND is_deleted = 0', [entry.id, req.userId]
+    );
+    if (req.tsRole !== 'person' || !logged) throw fail(404, 'Timesheet entry not found');
+  }
   return entry;
 }
 
@@ -92,7 +98,11 @@ router.get('/entries', route(async (req, res) => {
   const today = todayLocal();
   const where = ['e.org_id = ?', 'e.is_deleted = 0'];
   const params = [req.orgId];
-  if (req.tsRole === 'person') { where.push("(e.status = 'SUBMITTED' OR e.created_by = ?)"); params.push(req.userId); }
+  // Employees see only their own work; managers and admins see everyone's.
+  if (req.tsRole === 'person') {
+    where.push('(e.created_by = ? OR e.agent_id = ? OR EXISTS (SELECT 1 FROM timesheet_time_logs pl WHERE pl.entry_id = e.id AND pl.user_id = ? AND pl.is_deleted = 0))');
+    params.push(req.userId, req.userId, req.userId);
+  }
   if (req.query.client_id) { where.push('e.client_id = ?'); params.push(positive(req.query.client_id, 'client')); }
   if (req.query.agent_id) { where.push('e.agent_id = ?'); params.push(positive(req.query.agent_id, 'agent')); }
   if (req.query.task_id) { where.push('e.task_id = ?'); params.push(positive(req.query.task_id, 'task')); }

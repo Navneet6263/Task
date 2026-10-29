@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { teams as teamsApi } from '../../services/api';
+import { hrms, teams as teamsApi } from '../../services/api';
 import { updatesApi } from '../../components/Updates/updatesApi';
 import { CountBadge, PageHeader } from '../../ui';
 import ProfileSection from './ProfileSection';
@@ -11,6 +11,8 @@ import TaskFormSection from './TaskFormSection';
 import FormDesignerSection from './formDesigner';
 import ClientsSection from './clients/ClientsSection';
 import WhatsNewSection from './WhatsNewSection';
+import EmployeesSection from './employees/EmployeesSection';
+import TaskVisibilitySection from './TaskVisibilitySection';
 
 const Icon = ({ d }) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
 const ICONS = {
@@ -22,6 +24,8 @@ const ICONS = {
   clients: 'M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01',
   'form-designer': 'M4 5h16M4 12h10M4 19h7M17 15l3 3-3 3M14 18h6',
   'whats-new': 'm12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z',
+  employees: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM19 8v6M22 11h-6',
+  'task-visibility': 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
 };
 
 export default function Settings() {
@@ -32,16 +36,29 @@ export default function Settings() {
   const isAdmin = ['admin', 'company_admin'].includes(user.role);
   const [teamList, setTeamList] = useState([]);
   const [unread, setUnread] = useState(0);
+  const [modules, setModules] = useState(null);
+  // Add-ons the super admin switched on for this organization; admins manage them here.
+  const canHrms = isAdmin && modules?.can_manage && modules.hrms_login;
+  const canVisibility = isAdmin && modules?.can_manage && modules.all_tasks;
 
   const groups = [
     { label: 'Account', items: [['profile', 'Profile'], ['security', 'Password & security'], ['appearance', 'Appearance']] },
-    { label: 'Workspace', items: [['teams', 'Teams & join codes'], ...(canManageForm ? [['clients', 'Clients'], ['form-designer', 'Form designer'], ['task-form', 'Task dropdown lists']] : [])] },
+    { label: 'Workspace', items: [
+      ['teams', 'Teams & join codes'],
+      ...(canHrms ? [['employees', 'Employees (HRMS)']] : []),
+      ...(canVisibility ? [['task-visibility', 'Task visibility']] : []),
+      ...(canManageForm ? [['clients', 'Clients'], ['form-designer', 'Form designer'], ['task-form', 'Task dropdown lists']] : []),
+    ] },
     { label: 'Help', items: [['whats-new', "What's new & guides"]] },
   ];
   const ids = groups.flatMap((g) => g.items.map(([id]) => id));
   const current = ids.includes(hash.slice(1)) ? hash.slice(1) : 'profile';
 
   useEffect(() => { teamsApi.getAll().then((r) => setTeamList(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!isAdmin) return;
+    Promise.resolve().then(() => hrms.status()).then((r) => setModules(r.data || null)).catch(() => {});
+  }, [isAdmin]);
   useEffect(() => {
     const refresh = () => updatesApi.summary().then(({ data }) => setUnread(Number(data.unread || 0))).catch(() => {});
     refresh();
@@ -71,6 +88,8 @@ export default function Settings() {
           {current === 'security' && <SecuritySection />}
           {current === 'appearance' && <AppearanceSection />}
           {current === 'teams' && <TeamsSection teams={teamList} isAdmin={isAdmin} />}
+          {current === 'employees' && canHrms && <EmployeesSection status={modules} teams={teamList} />}
+          {current === 'task-visibility' && canVisibility && <TaskVisibilitySection status={modules} onChange={(on) => setModules((m) => ({ ...m, show_all_tasks: on }))} />}
           {current === 'clients' && canManageForm && <ClientsSection />}
           {current === 'form-designer' && canManageForm && <FormDesignerSection />}
           {current === 'task-form' && canManageForm && <TaskFormSection />}

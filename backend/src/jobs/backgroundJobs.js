@@ -33,9 +33,14 @@ cron.schedule('0 * * * *', async () => {
   } catch (e) { console.error('[CRON] overdue error:', e.message); }
 });
 
-// Cron: Email → Task inbox check every 2 minutes
-cron.schedule('*/2 * * * *', () => {
-  fetchEmailsAndCreateTasks().catch((e) => console.error('[CRON] email→task error:', e.message));
+// Cron: Email → Task inbox check every 2 minutes (only organizations with the module on)
+let readingInboxes = false;
+cron.schedule('*/2 * * * *', async () => {
+  if (readingInboxes) return;
+  readingInboxes = true;
+  try { await fetchEmailsAndCreateTasks(); }
+  catch (e) { console.error('[CRON] email→task error:', e.message); }
+  finally { readingInboxes = false; }
 });
 
 
@@ -50,6 +55,12 @@ cron.schedule('*/2 * * * *', () => {
       finally { sending = false; }
     });
   }
+
+  // "Show all tasks": keep new people and new teams in step every 10 minutes.
+  cron.schedule('*/10 * * * *', () => {
+    require('../services/employeeAccounts').syncAllTasksEverywhere()
+      .catch((error) => console.error('[CRON] all-tasks sync failed:', error.message));
+  });
 
   if (process.env.ENABLE_RECURRING_TASKS === 'true') {
     let running = false;

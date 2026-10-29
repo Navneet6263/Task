@@ -23,10 +23,30 @@ function mockDb(t, handle, role = 'person') {
   t.mock.method(db, 'execute', async (sql, params) => {
     calls.push({ sql, params });
     if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role }]];
+    if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: true }]];
     return handle(sql, params);
   });
   return calls;
 }
+
+test('companies without the Communications module cannot send or read anything', async (t) => {
+  let sent = false;
+  t.mock.method(nodemailer, 'createTransport', () => ({ sendMail: async () => { sent = true; return {}; } }));
+  t.mock.method(db, 'execute', async (sql) => {
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role: 'admin' }]];
+    if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[]];
+    throw Error(`Unexpected query: ${sql.slice(0, 40)}`);
+  });
+  const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  const status = await send('/status');
+  assert.deepEqual(await status.json(), { enabled: false });
+  const blocked = await send('/send', 'POST', { to: 'a@b.com', subject: 'x', text: 'y' });
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).code, 'MODULE_OFF');
+  assert.equal((await send('/history')).status, 403);
+  assert.equal((await send('/templates')).status, 403);
+  assert.equal(sent, false);
+});
 
 const mail = { to: 'client@acme.com; Boss@Acme.com', cc: '', subject: 'Status update', text: 'Hello', task_id: 8 };
 

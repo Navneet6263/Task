@@ -1,5 +1,7 @@
 const imaps = require('imap-simple');
 const db = require('../config/database');
+const { isModuleEnabled } = require('../services/orgModules');
+const { open } = require('../services/secretBox');
 
 /**
  * Strips the part after @ from an email address to derive a client/reporter name.
@@ -112,10 +114,10 @@ const cleanBody = (rawText = '') => {
  * Checks if an email is an automated system message, security alert,
  * marketing email, or bot notification that should NOT create a task.
  */
-const isAutomatedEmail = (fromAddr = '', subject = '') => {
+const isAutomatedEmail = (fromAddr = '', subject = '', inboxAccount = process.env.TASK_INBOX_USER) => {
   const from = String(fromAddr).toLowerCase();
   const subj = String(subject).toLowerCase();
-  const inboxUser = String(process.env.TASK_INBOX_USER || '').toLowerCase();
+  const inboxUser = String(inboxAccount || '').toLowerCase();
 
   // 0. Ignore emails sent by the inbox account itself
   if (inboxUser && from.includes(inboxUser)) {
@@ -177,44 +179,34 @@ const isAutomatedEmail = (fromAddr = '', subject = '') => {
 };
 
 
+const imapConfig = ({ host, port, user, pass }) => ({
+  imap: {
+    user,
+    password: String(pass || '').replace(/\s+/g, ''),
+    host,
+    port: Number(port || 993),
+    tls: true,
+    tlsOptions: { servername: host },
+    authTimeout: 10000,
+    connTimeout: 15000,
+  },
+});
+
+/** Signs in to a mailbox and opens the inbox, to check settings before saving them. */
+const testInbox = async (inbox) => {
+  const connection = await imaps.connect(imapConfig(inbox));
+  try { await connection.openBox('INBOX'); } finally { try { connection.end(); } catch (_) {} }
+};
+
 /**
- * Main function called by cron every 2 minutes.
- * Connects to the task-inbox via IMAP, reads UNSEEN emails,
- * creates a Bug task for each, then marks emails as Seen.
+ * Reads UNSEEN emails of one inbox, creates a Bug task for each in the inbox's team,
+ * then marks them Seen. Returns { created } or { created, error }.
  */
-const fetchEmailsAndCreateTasks = async () => {
-  const host = process.env.TASK_INBOX_HOST;
-  const user = process.env.TASK_INBOX_USER;
-  const pass = (process.env.TASK_INBOX_PASS || '').replace(/\s+/g, '');
-  const defaultTeamId = Number(process.env.TASK_INBOX_DEFAULT_TEAM_ID) || null;
-
-  if (!host || !user || !pass || !defaultTeamId) {
-    return;
-  }
-
-  // Fetch org_id for defaultTeamId
-  let orgId = null;
-  try {
-    const [teamRows] = await db.execute('SELECT org_id FROM teams WHERE id = ?', [defaultTeamId]);
-    if (teamRows.length > 0) orgId = teamRows[0].org_id;
-  } catch (_) {}
-
-  const config = {
-    imap: {
-      user,
-      password: pass,
-      host,
-      port: Number(process.env.TASK_INBOX_PORT || 993),
-      tls: true,
-      tlsOptions: { rejectUnauthorized: false },
-      authTimeout: 10000,
-      connTimeout: 15000,
-    },
-  };
-
+const processInbox = async ({ host, port, user, pass, teamId: defaultTeamId, orgId }) => {
+  let created = 0;
   let connection;
   try {
-    connection = await imaps.connect(config);
+    connection = await imaps.connect(imapConfig({ host, port, user, pass }));
     await connection.openBox('INBOX');
 
     // Fetch only UNSEEN messages
@@ -228,7 +220,7 @@ const fetchEmailsAndCreateTasks = async () => {
     const messages = await connection.search(searchCriteria, fetchOptions);
     if (!messages.length) {
       connection.end();
-      return;
+      return { created };
     }
 
     console.log(`[EMAIL→TASK] ${messages.length} new unseen email(s) found`);
@@ -247,7 +239,7 @@ const fetchEmailsAndCreateTasks = async () => {
         const clientName = extractClientName(fromAddr);
 
         // Smart Filter: Skip automated system emails, security alerts, and bots
-        if (isAutomatedEmail(fromAddr, subject)) {
+        if (isAutomatedEmail(fromAddr, subject, user)) {
           console.log(`[EMAIL→TASK] Ignored automated email: "${subject}" from ${fromAddr}`);
           await connection.addFlags(msg.attributes.uid, ['\\Seen']);
           continue;
@@ -300,6 +292,7 @@ const fetchEmailsAndCreateTasks = async () => {
         } catch (_) {}
 
         console.log(`[EMAIL→TASK] Created task ID ${newTaskId}: "${subject}" from ${fromAddr}`);
+        created += 1;
 
         // Mark this email as SEEN so it won't be re-processed
         await connection.addFlags(msg.attributes.uid, ['\\Seen']);
@@ -309,10 +302,48 @@ const fetchEmailsAndCreateTasks = async () => {
     }
 
     connection.end();
+    return { created };
   } catch (err) {
     console.error('[EMAIL→TASK] IMAP error:', err.message);
     if (connection) try { connection.end(); } catch (_) {}
+    return { created, error: String(err.message || 'Could not read the inbox').slice(0, 500) };
   }
 };
 
-module.exports = { fetchEmailsAndCreateTasks, isAutomatedEmail };
+/**
+ * Called by cron every 2 minutes. Only organizations the super admin turned "Email to task" on
+ * for are read: each with its own inbox (Super Admin → company → Email to task). The old single
+ * inbox from .env (TASK_INBOX_*) still works, but only if its team's organization has the module on.
+ */
+const fetchEmailsAndCreateTasks = async () => {
+  const [inboxes] = await db.execute(
+    `SELECT i.org_id, i.host, i.port, i.username, i.secret, i.team_id
+     FROM org_email_inboxes i
+     JOIN org_modules m ON m.org_id = i.org_id AND m.module_key = 'email_to_task' AND m.is_enabled = 1
+     JOIN teams t ON t.id = i.team_id AND t.org_id = i.org_id AND t.is_deleted = 0`
+  );
+  for (const inbox of inboxes) {
+    let result;
+    try {
+      result = await processInbox({ host: inbox.host, port: inbox.port, user: inbox.username, pass: open(inbox.secret), teamId: inbox.team_id, orgId: inbox.org_id });
+    } catch (error) {
+      result = { created: 0, error: String(error.message).slice(0, 500) };
+    }
+    await db.execute(
+      'UPDATE org_email_inboxes SET last_checked_at = SYSDATETIME(), last_error = ?, tasks_created = tasks_created + ? WHERE org_id = ?',
+      [result.error || null, result.created || 0, inbox.org_id]
+    );
+  }
+
+  const legacyTeamId = Number(process.env.TASK_INBOX_DEFAULT_TEAM_ID) || null;
+  if (!process.env.TASK_INBOX_HOST || !process.env.TASK_INBOX_USER || !process.env.TASK_INBOX_PASS || !legacyTeamId) return;
+  const [[team]] = await db.execute('SELECT org_id FROM teams WHERE id = ?', [legacyTeamId]);
+  if (!team || inboxes.some((inbox) => Number(inbox.org_id) === Number(team.org_id))) return;
+  if (!await isModuleEnabled(team.org_id, 'email_to_task')) return;
+  await processInbox({
+    host: process.env.TASK_INBOX_HOST, port: process.env.TASK_INBOX_PORT, user: process.env.TASK_INBOX_USER,
+    pass: process.env.TASK_INBOX_PASS, teamId: legacyTeamId, orgId: team.org_id,
+  });
+};
+
+module.exports = { fetchEmailsAndCreateTasks, processInbox, testInbox, isAutomatedEmail };

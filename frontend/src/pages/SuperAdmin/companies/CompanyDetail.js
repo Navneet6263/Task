@@ -3,6 +3,8 @@ import { Banner, Chip, Loading, Meter, Tabs } from '../../../ui';
 import { dateLabel, initials, parseCompanyProfile, STATUS_TONE } from '../consoleUtils';
 import LimitsPanel from './LimitsPanel';
 import OrgTable from './OrgTable';
+import EmployeesPanel from './EmployeesPanel';
+import EmailInboxPanel from './EmailInboxPanel';
 
 const GROUPS = [
   ['Company', ['Company Name', 'Industry', 'Company Size', 'Headquarters', 'Website']],
@@ -71,7 +73,8 @@ export default function CompanyDetail({ sa, summary }) {
 
       <div className="rounded-xl border border-line bg-surface px-4 pt-1 sm:px-5">
         <Tabs label="Company sections" value={tab} onChange={setTab}
-          tabs={[['profile', 'Profile'], ['limits', detail.status === 'pending' ? 'Decision & limits' : 'Limits'], ['orgs', `Organizations · ${orgs.length}`]]} />
+          tabs={[['profile', 'Profile'], ['limits', detail.status === 'pending' ? 'Decision & limits' : 'Limits'], ['orgs', `Organizations · ${orgs.length}`],
+            ...(detail.status === 'approved' ? [['employees', 'Employees & logins'], ['inbox', 'Email to task']] : [])]} />
         <div key={tab} className="pb-5 motion-safe:animate-fade-in">
           {tab === 'profile' && (
             <div className="flex flex-col gap-5">
@@ -97,6 +100,8 @@ export default function CompanyDetail({ sa, summary }) {
               onSave={async (limits) => after(await sa.actions.saveLimits(detail, limits))} />
           )}
           {tab === 'orgs' && <OrgTable orgs={orgs} onToggle={async (org, key, enabled) => after(await sa.actions.toggleModule(org, key, enabled))} />}
+          {tab === 'employees' && <EmployeesPanel orgs={orgs} sa={sa} onChanged={reload} />}
+          {tab === 'inbox' && <EmailInboxPanel orgs={orgs} sa={sa} onChanged={reload} />}
         </div>
       </div>
     </section>

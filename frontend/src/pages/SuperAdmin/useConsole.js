@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notify } from '../../services/feedback';
-import { errorOf, saApi, saUser } from './consoleUtils';
+import { errorOf, MODULE_NAMES, saApi, saUser } from './consoleUtils';
 
 const EMPTY = { admins: [], pending_count: 0, total_orgs: 0, total_users: 0 };
 
@@ -67,7 +67,7 @@ export default function useConsole({ onSignedOut }) {
     reject: (admin, reason) => run(() => saApi.patch(`/company-admins/${admin.id}/reject`, { reason }), `${admin.name} was rejected.`, 'Could not reject this company.'),
     saveLimits: (admin, limits) => run(() => saApi.patch(`/company-admins/${admin.id}/limits`, limits), 'Limits saved.', 'Could not save the limits.'),
     toggleModule: (org, key, enabled) => run(() => saApi.patch(`/organizations/${org.id}/modules/${key}`, { enabled }),
-      `${key[0].toUpperCase()}${key.slice(1)} is now ${enabled ? 'on' : 'off'} for ${org.name}.`, `Could not change the ${key} module.`, () => loadLogs().catch(() => {})),
+      `${MODULE_NAMES[key] || key} is now ${enabled ? 'on' : 'off'} for ${org.name}.`, `Could not change ${MODULE_NAMES[key] || key}.`, () => loadLogs().catch(() => {})),
     addSubUser: (email, name) => run(() => saApi.post('/sub-users', { email, name }),
       (r) => (r.invite_sent ? `Access given. ${email} got an email to set their password.` : 'Access given, but the email could not be sent. Share the setup link yourself.'), 'Could not add this person.'),
     resendInvite: (user) => run(() => saApi.post(`/sub-users/${user.id}/invite`),

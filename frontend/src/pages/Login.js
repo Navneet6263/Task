@@ -8,12 +8,19 @@ import SystemAdminForm from './auth/SystemAdminForm';
 
 const initialForm = {
   name: '', email: '', password: '', mobile: '', employee_id: '', role: 'person', team_code: '', company_code: '', company_name: '',
+  employee_code: '',
 };
+
+// Remembered on this device: how the person signs in, and their company code if they ever needed it.
+const remembered = (key, fallback = '') => { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } };
+const storeValue = (key, value) => { try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch { /* ignore */ } };
 
 const persistWorkspaceSession = (responseData) => {
   const userPayload = {
     id: responseData.id || responseData.user_id, org_id: responseData.org_id, org_ids: responseData.org_ids || [],
     name: responseData.name, email: responseData.email, role: responseData.role, limits: responseData.limits,
+    must_change_password: Boolean(responseData.must_change_password), needs_email: Boolean(responseData.needs_email),
+    login_code: responseData.login_code || null,
   };
   if (responseData?.role === 'company_admin') {
     localStorage.removeItem('token');
@@ -37,6 +44,10 @@ const Login = () => {
   const [busy, setBusy] = useState(false);
   const [remember, setRemember] = useState(true);
   const [adminHint, setAdminHint] = useState(null);
+  const [loginWith, setLoginWith] = useState(() => (remembered('login_with') === 'code' ? 'code' : 'email'));
+  const [companyCode, setCompanyCode] = useState(() => remembered('login_company_code'));
+  const [showCompany, setShowCompany] = useState(() => Boolean(remembered('login_company_code')));
+  const [notice, setNotice] = useState('');
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -60,8 +71,11 @@ const Login = () => {
     event.preventDefault();
     if (busy) return;
     setError(''); setBusy(true);
+    const byCode = isLogin && loginWith === 'code';
     try {
-      const payload = isLogin
+      const payload = byCode
+        ? { employee_code: form.employee_code.trim(), password: form.password, ...(companyCode.trim() ? { company_code: companyCode.trim().toUpperCase() } : {}) }
+        : isLogin
         ? { email: form.email.trim(), password: form.password }
         : {
             name: form.name.trim(), email: form.email.trim(), password: form.password, mobile: form.mobile.trim(),
@@ -70,10 +84,13 @@ const Login = () => {
           };
       const response = isLogin ? await auth.login(payload) : await auth.register(payload);
       persistWorkspaceSession(response.data);
-      navigate('/dashboard');
+      if (isLogin) storeValue('login_with', loginWith);
+      if (byCode) storeValue('login_company_code', companyCode.trim().toUpperCase());
+      navigate(response.data.must_change_password || response.data.needs_email ? '/account-setup' : '/dashboard');
     } catch (err) {
       const code = err.response?.data?.code;
-      if (code === 'PENDING') setError('This company account is still waiting for approval.');
+      if (code === 'COMPANY_CODE_REQUIRED') { setShowCompany(true); setError('Two companies use this employee code. Add your company code (ask your admin) and sign in again.'); }
+      else if (code === 'PENDING') setError('This company account is still waiting for approval.');
       else if (code === 'REJECTED') setError(err.response?.data?.error || 'This account was rejected.');
       else setError(err.response?.data?.error || 'Unable to process the request right now.');
     } finally { setBusy(false); }
@@ -106,12 +123,37 @@ const Login = () => {
         <>
           <form onSubmit={handleWorkspaceSubmit} className="flex flex-col gap-4">
             <AuthAlert>{error}</AuthAlert>
+            {notice && !error && <AuthAlert tone="ok">{notice}</AuthAlert>}
             {!isLogin && <RegisterFields form={form} update={updateField} />}
-            <AuthInput label="Work email" type="email" icon="mail" autoComplete="email" placeholder="name@company.com" required
-              value={form.email} onChange={(e) => updateField('email', e.target.value)} />
+            {isLogin && (
+              <div role="group" aria-label="Sign in with" className="flex items-center gap-1 self-start rounded-lg border border-line bg-subtle p-0.5 text-xs font-semibold">
+                {[['email', 'Email'], ['code', 'Employee code']].map(([key, label]) => (
+                  <button key={key} type="button" aria-pressed={loginWith === key} onClick={() => { setLoginWith(key); setError(''); setNotice(''); }}
+                    className={`rounded-md px-3 py-1.5 transition ${loginWith === key ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}>{label}</button>
+                ))}
+              </div>
+            )}
+            {isLogin && loginWith === 'code' ? (
+              <>
+                <AuthInput label="Employee code" icon="badge" autoComplete="username" placeholder="e.g. ACT05" required autoCapitalize="characters"
+                  hint="The same code as in your HR system (HRMS)."
+                  value={form.employee_code} onChange={(e) => updateField('employee_code', e.target.value.toUpperCase())}
+                  right={!showCompany && <TextLink onClick={() => setShowCompany(true)}>Add company code</TextLink>} />
+                {showCompany && (
+                  <AuthInput label="Company code" icon="building" placeholder="e.g. ORG-ABCD-12X" autoCapitalize="characters"
+                    hint="Only needed if your admin gave you one. We remember it on this device."
+                    value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} />
+                )}
+              </>
+            ) : (
+              <AuthInput label="Work email" type="email" icon="mail" autoComplete="email" placeholder="name@company.com" required
+                value={form.email} onChange={(e) => updateField('email', e.target.value)} />
+            )}
             <PasswordInput key={isLogin ? 'login' : 'register'} autoComplete={isLogin ? 'current-password' : 'new-password'} strength={!isLogin}
-              placeholder={isLogin ? 'Enter your password' : 'Create a password'} required value={form.password} onChange={(e) => updateField('password', e.target.value)}
-              right={isLogin && <TextLink onClick={() => navigate('/forgot-password')}>Forgot password?</TextLink>} />
+              placeholder={isLogin ? (loginWith === 'code' ? 'Your password (first time: the one from your admin)' : 'Enter your password') : 'Create a password'} required value={form.password} onChange={(e) => updateField('password', e.target.value)}
+              right={isLogin && (loginWith === 'code'
+                ? <TextLink onClick={() => { setError(''); setNotice('Ask your admin for a new one-time password. If you already added your email, switch to Email and use Forgot password.'); }}>Forgot password?</TextLink>
+                : <TextLink onClick={() => navigate('/forgot-password')}>Forgot password?</TextLink>)} />
             {isLogin && (
               <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
                 <input type="checkbox" className="h-4 w-4 rounded accent-[rgb(var(--c-accent))]" checked={remember} onChange={(e) => setRemember(e.target.checked)} />

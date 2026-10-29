@@ -2,7 +2,11 @@ const db = require('../config/database');
 
 // Paid add-on modules that can be switched on per organization by the super admin.
 // Organizations without a row keep the standard product unchanged.
-const KNOWN_MODULES = ['timesheet'];
+// hrms_login: employees sign in with their HRMS employee code; admins import them from the HRMS sheet.
+// all_tasks: the company admin may let everyone see and get every task, whatever their team.
+// communications: sending email to clients through GreenTask's own mail server.
+// email_to_task: emails to the organization's inbox become tasks (inbox set in the platform console).
+const KNOWN_MODULES = ['timesheet', 'hrms_login', 'all_tasks', 'communications', 'email_to_task'];
 
 const isTrue = (value) => value === true || value === 1;
 

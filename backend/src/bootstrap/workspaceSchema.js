@@ -43,6 +43,8 @@ const ensureWorkspaceSchema = async () => {
   await require('./superAdminSchema').ensureSuperAdminSchema();
   await require('./taskFormSchema').ensureTaskFormSchema();
   await require('./clientsSchema').ensureClientsSchema();
+  await require('./hrmsSchema').ensureHrmsSchema();
+  await require('./emailInboxSchema').ensureEmailInboxSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };

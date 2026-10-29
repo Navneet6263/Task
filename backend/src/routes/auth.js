@@ -7,6 +7,7 @@ const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const { sendResetOtp, sendResetLink } = require('../utils/mailer');
+const { normalizeCode, accountFlags, syncQuietly } = require('../services/employeeAccounts');
 const router = express.Router();
 
 // In-memory OTP & Token stores: { email → { otp/token, expiresAt } }
@@ -17,6 +18,33 @@ const LINK_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
+
+// Compared when no account matches, so a wrong code takes as long as a wrong password.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
+
+// Employee-code sign-in, only for organizations where the super admin turned it on.
+// The company code is optional; it is needed only if the same code and password fit two companies.
+async function findEmployeeAccount(rawCode, rawCompanyCode, password) {
+  const code = normalizeCode(rawCode);
+  const companyCode = String(rawCompanyCode || '').trim().toUpperCase();
+  if (!code || !password) return { status: 422, error: 'Enter your employee code and password' };
+  const [rows] = await db.execute(
+    `SELECT TOP 5 u.* FROM users u
+     JOIN organizations o ON o.id = u.org_id
+     JOIN org_modules m ON m.org_id = u.org_id AND m.module_key = 'hrms_login' AND m.is_enabled = 1
+     WHERE u.login_code = ? AND u.is_deleted = 0${companyCode ? ' AND o.company_code = ?' : ''}`,
+    companyCode ? [code, companyCode] : [code]
+  );
+  if (!rows.length) {
+    await bcrypt.compare(password, DUMMY_HASH);
+    return { status: 401, error: 'Wrong employee code or password' };
+  }
+  const matches = [];
+  for (const row of rows) if (await bcrypt.compare(password, row.password)) matches.push(row);
+  if (matches.length > 1) return { status: 409, code: 'COMPANY_CODE_REQUIRED', error: 'Add your company code to sign in' };
+  if (!matches.length) return { status: 401, error: 'Wrong employee code or password' };
+  return { user: matches[0] };
+}
 
 router.post('/register', async (req, res) => {
   try {
@@ -111,6 +139,25 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (req.body.employee_code !== undefined) {
+      const found = await findEmployeeAccount(req.body.employee_code, req.body.company_code, password);
+      if (!found.user) return res.status(found.status).json({ error: found.error, ...(found.code ? { code: found.code } : {}) });
+      const employee = found.user;
+      const employeeOrgIds = await getAccessibleOrgIds(db, employee.id, employee.org_id);
+      const employeeToken = jwt.sign({ id: employee.id, role: employee.role, org_id: employee.org_id, org_ids: employeeOrgIds }, process.env.JWT_SECRET);
+      syncQuietly(employee.org_id);
+      const flags = accountFlags(employee);
+      return res.json({
+        token: employeeToken,
+        id: employee.id,
+        name: employee.name,
+        email: flags.needs_email ? '' : employee.email,
+        role: employee.role,
+        org_id: employee.org_id,
+        org_ids: employeeOrgIds,
+        ...flags,
+      });
+    }
     const normalizedEmail = normalizeEmail(email);
 
     const [companyAdmins] = await db.execute(
@@ -162,7 +209,7 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    const [users] = await db.execute('SELECT * FROM users WHERE email = ? AND is_deleted = FALSE', [normalizedEmail]);
     if (users.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const user = users[0];
     const valid = await bcrypt.compare(password, user.password);
@@ -182,6 +229,7 @@ router.post('/login', async (req, res) => {
       role: user.role,
       org_id: user.org_id,
       org_ids: orgIds,
+      ...accountFlags(user),
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -286,7 +334,7 @@ router.post('/reset-password', async (req, res) => {
     );
     if (companyAdmins.length > 0) {
       await db.execute('UPDATE company_admins SET password = ? WHERE email = ?', [hashed, normalizedEmail]);
-      await db.execute('UPDATE users SET password = ? WHERE email = ?', [hashed, normalizedEmail]);
+      await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE email = ?', [hashed, normalizedEmail]);
       updated = true;
     } else {
       const [users] = await db.execute(
@@ -294,7 +342,7 @@ router.post('/reset-password', async (req, res) => {
         [normalizedEmail]
       );
       if (users.length > 0) {
-        await db.execute('UPDATE users SET password = ? WHERE email = ? AND is_deleted = FALSE', [hashed, normalizedEmail]);
+        await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE email = ? AND is_deleted = FALSE', [hashed, normalizedEmail]);
         updated = true;
       }
     }

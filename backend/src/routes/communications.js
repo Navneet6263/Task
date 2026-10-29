@@ -1,8 +1,9 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
+const { createTransporter } = require('../utils/mailer');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { currentOrgRole, fail } = require('../utils/orgMember');
+const { isModuleEnabled } = require('../services/orgModules');
 
 const router = express.Router();
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
@@ -18,6 +19,18 @@ const route = (handler) => async (req, res, next) => {
 };
 
 router.use(authenticate, route(async (req, res, next) => { req.orgRole = await currentOrgRole(req); next(); }));
+
+// Mail goes out from GreenTask's own mail server, so only organizations the super admin
+// turned the Communications module on for can use any of it.
+router.get('/status', route(async (req, res) => {
+  res.json({ enabled: await isModuleEnabled(req.orgId, 'communications') });
+}));
+router.use(route(async (req, res, next) => {
+  if (!await isModuleEnabled(req.orgId, 'communications')) {
+    return res.status(403).json({ error: 'Communications is not turned on for your company. Ask GreenTask to enable it.', code: 'MODULE_OFF' });
+  }
+  next();
+}));
 
 // "a@x.com, b@y.com; c@z.com" → validated, de-duplicated list.
 function recipients(value, label, required) {
@@ -45,10 +58,7 @@ router.post('/send', route(async (req, res) => {
   const templateName = req.body.template_name ? String(req.body.template_name).slice(0, 120) : null;
   let status = 'SENT', error = null, messageId = null;
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST, port: process.env.SMTP_PORT, secure: Number(process.env.SMTP_PORT) === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
+    const transporter = createTransporter('task');
     const info = await transporter.sendMail({ from: process.env.FROM_EMAIL || process.env.SMTP_USER, to: to.join(', '), ...(cc.length ? { cc: cc.join(', ') } : {}), subject, text: body });
     messageId = info.messageId;
   } catch (sendError) {

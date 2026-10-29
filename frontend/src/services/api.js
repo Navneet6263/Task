@@ -129,6 +129,23 @@ export const timesheet = {
 };
 
 // Settings → Clients: the organization's client list and the "pick only from the list" rule.
+// The signed-in person's own account: first password after an admin's sheet, and the sign-in email.
+export const account = {
+  firstPassword: (password) => api.post('/users/me/first-password', { password }),
+  startEmail: (email) => api.post('/users/me/email/start', { email }),
+  verifyEmail: (code) => api.post('/users/me/email/verify', { code }),
+};
+
+// Employee-code sign-in (HRMS import) and the "show all tasks" switch; each needs its module on.
+export const hrms = {
+  status: () => api.get('/hrms/status'),
+  employees: () => api.get('/hrms/employees'),
+  importRows: (data) => api.post('/hrms/import', data),
+  loginSheet: () => api.post('/hrms/login-sheet'),
+  resetPassword: (id) => api.post(`/hrms/employees/${id}/reset-password`),
+  saveSettings: (data) => api.put('/hrms/settings', data),
+};
+
 export const clients = {
   list: () => api.get('/clients'),
   create: (name, agentId) => api.post('/clients', { name, ...(agentId ? { agent_id: agentId } : {}) }),
@@ -201,6 +218,7 @@ export const comments = {
 };
 
 export const communications = {
+  status: () => cachedGet(api, '/communications/status', 300000),
   send: (data) => api.post('/communications/send', data),
   history: (page = 1, mine = false) => api.get('/communications/history', { params: { page, ...(mine ? { mine: 'true' } : {}) } }),
   historyItem: (id) => api.get(`/communications/history/${id}`),

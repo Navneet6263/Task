@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { communications } from '../../services/api';
-import { PageHeader, Tabs } from '../../ui';
+import { EmptyState, Loading, PageHeader, Tabs } from '../../ui';
+import useCommunicationsEnabled from './useCommunicationsEnabled';
 import TemplateRail from './TemplateRail';
 import EmailComposer from './EmailComposer';
 import SentHistory from './SentHistory';
@@ -15,6 +16,7 @@ export default function Communications() {
   const [taskDraft, setTaskDraft] = useState(null);
   const [orgTemplates, setOrgTemplates] = useState([]);
   const [saveDraft, setSaveDraft] = useState(null);
+  const enabled = useCommunicationsEnabled();
 
   // A task's "send email" button leaves its details here; read them once.
   useEffect(() => {
@@ -32,6 +34,15 @@ export default function Communications() {
   useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
   const use = (template) => { setActive({ ...template, id: `use-${template.id}-${Date.now()}` }); setTab('compose'); };
+
+  if (enabled === null) return <div className="p-6"><Loading>Opening communications…</Loading></div>;
+  if (!enabled) {
+    return (
+      <div className="mx-auto max-w-xl py-10">
+        <EmptyState title="Communications is not turned on">Sending client emails from GreenTask is an add-on. Ask GreenTask to turn it on for your company.</EmptyState>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col">

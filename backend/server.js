@@ -78,6 +78,7 @@ app.use('/api/task-workflow', require('./src/routes/taskWorkflow'));
 app.use('/api/task-recurrence', require('./src/routes/taskRecurrence'));
 app.use('/api/logs', require('./src/routes/logs'));
 app.use('/api/users', require('./src/routes/users'));
+app.use('/api/hrms', require('./src/routes/hrms'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/company-admin', require('./src/routes/companyAdmin'));
 app.use('/api/analytics', require('./src/routes/analytics'));

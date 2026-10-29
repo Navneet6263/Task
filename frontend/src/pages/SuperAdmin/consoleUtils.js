@@ -65,10 +65,14 @@ export const ACTION_LABEL = {
   LOGIN: 'Signed in', VIEW_DASHBOARD: 'Opened console', APPROVE_COMPANY: 'Approved company', REJECT_COMPANY: 'Rejected company',
   UPDATE_LIMITS: 'Changed limits', ENABLE_MODULE: 'Turned module on', DISABLE_MODULE: 'Turned module off',
   ADD_SUB_USER: 'Gave access', REMOVE_SUB_USER: 'Removed access', LOGIN_FAILED: 'Failed sign-in', SET_PASSWORD: 'Set password', RESEND_INVITE: 'Sent setup link',
+  IMPORT_EMPLOYEES: 'Imported employees', LOGIN_SHEET: 'Downloaded login sheet',
+  SAVE_EMAIL_INBOX: 'Saved task inbox', REMOVE_EMAIL_INBOX: 'Removed task inbox',
 };
+export const MODULE_NAMES = { timesheet: 'Timesheet', hrms_login: 'Employee code login', all_tasks: 'Show all tasks', communications: 'Communications', email_to_task: 'Email to task' };
 export const ACTION_TONE = {
   APPROVE_COMPANY: 'ok', ENABLE_MODULE: 'ok', ADD_SUB_USER: 'info', REJECT_COMPANY: 'danger', DISABLE_MODULE: 'warn',
   REMOVE_SUB_USER: 'danger', UPDATE_LIMITS: 'info', LOGIN_FAILED: 'danger', SET_PASSWORD: 'ok', RESEND_INVITE: 'info',
+  IMPORT_EMPLOYEES: 'ok', LOGIN_SHEET: 'warn', SAVE_EMAIL_INBOX: 'info', REMOVE_EMAIL_INBOX: 'warn',
 };
 export const actionLabel = (action) => ACTION_LABEL[action] || String(action || '').toLowerCase().replace(/_/g, ' ');
 // Routine entries that are hidden from the activity feed unless asked for.
