@@ -126,6 +126,7 @@ export const timesheet = {
   resetForm: () => api.delete('/timesheet/form'),
   saveSettings: (data) => api.put('/timesheet/settings', data),
   report: (params) => api.get('/timesheet/reports', { params }),
+  teamWeek: (params) => api.get('/timesheet/team-week', { params }),
 };
 
 // Settings → Clients: the organization's client list and the "pick only from the list" rule.

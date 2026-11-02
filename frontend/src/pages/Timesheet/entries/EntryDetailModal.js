@@ -76,7 +76,7 @@ export default function EntryDetailModal({ id, config, onClose, onChanged, onEdi
         <Detail label="Job Type">{entry.job_type}</Detail>
         <Detail label="Work Type">{entry.work_type}</Detail>
         <Detail label="Date worked"><span className="font-mono">{fmtDate(entry.date_worked)}</span></Detail>
-        <Detail label="Agent">{entry.agent_name}</Detail>
+        <Detail label="Done by">{entry.agent_name}</Detail>
         <Detail label="Period">{entry.period_type && <>{entry.period_type} · ended <span className="font-mono">{fmtDate(entry.period_ended)}</span></>}</Detail>
         <Detail label="Registration Status">{entry.registration_status}</Detail>
         <Detail label="Count">{entry.count_type && <><span className="font-mono">{entry.count_number ?? '—'}</span> {entry.count_type}</>}</Detail>

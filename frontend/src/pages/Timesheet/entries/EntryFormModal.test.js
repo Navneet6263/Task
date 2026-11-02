@@ -45,6 +45,28 @@ test('people can search their tasks and change the pick', async () => {
   expect(document.querySelector('#ts-task_id')).toBeTruthy();
 });
 
+const names = () => [...document.querySelectorAll('#ts-agent_id option')].map((o) => o.textContent);
+
+test('an employee always sees their own name in Done by and cannot change it', async () => {
+  const employee = { ...config, role: 'person', user_id: 12, team_ids: [12], permissions: { log_for_others: false, manage_clients: false } };
+  await act(async () => r.render(<EntryFormModal config={employee} onClose={() => {}} onSaved={() => {}} />));
+  const select = document.querySelector('#ts-agent_id');
+  expect(select.value).toBe('12');
+  expect(select.selectedOptions[0].textContent).toBe('Asha');
+  expect(select.disabled).toBe(true);
+  expect(document.body.textContent).toContain('Your entries are logged under your own name.');
+  expect(document.body.textContent).not.toContain('Show everyone');
+});
+
+test('a manager picks Done by from their own team, with everyone one click away', async () => {
+  const manager = { ...config, role: 'manager', team_ids: [10, 12], users: [...config.users, { id: 13, name: 'Other Team' }] };
+  await act(async () => r.render(<EntryFormModal config={manager} onClose={() => {}} onSaved={() => {}} />));
+  expect(names()).toEqual(['Select', 'Manager', 'Asha']);
+  expect(document.body.textContent).toContain('Showing your team (2 people).');
+  await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Show everyone').click());
+  expect(names()).toEqual(['Select', 'Manager', 'Asha', 'Other Team']);
+});
+
 test('picking an agent shows only its clients, and picking a client fills in its agent', async () => {
   const withAgents = {
     ...config,

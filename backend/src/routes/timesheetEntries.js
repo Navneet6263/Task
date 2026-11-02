@@ -9,8 +9,17 @@ const {
 } = require('./timesheetSupport');
 const { requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys } = require('../services/timesheetFormLayout');
 const { resolveAgent } = require('../services/orgClients');
+const { teamOf } = require('../services/timesheetTeam');
 
 const PAGE_SIZE = 50;
+const EXPORT_LIMIT = 5000;
+const ENTRY_SORTS = {
+  date_desc: 'e.date_worked DESC, e.id DESC',
+  date_asc: 'e.date_worked ASC, e.id ASC',
+  hours_desc: 'total_hours DESC, e.date_worked DESC, e.id DESC',
+  client: 'c.name ASC, e.date_worked DESC, e.id DESC',
+  person: 'a.name ASC, e.date_worked DESC, e.id DESC',
+};
 const REPORT_ROW_LIMIT = 10000;
 const GROUP_LABELS = { job_type: 'Job Type', work_type: 'Work Type', period_type: 'Period Type', registration_status: 'Registration Status', count_type: 'Count Type' };
 const ENTRY_FIELDS = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number'];
@@ -104,11 +113,38 @@ router.get('/entries', route(async (req, res) => {
     params.push(req.userId, req.userId, req.userId);
   }
   if (req.query.client_id) { where.push('e.client_id = ?'); params.push(positive(req.query.client_id, 'client')); }
-  if (req.query.agent_id) { where.push('e.agent_id = ?'); params.push(positive(req.query.agent_id, 'agent')); }
+  if (req.query.agent_id) {
+    const personId = positive(req.query.agent_id, 'agent');
+    where.push('(e.agent_id = ? OR EXISTS (SELECT 1 FROM timesheet_time_logs fl WHERE fl.entry_id = e.id AND fl.user_id = ? AND fl.is_deleted = 0))');
+    params.push(personId, personId);
+  }
+  // "My team": work done by the manager's people, whoever typed the entry in.
+  if (req.tsRole !== 'person' && req.query.scope === 'team') {
+    const team = await teamOf(req.orgId, req.userId);
+    const marks = team.map(() => '?').join(',');
+    where.push(`(e.agent_id IN (${marks}) OR EXISTS (SELECT 1 FROM timesheet_time_logs tl WHERE tl.entry_id = e.id AND tl.is_deleted = 0 AND tl.user_id IN (${marks})))`);
+    params.push(...team, ...team);
+  }
+  const search = String(req.query.q || '').trim().slice(0, 100);
+  if (search) {
+    const like = `%${search.replace(/[[%_]/g, (c) => `[${c}]`)}%`;
+    where.push(`(e.description LIKE ? OR e.job_type LIKE ? OR e.work_type LIKE ?
+      OR EXISTS (SELECT 1 FROM timesheet_clients sc WHERE sc.id = e.client_id AND sc.name LIKE ?)
+      OR EXISTS (SELECT 1 FROM tasks st WHERE st.id = e.task_id AND st.title LIKE ?)
+      OR CAST(e.task_id AS VARCHAR(12)) = ?)`);
+    params.push(like, like, like, like, like, search.replace(/^#/, ''));
+  }
   if (req.query.task_id) { where.push('e.task_id = ?'); params.push(positive(req.query.task_id, 'task')); }
   if (req.query.agent_firm_id) { where.push('e.agent_firm_id = ?'); params.push(positive(req.query.agent_firm_id, 'agent')); }
-  if (req.query.from) { if (!isValidDate(req.query.from)) throw fail(422, 'Invalid from date'); where.push('e.date_worked >= ?'); params.push(req.query.from); }
-  if (req.query.to) { if (!isValidDate(req.query.to)) throw fail(422, 'Invalid to date'); where.push('e.date_worked <= ?'); params.push(req.query.to); }
+  if (req.query.from && !isValidDate(req.query.from)) throw fail(422, 'Invalid from date');
+  if (req.query.to && !isValidDate(req.query.to)) throw fail(422, 'Invalid to date');
+  // An entry belongs to a period by its date worked or by any time logged in that period.
+  if (req.query.from || req.query.to) {
+    const range = (column) => [req.query.from ? `${column} >= ?` : null, req.query.to ? `${column} <= ?` : null].filter(Boolean).join(' AND ');
+    const values = [req.query.from, req.query.to].filter(Boolean);
+    where.push(`((${range('e.date_worked')}) OR EXISTS (SELECT 1 FROM timesheet_time_logs dl WHERE dl.entry_id = e.id AND dl.is_deleted = 0 AND ${range('dl.work_date')}))`);
+    params.push(...values, ...values);
+  }
   const lockedSql = `(e.status = 'SUBMITTED' AND DATEADD(DAY, ?, e.submitted_on) < ? AND (e.unlocked_until IS NULL OR e.unlocked_until < ?))`;
   switch (req.query.status) {
     case undefined: case '': case 'ALL': break;
@@ -119,19 +155,30 @@ router.get('/entries', route(async (req, res) => {
   }
   if (req.query.mine === 'true') { where.push('(e.created_by = ? OR e.agent_id = ? OR EXISTS (SELECT 1 FROM timesheet_time_logs ml WHERE ml.entry_id = e.id AND ml.user_id = ? AND ml.is_deleted = 0))'); params.push(req.userId, req.userId, req.userId); }
   const whereSql = where.join(' AND ');
+  const orderSql = ENTRY_SORTS[req.query.sort] || ENTRY_SORTS.date_desc;
+  const exporting = req.query.all === 'true';
   const [rows] = await db.execute(
     `SELECT ${ENTRY_COLUMNS},
        (SELECT COALESCE(SUM(l.hours), 0) FROM timesheet_time_logs l WHERE l.entry_id = e.id AND l.is_deleted = 0) AS total_hours,
        (SELECT COUNT(DISTINCT l.user_id) FROM timesheet_time_logs l WHERE l.entry_id = e.id AND l.is_deleted = 0) AS people_count,
        CASE WHEN EXISTS (SELECT 1 FROM timesheet_unlock_requests r WHERE r.entry_id = e.id AND r.status = 'PENDING') THEN 1 ELSE 0 END AS has_pending_unlock
      ${ENTRY_FROM} WHERE ${whereSql}
-     ORDER BY e.date_worked DESC, e.id DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`,
-    [...params, (page - 1) * PAGE_SIZE, PAGE_SIZE]
+     ORDER BY ${orderSql} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`,
+    exporting ? [...params, 0, EXPORT_LIMIT] : [...params, (page - 1) * PAGE_SIZE, PAGE_SIZE]
   );
-  const [[count]] = await db.execute(`SELECT COUNT(*) AS total FROM timesheet_entries e WHERE ${whereSql}`, params);
+  const [[count]] = await db.execute(
+    `SELECT COUNT(*) AS total, COUNT(DISTINCT e.agent_id) AS people, COALESCE(SUM(x.hours), 0) AS hours,
+       SUM(CASE WHEN e.status = 'DRAFT' THEN 1 ELSE 0 END) AS drafts,
+       SUM(CASE WHEN ${lockedSql} THEN 1 ELSE 0 END) AS locked
+     FROM timesheet_entries e
+     OUTER APPLY (SELECT SUM(l.hours) AS hours FROM timesheet_time_logs l WHERE l.entry_id = e.id AND l.is_deleted = 0) x
+     WHERE ${whereSql}`,
+    [settings.lock_days, today, today, ...params]
+  );
   res.json({
-    data: rows.map(({ description, ...row }) => decorate({ ...row, total_hours: Number(row.total_hours), has_pending_unlock: Boolean(row.has_pending_unlock) }, req, settings, today)),
-    page, page_size: PAGE_SIZE, total: Number(count.total),
+    data: rows.map(({ description, ...row }) => decorate({ ...row, ...(exporting ? { description } : {}), total_hours: Number(row.total_hours), has_pending_unlock: Boolean(row.has_pending_unlock) }, req, settings, today)),
+    page, page_size: exporting ? EXPORT_LIMIT : PAGE_SIZE, total: Number(count.total),
+    summary: { entries: Number(count.total), hours: Number(count.hours), people: Number(count.people), drafts: Number(count.drafts || 0), locked: Number(count.locked || 0) },
   });
 }));
 
@@ -395,6 +442,11 @@ router.get('/reports', requirePermission((role) => permissionsFor(role).view_rep
   const params = [req.orgId, from, to];
   if (req.query.client_id) { where.push('e.client_id = ?'); params.push(positive(req.query.client_id, 'client')); }
   if (req.query.user_id) { where.push('l.user_id = ?'); params.push(positive(req.query.user_id, 'person')); }
+  if (req.query.scope === 'team') {
+    const team = await teamOf(req.orgId, req.userId);
+    where.push(`l.user_id IN (${team.map(() => '?').join(',')})`);
+    params.push(...team);
+  }
   const [rows] = await db.execute(
     `SELECT l.id, CONVERT(VARCHAR(10), l.work_date, 23) AS work_date, l.hours, l.note, l.user_id, u.name AS user_name,
        e.id AS entry_id, e.client_id, c.name AS client_name, e.job_type, e.work_type, e.period_type,

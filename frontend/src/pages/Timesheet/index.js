@@ -7,6 +7,7 @@ import EntriesTab from './entries/EntriesTab';
 import EntryFormModal from './entries/EntryFormModal';
 import EntryDetailModal from './entries/EntryDetailModal';
 import ReportsTab from './reports/ReportsTab';
+import TeamWeekTab from './week/TeamWeekTab';
 import SetupTab from './setup/SetupTab';
 import UnlockRequestsModal from './setup/UnlockRequestsModal';
 
@@ -18,6 +19,7 @@ export default function Timesheet() {
   const [form, setForm] = useState(null); // {} to add, { entry } to edit
   const [detailId, setDetailId] = useState(null);
   const [showUnlocks, setShowUnlocks] = useState(false);
+  const [entriesPreset, setEntriesPreset] = useState(null); // opened from a number in the team week
   const [params, setParams] = useSearchParams();
 
   const loadConfig = useCallback(async () => {
@@ -41,7 +43,7 @@ export default function Timesheet() {
 
   const { permissions } = config;
   const tabs = [['entries', 'Entries'],
-    ...(permissions.view_reports ? [['reports', 'Reports']] : []),
+    ...(permissions.view_reports ? [['week', 'Team week'], ['reports', 'Reports']] : []),
     ...(permissions.setup ? [['setup', 'Setup']] : [])];
 
   const onSaved = (id, mode) => {
@@ -65,7 +67,8 @@ export default function Timesheet() {
         )}
       />
 
-      {tab === 'entries' && <EntriesTab config={config} refreshKey={refreshKey} onOpen={setDetailId} />}
+      {tab === 'entries' && <EntriesTab key={entriesPreset?.at || 'entries'} config={config} refreshKey={refreshKey} onOpen={setDetailId} preset={entriesPreset} />}
+      {tab === 'week' && <TeamWeekTab config={config} refreshKey={refreshKey} onDrill={(preset) => { setEntriesPreset({ ...preset, at: Date.now() }); setTab('entries'); }} />}
       {tab === 'reports' && <ReportsTab config={config} />}
       {tab === 'setup' && <SetupTab config={config} onChanged={loadConfig} />}
 

@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const { authenticate } = require('../middleware/auth');
 const { isModuleEnabled } = require('../services/orgModules');
-const { OPTION_GROUPS, fail, todayLocal, permissionsFor } = require('../services/timesheetRules');
+const { OPTION_GROUPS, fail, todayLocal, addDays, isValidDate, permissionsFor } = require('../services/timesheetRules');
+const { teamOf } = require('../services/timesheetTeam');
 const {
   db, isDuplicateKey, route, positive, resolveRole, requireTimesheet, requirePermission, getSettings,
   ensureDefaultOptions, getOptions, orgMembers, taskScope, effectiveLayout,
@@ -29,7 +30,7 @@ const canSetup = (role) => permissionsFor(role).setup;
 
 router.get('/config', route(async (req, res) => {
   await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncClientLists(req.orgId, req.userId, { toTimesheet: true })]);
-  const [settings, options, members, clientRows, form, agentRows] = await Promise.all([
+  const [settings, options, members, clientRows, form, agentRows, teamIds] = await Promise.all([
     getSettings(req.orgId),
     getOptions(req.orgId),
     orgMembers(req.orgId),
@@ -39,6 +40,7 @@ router.get('/config', route(async (req, res) => {
        WHERE tc.org_id = ? AND oc.is_active = 1 ORDER BY tc.name ASC`, [req.orgId]),
     effectiveLayout(req.orgId),
     db.execute('SELECT id, name FROM org_agents WHERE org_id = ? AND is_active = 1 ORDER BY name ASC', [req.orgId]),
+    permissionsFor(req.tsRole).log_for_others ? teamOf(req.orgId, req.userId) : [Number(req.userId)],
   ]);
   let pendingUnlocks = 0;
   if (permissionsFor(req.tsRole).approve_unlocks) {
@@ -55,9 +57,37 @@ router.get('/config', route(async (req, res) => {
     clients: clientRows[0],
     agents: agentRows[0],
     users: members.map(({ id, name }) => ({ id, name })),
+    team_ids: teamIds,
     pending_unlocks: pendingUnlocks,
     form,
   });
+}));
+
+/* One week at a glance for managers and admins: hours per person per day, gaps included. */
+router.get('/team-week', requirePermission((role) => permissionsFor(role).view_reports, 'Only managers and admins can see the team week'), route(async (req, res) => {
+  const anchor = req.query.week === undefined ? todayLocal() : String(req.query.week);
+  if (!isValidDate(anchor)) throw fail(422, 'Pick a valid week');
+  const weekday = new Date(`${anchor}T00:00:00Z`).getUTCDay();
+  const start = addDays(anchor, -((weekday + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  let members = await orgMembers(req.orgId);
+  if (req.query.scope === 'team') {
+    const team = new Set(await teamOf(req.orgId, req.userId));
+    members = members.filter((member) => team.has(Number(member.id)));
+  }
+  const [rows] = await db.execute(
+    `SELECT l.user_id, CONVERT(VARCHAR(10), l.work_date, 23) AS work_date, SUM(l.hours) AS hours
+     FROM timesheet_time_logs l JOIN timesheet_entries e ON e.id = l.entry_id AND e.org_id = l.org_id
+     WHERE l.org_id = ? AND l.is_deleted = 0 AND e.is_deleted = 0 AND l.work_date >= ? AND l.work_date <= ?
+     GROUP BY l.user_id, l.work_date`,
+    [req.orgId, days[0], days[6]]
+  );
+  const logged = new Map(rows.map((row) => [`${row.user_id}|${row.work_date}`, Number(row.hours)]));
+  const people = members.map(({ id, name }) => {
+    const hours = Object.fromEntries(days.map((day) => [day, logged.get(`${id}|${day}`) || 0]));
+    return { id, name, hours, total: Object.values(hours).reduce((sum, value) => sum + value, 0) };
+  });
+  res.json({ today: todayLocal(), days, people });
 }));
 
 /* Tasks people can log time against, open ones and their own first. */

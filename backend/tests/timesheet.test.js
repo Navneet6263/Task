@@ -92,6 +92,62 @@ test('report summary adds hours per person and per entry', () => {
   assert.equal(summary.by_client[0].entries[0].hours, 4.75);
 });
 
+/* My team: the reporting line */
+test('a team is everyone under a person in the reporting line, even if the data has a loop', () => {
+  const { reportsUnder } = require('../src/services/timesheetTeam');
+  const rows = [{ id: 2, reports_to: 1 }, { id: 3, reports_to: 2 }, { id: 4, reports_to: 9 }, { id: 1, reports_to: 3 }];
+  assert.deepEqual(reportsUnder(rows, 2).sort(), [1, 2, 3]);
+  assert.deepEqual(reportsUnder(rows, 4), [4]);
+});
+
+test('"My team" limits a manager to their people, employees stay on their own work, and filters reach the query', async (t) => {
+  const seen = [];
+  mockDb(t, (sql, params) => {
+    if (sql.includes('u.reports_to IS NOT NULL')) return [[{ id: 12, reports_to: 10 }, { id: 13, reports_to: 12 }, { id: 20, reports_to: 99 }]];
+    if (sql.includes('COUNT(*) AS total')) { seen.push({ sql, params }); return [[{ total: 0, people: 0, hours: 0, drafts: 0, locked: 0 }]]; }
+    if (sql.includes('FROM timesheet_entries e')) { seen.push({ sql, params }); return [[]]; }
+    return [[]];
+  }, { role: 'manager' });
+  const send = await client(t, { id: 10, role: 'manager', org_id: 1 });
+  const ok = await send('/entries?scope=team&q=acme&sort=hours_desc&from=2026-10-01&to=2026-10-31');
+  assert.equal(ok.status, 200);
+  assert.deepEqual((await ok.json()).summary, { entries: 0, hours: 0, people: 0, drafts: 0, locked: 0 });
+  const list = seen.find((call) => call.sql.includes('ORDER BY'));
+  assert.match(list.sql, /e\.agent_id IN \(\?,\?,\?\)/);
+  assert.match(list.sql, /ORDER BY total_hours DESC/);
+  assert.ok(list.params.includes('%acme%') && list.params.includes('2026-10-01'));
+  [10, 12, 13].forEach((id) => assert.ok(list.params.includes(id)));
+  assert.ok(!list.params.includes(20));
+});
+
+test('employees cannot widen their view with scope, and only leads get the team week', async (t) => {
+  const seen = [];
+  mockDb(t, (sql, params) => {
+    if (sql.includes('COUNT(*) AS total')) return [[{ total: 0, people: 0, hours: 0, drafts: 0, locked: 0 }]];
+    if (sql.includes('FROM timesheet_entries e')) { seen.push({ sql, params }); return [[]]; }
+    return [[]];
+  });
+  const send = await client(t, { id: 10, role: 'person', org_id: 1 });
+  assert.equal((await send('/entries?scope=all')).status, 200);
+  assert.match(seen[0].sql, /e\.created_by = \? OR e\.agent_id = \?/);
+  assert.equal((await send('/team-week')).status, 403);
+});
+
+test('the team week adds up hours per person and starts on Monday', async (t) => {
+  mockDb(t, (sql) => {
+    if (sql.includes('u.reports_to IS NOT NULL')) return [[{ id: 12, reports_to: 10 }]];
+    if (sql.includes('FROM users u')) return [[{ id: 10, name: 'Manager', role: 'manager' }, { id: 12, name: 'Asha', role: 'person' }, { id: 20, name: 'Other', role: 'person' }]];
+    if (sql.includes('FROM timesheet_time_logs l')) return [[{ user_id: 12, work_date: '2026-10-27', hours: 2.5 }, { user_id: 12, work_date: '2026-10-28', hours: 1 }]];
+    return [[]];
+  }, { role: 'manager' });
+  const send = await client(t, { id: 10, role: 'manager', org_id: 1 });
+  const data = await (await send('/team-week?week=2026-10-29&scope=team')).json();
+  assert.equal(data.days[0], '2026-10-26');
+  assert.equal(data.days[6], '2026-11-01');
+  assert.deepEqual(data.people.map((p) => [p.name, p.total]), [['Manager', 0], ['Asha', 3.5]]);
+  assert.equal(data.people[1].hours['2026-10-27'], 2.5);
+});
+
 /* Routes: organization isolation and roles */
 test('organizations without the module are refused on every route', async (t) => {
   const calls = mockDb(t, () => { throw Error('Unexpected query'); }, { enabled: false, role: 'admin' });

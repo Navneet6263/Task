@@ -5,6 +5,7 @@ import { Button, FormRow, Input, Modal, Select, Textarea } from '../../../ui';
 import LayoutField from '../../Dashboard/TaskComposer/LayoutField';
 import { errorOf, fieldsOf } from '../format';
 import TaskPicker from './TaskPicker';
+import { doneByPeople, hasTeam, teamPeople } from '../team';
 import AgentPicker from '../../../components/clients/AgentPicker';
 
 const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
@@ -130,6 +131,9 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const optionsFor = (field) => (form[field.key] && !(field.options || []).includes(form[field.key]) ? [form[field.key], ...(field.options || [])] : field.options || []);
   const canAddClient = config.permissions.manage_clients;
   const canPickAgent = config.permissions.log_for_others;
+  // Managers pick from their own people; anyone else in the company is one click away.
+  const [everyone, setEveryone] = useState(() => config.role !== 'manager');
+  const doneByOptions = canPickAgent ? doneByPeople(config, everyone, form.agent_id) : config.users;
 
   const control = (field) => {
     const { key } = field;
@@ -159,7 +163,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       );
       case 'date_worked': return <Input id="ts-date_worked" type="date" max={config.today} value={form.date_worked} onChange={set('date_worked')} />;
       case 'period_ended': return <Input id="ts-period_ended" type="date" value={form.period_ended} onChange={set('period_ended')} />;
-      case 'agent_id': return select('agent_id', config.users.map((user) => ({ id: String(user.id), name: user.name })), 'Select', !canPickAgent);
+      case 'agent_id': return select('agent_id', doneByOptions.map((user) => ({ id: String(user.id), name: user.name })), 'Select', !canPickAgent);
       case 'description': return <Textarea id="ts-description" rows={3} maxLength={2000} value={form.description} onChange={set('description')} />;
       case 'count_number': return <Input id="ts-count_number" type="number" min="0" step="1" value={form.count_number} onChange={set('count_number')} />;
       case 'hours': return isEdit
@@ -176,6 +180,14 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     if (field.key === 'agent_firm_id') return 'Pick the agent first to see only its clients.';
     if (field.key === 'client_id') return form.agent_firm_id ? `Showing ${agentClients.length} client${agentClients.length === 1 ? '' : 's'} of this agent.` : canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
     if (field.key === 'agent_id' && !canPickAgent) return 'Your entries are logged under your own name.';
+    if (field.key === 'agent_id' && hasTeam(config)) {
+      return (
+        <>
+          {everyone ? 'Showing everyone in the company. ' : `Showing your team (${teamPeople(config).length} people). `}
+          <button type="button" className="font-semibold text-accent hover:underline" onClick={() => setEveryone((value) => !value)}>{everyone ? 'Show only my team' : 'Show everyone'}</button>
+        </>
+      );
+    }
     return null;
   };
 

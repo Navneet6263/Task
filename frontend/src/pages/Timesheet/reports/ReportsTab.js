@@ -5,11 +5,13 @@ import { exportTimesheetReport } from './exportTimesheet';
 import { Banner, Button, Card, EmptyState, ErrorText, Field, Input, Select } from '../../../ui';
 import { errorOf } from '../format';
 import { ClientBreakdown, HoursByPerson, ReportStats } from './ReportSections';
+import { defaultScope, hasTeam, teamPeople } from '../team';
 
 const monthStart = (today) => `${today.slice(0, 8)}01`;
 
 export default function ReportsTab({ config }) {
-  const [filters, setFilters] = useState({ client_id: '', user_id: '', from: monthStart(config.today), to: config.today });
+  const [filters, setFilters] = useState({ client_id: '', user_id: '', from: monthStart(config.today), to: config.today, scope: defaultScope(config) === 'team' ? 'team' : 'all' });
+  const people = filters.scope === 'team' ? teamPeople(config) : config.users;
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +20,7 @@ export default function ReportsTab({ config }) {
     event.preventDefault();
     setLoading(true); setError('');
     try {
-      const params = { ...filters, client_id: filters.client_id || undefined, user_id: filters.user_id || undefined };
+      const params = { ...filters, client_id: filters.client_id || undefined, user_id: filters.user_id || undefined, scope: filters.scope === 'team' ? 'team' : undefined };
       setReport((await timesheet.report(params)).data);
     } catch (err) { setError(errorOf(err, 'Could not load the report.')); setReport(null); }
     finally { setLoading(false); }
@@ -50,9 +52,16 @@ export default function ReportsTab({ config }) {
           </Field>
           <Field label="From" htmlFor="ts-report-from"><Input id="ts-report-from" type="date" required value={filters.from} max={filters.to} onChange={set('from')} /></Field>
           <Field label="To" htmlFor="ts-report-to"><Input id="ts-report-to" type="date" required value={filters.to} min={filters.from} onChange={set('to')} /></Field>
+          {hasTeam(config) && (
+            <Field label="Whose work" htmlFor="ts-report-scope">
+              <Select id="ts-report-scope" className="min-w-[130px]" value={filters.scope} onChange={(event) => setFilters((prev) => ({ ...prev, scope: event.target.value, user_id: '' }))}>
+                <option value="team">My team</option><option value="all">Everyone</option>
+              </Select>
+            </Field>
+          )}
           <Field label="Person" htmlFor="ts-report-person">
             <Select id="ts-report-person" className="min-w-[160px]" value={filters.user_id} onChange={set('user_id')}>
-              <option value="">Everyone</option>{config.users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              <option value="">{filters.scope === 'team' ? 'Everyone in my team' : 'Everyone'}</option>{people.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </Select>
           </Field>
           <Button type="submit" variant="primary" disabled={loading}>{loading ? 'Loading...' : 'Show report'}</Button>
