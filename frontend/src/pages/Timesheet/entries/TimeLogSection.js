@@ -3,13 +3,10 @@ import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
 import { Button, Card, CardHeader, EmptyRow, FieldError, Input, Select, Table, Td, Th } from '../../../ui';
 import { errorOf, fieldsOf, fmtDate, fmtHours } from '../format';
-import { doneByPeople } from '../team';
 
 // "Who spent how much time" table plus the Add Time form.
 export default function TimeLogSection({ entry, config, busy, onRemove, onAdded }) {
   const [log, setLog] = useState({ user_id: String(config.user_id), work_date: config.today, hours: '', note: '' });
-  // A manager's own people, plus whoever is already in this entry.
-  const people = config.role === 'manager' ? doneByPeople(config, false, entry.agent_id) : config.users;
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const canPickPerson = config.permissions.log_for_others;
@@ -53,7 +50,7 @@ export default function TimeLogSection({ entry, config, busy, onRemove, onAdded 
         {entry.can_log ? (
           <form onSubmit={add} className="grid grid-cols-2 gap-2 md:grid-cols-[1.3fr_1fr_0.7fr_1.6fr_auto]">
             <Select aria-label="Person" value={log.user_id} disabled={!canPickPerson} onChange={(event) => setLog({ ...log, user_id: event.target.value })}>
-              {people.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+              {config.users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </Select>
             <Input aria-label="Date" type="date" max={config.today} value={log.work_date} onChange={(event) => setLog({ ...log, work_date: event.target.value })} />
             <Input aria-label="Hours" type="number" min="0.25" max="24" step="0.25" placeholder="Hours" value={log.hours} onChange={(event) => setLog({ ...log, hours: event.target.value })} />

@@ -249,6 +249,34 @@ test('"+ New client" in the timesheet adds to the one client list and refuses cl
   assert.equal((await send('/clients', 'POST', { name: 'ABC Ltd' })).status, 409);
 });
 
+test('a manager cannot fill a timesheet for someone else, only an admin can', async (t) => {
+  assert.equal(rules.permissionsFor('manager').log_for_others, false);
+  assert.equal(rules.permissionsFor('manager').view_reports, true);
+  assert.equal(rules.permissionsFor('admin').log_for_others, true);
+  let insert;
+  let role = 'manager';
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role }]];
+    if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: true }]];
+    if (sql.startsWith('INSERT INTO timesheet_audit')) return [{}];
+    if (sql.startsWith('SELECT name FROM timesheet_clients')) return [[{ name: 'Acme' }]];
+    if (sql.startsWith('SELECT c.agent_id')) return [[]];
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: params[0] }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('SET XACT_ABORT ON')) { insert = params; return [{ insertId: 78, rows: [{ insertId: 78 }] }]; }
+    return [[]];
+  });
+  const asManager = await client(t, { id: 10, role: 'manager', org_id: 1 });
+  assert.equal((await asManager('/entries', 'POST', { ...validEntry, agent_id: 12 })).status, 201);
+  assert.equal(insert[5], 10, 'saved under the manager, not the person they named');
+  role = 'admin';
+  const asAdmin = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  assert.equal((await asAdmin('/entries', 'POST', { ...validEntry, agent_id: 12 })).status, 201);
+  assert.equal(insert[5], 12);
+});
+
 test('an entry can be linked to a task the person can see, but not to someone else\'s task', async (t) => {
   let insert;
   let visible = false;

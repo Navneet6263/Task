@@ -34,7 +34,7 @@ const timesheetRole = (role) => ROLE_MAP[role] || null;
 const permissionsFor = (role) => ({
   manage_clients: role === 'admin' || role === 'manager',
   view_reports: role === 'admin' || role === 'manager',
-  log_for_others: role === 'admin' || role === 'manager',
+  log_for_others: role === 'admin',
   setup: role === 'admin',
   approve_unlocks: role === 'admin',
   bypass_lock: role === 'admin',

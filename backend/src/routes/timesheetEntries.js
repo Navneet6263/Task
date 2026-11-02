@@ -217,7 +217,7 @@ router.post('/entries', route(async (req, res) => {
   const mode = req.body.mode === 'draft' ? 'draft' : 'submit';
   const today = todayLocal();
   const body = { ...req.body };
-  if (req.tsRole === 'person') body.agent_id = req.userId;
+  if (!permissionsFor(req.tsRole).log_for_others) body.agent_id = req.userId;
   const layout = await getFormLayout(req.orgId);
   const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode) : undefined);
   const custom = layout ? cleanTimesheetCustom(layout, body.custom_fields, mode) : null;
@@ -258,7 +258,7 @@ router.put('/entries/:id', route(async (req, res) => {
     throw fail(403, lock.locked ? 'This entry is locked. Ask your admin to unlock it.' : 'You can only edit your own entries.');
   }
   const body = { ...req.body };
-  if (req.tsRole === 'person') body.agent_id = current.agent_id || req.userId;
+  if (!permissionsFor(req.tsRole).log_for_others) body.agent_id = current.agent_id || req.userId;
   const layout = await getFormLayout(req.orgId);
   const editMode = current.status === 'DRAFT' ? 'draft' : 'edit';
   // Fields hidden from the form keep whatever an older entry already had.

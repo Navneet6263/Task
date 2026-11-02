@@ -131,8 +131,8 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const optionsFor = (field) => (form[field.key] && !(field.options || []).includes(form[field.key]) ? [form[field.key], ...(field.options || [])] : field.options || []);
   const canAddClient = config.permissions.manage_clients;
   const canPickAgent = config.permissions.log_for_others;
-  // Managers pick from their own people; anyone else in the company is one click away.
-  const [everyone, setEveryone] = useState(() => config.role !== 'manager');
+  // Only admins fill for others: the whole company, narrowed to their own people in one click.
+  const [everyone, setEveryone] = useState(true);
   const doneByOptions = canPickAgent ? doneByPeople(config, everyone, form.agent_id) : config.users;
 
   const control = (field) => {

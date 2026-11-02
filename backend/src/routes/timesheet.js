@@ -40,7 +40,7 @@ router.get('/config', route(async (req, res) => {
        WHERE tc.org_id = ? AND oc.is_active = 1 ORDER BY tc.name ASC`, [req.orgId]),
     effectiveLayout(req.orgId),
     db.execute('SELECT id, name FROM org_agents WHERE org_id = ? AND is_active = 1 ORDER BY name ASC', [req.orgId]),
-    permissionsFor(req.tsRole).log_for_others ? teamOf(req.orgId, req.userId) : [Number(req.userId)],
+    permissionsFor(req.tsRole).view_reports ? teamOf(req.orgId, req.userId) : [Number(req.userId)],
   ]);
   let pendingUnlocks = 0;
   if (permissionsFor(req.tsRole).approve_unlocks) {

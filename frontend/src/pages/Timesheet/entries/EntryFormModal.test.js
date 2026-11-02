@@ -58,15 +58,25 @@ test('an employee always sees their own name in Done by and cannot change it', a
   expect(document.body.textContent).not.toContain('Show everyone');
 });
 
-test('a manager picks Done by from their own team, with everyone one click away', async () => {
-  const manager = { ...config, role: 'manager', team_ids: [10, 12], users: [...config.users, { id: 13, name: 'Other Team' }] };
+test('a manager always sees their own name in Done by and cannot change it', async () => {
+  const manager = { ...config, role: 'manager', team_ids: [10, 12], permissions: { log_for_others: false, manage_clients: true } };
   await act(async () => r.render(<EntryFormModal config={manager} onClose={() => {}} onSaved={() => {}} />));
+  const select = document.querySelector('#ts-agent_id');
+  expect(select.value).toBe('10');
+  expect(select.selectedOptions[0].textContent).toBe('Manager');
+  expect(select.disabled).toBe(true);
+  expect(document.body.textContent).toContain('Your entries are logged under your own name.');
+  expect(document.body.textContent).not.toContain('Show everyone');
+});
+
+test('an admin starts on their own name and can choose anyone, or just their own team', async () => {
+  const admin = { ...config, role: 'admin', team_ids: [10, 12], users: [...config.users, { id: 13, name: 'Other Team' }] };
+  await act(async () => r.render(<EntryFormModal config={admin} onClose={() => {}} onSaved={() => {}} />));
   expect(document.querySelector('#ts-agent_id').value).toBe('10');
   expect(document.querySelector('#ts-agent_id').disabled).toBe(false);
-  expect(names()).toEqual(['Select', 'Manager', 'Asha']);
-  expect(document.body.textContent).toContain('Showing your team (2 people).');
-  await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Show everyone').click());
   expect(names()).toEqual(['Select', 'Manager', 'Asha', 'Other Team']);
+  await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Show only my team').click());
+  expect(names()).toEqual(['Select', 'Manager', 'Asha']);
 });
 
 test('Done by asks for a name when the logged-in person is not in the list', async () => {
