@@ -13,7 +13,8 @@ const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 
 const blank = (config) => ({
   ...Object.fromEntries(CORE.map((key) => [key, ''])),
   date_worked: config.today,
-  agent_id: config.permissions.log_for_others ? '' : String(config.user_id),
+  // The person logged in, unless they cannot be picked at all (a company admin is not in this list).
+  agent_id: config.users.some((user) => String(user.id) === String(config.user_id)) ? String(config.user_id) : '',
   custom_fields: {},
 });
 const fromEntry = (entry) => {
@@ -57,7 +58,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     return { ...prev, client_id: value, agent_firm_id: client?.agent_id || prev.agent_firm_id };
   });
 
-  // Picking a task fills in what we already know: its client, who it is assigned to, and a description.
+  // Picking a task fills in what we already know: its client and a description. Done by stays as it is.
   const pickTask = (picked) => {
     setTask(picked);
     setForm((prev) => {
@@ -65,7 +66,6 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       const next = { ...prev, task_id: String(picked.id) };
       const match = picked.client_name && clients.find((c) => c.name.toLowerCase() === String(picked.client_name).trim().toLowerCase());
       if (match) { next.client_id = match.id; if (match.agent_id) next.agent_firm_id = match.agent_id; }
-      if (config.permissions.log_for_others && picked.assigned_to) next.agent_id = String(picked.assigned_to);
       if (!prev.description) next.description = picked.title;
       return next;
     });

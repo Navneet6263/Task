@@ -22,12 +22,12 @@ let c, r;
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; c = document.createElement('div'); document.body.append(c); r = createRoot(c); });
 afterEach(() => { act(() => r.unmount()); c.remove(); });
 
-test('opening from a task picks it and fills client, agent and description', async () => {
+test('opening from a task picks it and fills client and description, and Done by stays on the logged-in person', async () => {
   h.create = jest.fn(async () => ({ data: { id: 9 } }));
   await act(async () => r.render(<EntryFormModal config={config} initialTask={task} onClose={() => {}} onSaved={() => {}} />));
   expect(document.body.textContent).toContain('October payroll');
   expect(document.querySelector('#ts-client_id').value).toBe('4');
-  expect(document.querySelector('#ts-agent_id').value).toBe('12');
+  expect(document.querySelector('#ts-agent_id').value).toBe('10');
   expect(document.querySelector('#ts-description').value).toBe('October payroll');
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save Draft').click());
   expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ task_id: '42', client_id: '4', mode: 'draft' }));
@@ -61,10 +61,18 @@ test('an employee always sees their own name in Done by and cannot change it', a
 test('a manager picks Done by from their own team, with everyone one click away', async () => {
   const manager = { ...config, role: 'manager', team_ids: [10, 12], users: [...config.users, { id: 13, name: 'Other Team' }] };
   await act(async () => r.render(<EntryFormModal config={manager} onClose={() => {}} onSaved={() => {}} />));
+  expect(document.querySelector('#ts-agent_id').value).toBe('10');
+  expect(document.querySelector('#ts-agent_id').disabled).toBe(false);
   expect(names()).toEqual(['Select', 'Manager', 'Asha']);
   expect(document.body.textContent).toContain('Showing your team (2 people).');
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Show everyone').click());
   expect(names()).toEqual(['Select', 'Manager', 'Asha', 'Other Team']);
+});
+
+test('Done by asks for a name when the logged-in person is not in the list', async () => {
+  await act(async () => r.render(<EntryFormModal config={{ ...config, role: 'admin', user_id: 99 }} onClose={() => {}} onSaved={() => {}} />));
+  expect(document.querySelector('#ts-agent_id').value).toBe('');
+  expect(document.querySelector('#ts-agent_id').selectedOptions[0].textContent).toBe('Select');
 });
 
 test('picking an agent shows only its clients, and picking a client fills in its agent', async () => {
