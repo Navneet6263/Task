@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import api from '../../services/api';
+import api, { setAccessRole } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Chip, EmptyRow, Input, Modal, Segmented, Select, Table, TableWrap, Td, Th } from '../../ui';
 import { Person, ROLE_LABEL, ROLE_TONE, dateLabel, errorOf, lastSeen } from './adminShared';
+import LeadTeamsModal from '../TeamManagement/LeadTeamsModal';
 
 const ROLES = [['', 'Everyone'], ['admin', 'Admins'], ['manager', 'Managers'], ['person', 'Members']];
 const PAGE = 50;
@@ -18,6 +19,7 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
   const [org, setOrg] = useState(initialOrg);
   const [loading, setLoading] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [leading, setLeading] = useState(null); // { person, role }: choosing the teams a manager leads
 
   useEffect(() => { const t = setTimeout(() => { setQuery(q.trim()); setPage(1); }, 300); return () => clearTimeout(t); }, [q]);
   const load = useCallback(async () => {
@@ -38,11 +40,18 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
   }, [isCompanyAdmin, org, query, role, page]);
   useEffect(() => { load(); }, [load]);
 
+  const saveRole = async (person, next, leadTeamIds) => {
+    await setAccessRole(isCompanyAdmin, person.id, next, leadTeamIds);
+    notify(next === person.role ? `Teams for ${person.name} saved.` : `${person.name} is now ${ROLE_LABEL[next].toLowerCase()}.`, 'success');
+    setLeading(null); load(); onChanged();
+  };
+  // Making someone a manager or admin asks which teams they lead; making them a member ends their leads.
   const changeRole = async (person, next) => {
-    try {
-      await api.put(isCompanyAdmin ? `/company-admin/users/${person.id}/role` : `/admin/users/${person.id}/role`, { role: next });
-      notify(`${person.name} is now ${ROLE_LABEL[next].toLowerCase()}.`, 'success'); load(); onChanged();
-    } catch (err) { notify(errorOf(err, 'Could not change the role.')); }
+    if (next !== 'person' && person.role === 'person') { setLeading({ person, role: next }); return; }
+    const leads = (person.leads || []).map((t) => t.name).join(', ');
+    if (next === 'person' && leads && !window.confirm(`${person.name} will stop leading ${leads}. Continue?`)) return;
+    try { await saveRole(person, next); }
+    catch (err) { notify(errorOf(err, 'Could not change the role.')); }
   };
   const remove = async () => {
     const person = confirm;
@@ -64,10 +73,10 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
           </Select>
         )}
       </div>
-      <p className="text-xs text-muted">{loading ? 'Loading…' : `${total} ${total === 1 ? 'person' : 'people'}`}. Admins manage everything, managers run teams, members work on tasks.</p>
+      <p className="text-xs text-muted">{loading ? 'Loading…' : `${total} ${total === 1 ? 'person' : 'people'}`}. Admins manage everything, managers lead the teams you give them, members work on tasks.</p>
       <TableWrap>
         <Table>
-          <thead><tr><Th>Person</Th>{isCompanyAdmin && <Th>Organization</Th>}<Th>Role</Th><Th>Employee ID</Th><Th>Joined</Th>{!isCompanyAdmin && <Th>Last active</Th>}<Th><span className="sr-only">Actions</span></Th></tr></thead>
+          <thead><tr><Th>Person</Th>{isCompanyAdmin && <Th>Organization</Th>}<Th>Role</Th><Th>Leads</Th><Th>Employee ID</Th><Th>Joined</Th>{!isCompanyAdmin && <Th>Last active</Th>}<Th><span className="sr-only">Actions</span></Th></tr></thead>
           <tbody>
             {rows.map((person) => {
               const self = Number(person.id) === Number(selfId);
@@ -82,6 +91,13 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
                       </Select>
                     )}
                   </Td>
+                  <Td className="align-middle">
+                    <span className="flex flex-wrap items-center gap-1">
+                      {(person.leads || []).map((t) => <Chip key={t.id} tone="ok">{t.name}</Chip>)}
+                      {!self && person.role !== 'person' && <Button size="sm" variant="ghost" onClick={() => setLeading({ person, role: person.role })}>{person.leads?.length ? 'Change' : '+ Team'}</Button>}
+                      {person.role === 'person' && <span className="text-xs text-muted">—</span>}
+                    </span>
+                  </Td>
                   <Td className="align-middle font-mono text-xs">{person.employee_id || '—'}</Td>
                   <Td className="whitespace-nowrap align-middle text-muted">{dateLabel(person.created_at)}</Td>
                   {!isCompanyAdmin && <Td className={`whitespace-nowrap align-middle ${lastSeen(person.last_active) === 'Online now' ? 'font-semibold text-accent' : 'text-muted'}`}>{lastSeen(person.last_active)}</Td>}
@@ -89,7 +105,7 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
                 </tr>
               );
             })}
-            {!loading && !rows.length && <EmptyRow colSpan={7}>No one matches these filters.</EmptyRow>}
+            {!loading && !rows.length && <EmptyRow colSpan={8}>No one matches these filters.</EmptyRow>}
           </tbody>
         </Table>
       </TableWrap>
@@ -100,6 +116,7 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
           <Button size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
       )}
+      {leading && <LeadTeamsModal person={leading.person} role={leading.role} onClose={() => setLeading(null)} onSave={(ids) => saveRole(leading.person, leading.role, ids)} />}
       {confirm && (
         <Modal title={`Remove ${confirm.name}?`} onClose={() => setConfirm(null)}
           footer={<><span className="flex-1" /><Button onClick={() => setConfirm(null)}>Keep</Button><Button variant="danger" className="!border-danger/40" onClick={remove}>Remove account</Button></>}>

@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
 const db = require('./config/database');
+const { isExpiredLegacy } = require('./utils/session');
 const { canAccessTeam } = require('./utils/teamAccess');
 
 let wss = null;
@@ -68,6 +69,7 @@ function init(server) {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (isExpiredLegacy(decoded)) throw new Error('Session expired');
       ws.userId = decoded.id;
       ws.userRole = decoded.role;
       const orgIds = decoded.org_ids || [decoded.org_id];

@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const TEAM_TYPES = ['Development', 'Design', 'Marketing', 'Sales', 'Support', 'Operations', 'Management'];
-export const TEAM_ROLES = ['Member', 'Reporting Manager', 'Lead Developer', 'Frontend Developer', 'Backend Developer', 'UI Designer', 'QA Engineer', 'Analyst'];
+export const TEAM_ROLES = ['Member', 'Team Leader', 'Reporting Manager', 'Lead Developer', 'Frontend Developer', 'Backend Developer', 'UI Designer', 'QA Engineer', 'Analyst'];
 export const errorOf = (error, fallback) => error?.response?.data?.error || fallback;
 
 export const initials = (name) => {

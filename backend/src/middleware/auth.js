@@ -1,10 +1,12 @@
 const jwt = require('jsonwebtoken');
+const { isExpiredLegacy } = require('../utils/session');
 
 const authenticate = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Authentication required' });
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (isExpiredLegacy(decoded)) return res.status(401).json({ error: 'Invalid token' });
 
     const tokenOrgIds = Array.isArray(decoded.org_ids) ? decoded.org_ids.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0) : [];
     const primaryOrgId = decoded.org_id ? Number(decoded.org_id) : null;

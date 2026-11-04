@@ -1,6 +1,5 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('../config/database');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
@@ -8,6 +7,8 @@ const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap'
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const { sendResetOtp, sendResetLink } = require('../utils/mailer');
 const { normalizeCode, accountFlags, syncQuietly } = require('../services/employeeAccounts');
+const { isModuleEnabled } = require('../services/orgModules');
+const { signSession } = require('../utils/session');
 const router = express.Router();
 
 // In-memory OTP & Token stores: { email → { otp/token, expiresAt } }
@@ -49,9 +50,13 @@ async function findEmployeeAccount(rawCode, rawCompanyCode, password) {
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password, mobile, employee_id, role, team_code, company_code, company_name } = req.body;
+    // Signing up never makes anyone an admin, and nobody joins an existing company as a manager by themselves.
+    const userRole = role === 'manager' ? 'manager' : 'person';
+    if (userRole === 'manager' && company_code) {
+      return res.status(403).json({ error: 'Managers are added by their company admin. Ask your admin to add you.' });
+    }
     const normalizedEmail = normalizeEmail(email);
     const hashed = await bcrypt.hash(password, 10);
-    const userRole = ['admin', 'manager', 'person'].includes(role) ? role : 'person';
     const safeEmployeeId = await ensureUniqueEmployeeId(
       db,
       employee_id,
@@ -64,26 +69,23 @@ router.post('/register', async (req, res) => {
       if (!team_code) return res.status(400).json({ error: 'Team Code is required for employees' });
       const [teams] = await db.execute('SELECT id, org_id FROM teams WHERE team_code = ?', [team_code]);
       if (teams.length === 0) return res.status(400).json({ error: 'Invalid Team Code' });
+      // Companies on employee-code sign-in create every account themselves, so a join code lets no one in.
+      if (await isModuleEnabled(teams[0].org_id, 'hrms_login')) {
+        return res.status(403).json({ error: 'Your company creates accounts for you. Ask your admin for your sign-in details.' });
+      }
       resolvedOrgId = teams[0].org_id;
     }
 
-    // MANAGER: must provide company_code to join existing org
+    // MANAGER: starts a new company
     if (userRole === 'manager') {
-      if (!company_code && !company_name) return res.status(400).json({ error: 'Company Code or Company Name required' });
-      if (company_code) {
-        const [orgs] = await db.execute('SELECT id FROM organizations WHERE company_code = ?', [company_code]);
-        if (orgs.length === 0) return res.status(400).json({ error: 'Invalid Company Code' });
-        resolvedOrgId = orgs[0].id;
-      } else {
-        // New company — create org
-        const slug = company_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
-        const code = 'ORG-' + company_name.substring(0, 4).toUpperCase() + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
-        const [orgResult] = await db.execute(
-          'INSERT INTO organizations (name, slug, company_code) VALUES (?, ?, ?)',
-          [company_name, slug, code]
-        );
-        resolvedOrgId = orgResult.insertId;
-      }
+      if (!company_name) return res.status(400).json({ error: 'Company Name required' });
+      const slug = company_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
+      const code = 'ORG-' + company_name.substring(0, 4).toUpperCase() + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
+      const [orgResult] = await db.execute(
+        'INSERT INTO organizations (name, slug, company_code) VALUES (?, ?, ?)',
+        [company_name, slug, code]
+      );
+      resolvedOrgId = orgResult.insertId;
     }
 
     const [result] = await db.execute(
@@ -119,7 +121,7 @@ router.post('/register', async (req, res) => {
     }
 
     const orgIds = await getAccessibleOrgIds(db, userId, resolvedOrgId);
-    const token = jwt.sign({ id: userId, role: userRole, org_id: resolvedOrgId, org_ids: orgIds }, process.env.JWT_SECRET);
+    const token = signSession({ id: userId, role: userRole, org_id: resolvedOrgId, org_ids: orgIds });
     res.json({
       token,
       id: userId,
@@ -144,7 +146,7 @@ router.post('/login', async (req, res) => {
       if (!found.user) return res.status(found.status).json({ error: found.error, ...(found.code ? { code: found.code } : {}) });
       const employee = found.user;
       const employeeOrgIds = await getAccessibleOrgIds(db, employee.id, employee.org_id);
-      const employeeToken = jwt.sign({ id: employee.id, role: employee.role, org_id: employee.org_id, org_ids: employeeOrgIds }, process.env.JWT_SECRET);
+      const employeeToken = signSession({ id: employee.id, role: employee.role, org_id: employee.org_id, org_ids: employeeOrgIds }, req.body.remember);
       syncQuietly(employee.org_id);
       const flags = accountFlags(employee);
       return res.json({
@@ -168,7 +170,7 @@ router.post('/login', async (req, res) => {
 
     const respondAsCompanyAdmin = async (ca) => {
       const bootstrap = await ensureCompanyAdminBootstrap(db, ca.id);
-      const token = jwt.sign(
+      const token = signSession(
         {
           id: bootstrap.linkedUserId,
           role: 'company_admin',
@@ -176,7 +178,7 @@ router.post('/login', async (req, res) => {
           org_id: bootstrap.primaryOrgId,
           org_ids: bootstrap.orgIds,
         },
-        process.env.JWT_SECRET
+        req.body.remember
       );
       return res.json({
         token,
@@ -220,7 +222,7 @@ router.post('/login', async (req, res) => {
     }
 
     const orgIds = await getAccessibleOrgIds(db, user.id, user.org_id);
-    const token = jwt.sign({ id: user.id, role: user.role, org_id: user.org_id, org_ids: orgIds }, process.env.JWT_SECRET);
+    const token = signSession({ id: user.id, role: user.role, org_id: user.org_id, org_ids: orgIds }, req.body.remember);
     res.json({
       token,
       id: user.id,

@@ -85,7 +85,7 @@ test('employees sign in with their code, then must choose their own password bef
   act(() => type(c.querySelector('#auth-employee-code'), 'act20'));
   act(() => type(c.querySelector('#auth-password'), 'KMPT-4827'));
   await act(async () => c.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-  expect(h.login).toHaveBeenCalledWith({ employee_code: 'ACT20', password: 'KMPT-4827' });
+  expect(h.login).toHaveBeenCalledWith({ employee_code: 'ACT20', password: 'KMPT-4827', remember: true });
   expect(JSON.parse(localStorage.getItem('user'))).toMatchObject({ needs_email: true, must_change_password: true });
   expect(c.textContent).toContain('Hi Asha, choose your own password');
 

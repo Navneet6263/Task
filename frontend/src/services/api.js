@@ -7,9 +7,20 @@ const api = axios.create({
   timeout: 30000,
 });
 
+// The sign-in has expired or is no longer valid: forget it and show the sign-in page.
+const SESSION_ENDED = ['Invalid token', 'Authentication required'];
+export const endedSession = (error) => error?.response?.status === 401 && SESSION_ENDED.includes(error.response.data?.error);
+
 api.interceptors.response.use(response => {
   if (!['get', 'head'].includes(response.config.method)) clearQueryCache();
   return response;
+}, (error) => {
+  if (endedSession(error) && window.location.pathname !== '/login') {
+    ['token', 'user', 'company_token', 'company_user', 'active_org_id'].forEach((key) => localStorage.removeItem(key));
+    clearQueryCache();
+    window.location.assign('/login');
+  }
+  return Promise.reject(error);
 });
 
 api.interceptors.request.use((config) => {
@@ -46,7 +57,14 @@ export const teams = {
   update: (teamId, data) => api.patch(`/teams/${teamId}`, data),
   candidates: (teamId, q = '', signal) => api.get(`/teams/${teamId}/candidates`, { params: { q }, signal }),
   updateMemberRole: (teamId, userId, role) => api.patch(`/teams/${teamId}/members/${userId}`, { role }),
+  setLeader: (teamId, userId) => api.put(`/teams/${teamId}/leader`, { user_id: userId }),
 };
+
+// An admin changes what someone can do (member, manager, admin), optionally with the teams they lead.
+export const setAccessRole = (isCompanyAdmin, userId, role, leadTeamIds) => api.put(
+  isCompanyAdmin ? `/company-admin/users/${userId}/role` : `/admin/users/${userId}/role`,
+  { role, ...(leadTeamIds ? { lead_team_ids: leadTeamIds } : {}) },
+);
 
 export const tasks = {
   getByTeam: (teamId, page = 1, limit = 20, filters = {}, signal) =>

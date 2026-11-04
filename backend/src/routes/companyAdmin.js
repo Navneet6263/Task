@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { generateCompanyCode } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const { ensureUserOrgAccessTable } = require('../utils/orgAccess');
+const { pickedLeads, applyLeadsForRole, leadsFor } = require('../services/teamLeads');
 
 const router = express.Router();
 
@@ -191,7 +192,8 @@ router.get('/users', async (req, res) => {
     sql += ' ORDER BY u.created_at DESC';
 
     const [users] = await db.execute(sql, params);
-    res.json(users);
+    const leads = await leadsFor(users.map((u) => u.id));
+    res.json(users.map((u) => ({ ...u, leads: leads[u.id] || [] })));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -324,10 +326,12 @@ router.put('/users/:id/role', async (req, res) => {
       }
     }
 
+    const leadIds = await pickedLeads(target.org_id, role, req.body);
     await db.execute('UPDATE users SET role = ? WHERE id = ?', [role, targetUserId]);
+    await applyLeadsForRole(targetUserId, role, leadIds);
     res.json({ message: 'Role updated' });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 

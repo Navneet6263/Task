@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const db = require('../config/database');
+const { signSession } = require('../utils/session');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const router = express.Router();
 
@@ -46,7 +46,7 @@ router.post('/login', async (req, res) => {
     const bootstrap = await ensureCompanyAdminBootstrap(db, ca.id);
     const orgIds = bootstrap.orgIds;
 
-    const token = jwt.sign(
+    const token = signSession(
       {
         id: bootstrap.linkedUserId,
         role: 'company_admin',
@@ -54,7 +54,7 @@ router.post('/login', async (req, res) => {
         org_id: bootstrap.primaryOrgId,
         org_ids: orgIds,
       },
-      process.env.JWT_SECRET
+      req.body.remember
     );
     res.json({
       token, name: ca.name, email: ca.email, role: 'company_admin',

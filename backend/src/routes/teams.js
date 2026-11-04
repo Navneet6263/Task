@@ -7,6 +7,7 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
 const { canAccessTeam } = require('../utils/teamAccess');
 const { syncQuietly } = require('../services/employeeAccounts');
+const { setTeamLeader } = require('../services/teamLeads');
 
 const MANAGER_ROLES = ['admin', 'manager', 'company_admin'];
 const teamRoleText = (value) => {
@@ -225,6 +226,18 @@ router.patch('/:teamId/members/:userId', authenticate, async (req, res) => {
     if (!result.affectedRows) return res.status(404).json({ error: 'Member not found in this team' });
     res.json({ message: 'Role updated' });
   } catch (error) { res.status(500).json({ error: 'Could not update the role' }); }
+});
+
+// Put someone in charge of the team. Only admins decide who leads, because it can make a member a manager.
+router.put('/:teamId/leader', authenticate, async (req, res) => {
+  try {
+    if (!['admin', 'company_admin'].includes(req.userRole)) return res.status(403).json({ error: 'Only admins can choose a team leader' });
+    if (!await canAccessTeam(req, req.params.teamId)) return res.status(403).json({ error: 'Team access denied' });
+    const userId = Number(req.body.user_id);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(422).json({ error: 'Pick a person' });
+    const { promoted } = await setTeamLeader(Number(req.params.teamId), userId);
+    res.json({ message: 'Team leader updated', promoted });
+  } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not change the team leader' }); }
 });
 
 module.exports = router;

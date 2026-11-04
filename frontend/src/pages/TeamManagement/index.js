@@ -8,10 +8,14 @@ import MembersTable from './MembersTable';
 import AddMembers from './AddMembers';
 import TeamFormModal from './TeamFormModal';
 import { canManageTeams, errorOf } from './shared';
+import { adminIdentity } from '../AdminPanel/adminShared';
 
 export default function TeamManagement() {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const canManage = canManageTeams(user.role);
+  // Only admins choose team leaders and change what someone can do.
+  const { isCompanyAdmin, isOrgAdmin } = adminIdentity();
+  const admin = isCompanyAdmin || isOrgAdmin ? { isCompanyAdmin, selfId: user.id } : null;
   const [teamList, setTeamList] = useState(null);
   const [selectedId, setSelectedId] = useState(() => readPreference('team-management-selected', null));
   const [members, setMembers] = useState([]);
@@ -88,7 +92,7 @@ export default function TeamManagement() {
                 <StatTile label="Done in 30 days" value={totals.done} />
               </section>
               <div className={`grid grid-cols-1 gap-4 ${canManage ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
-                <div className="min-w-0">{membersLoading && !members.length ? <Loading>Loading members…</Loading> : <MembersTable team={team} members={members} canManage={canManage} onChanged={refresh} />}</div>
+                <div className="min-w-0">{membersLoading && !members.length ? <Loading>Loading members…</Loading> : <MembersTable team={team} members={members} canManage={canManage} admin={admin} onChanged={refresh} />}</div>
                 {canManage && <AddMembers team={team} onAdded={refresh} />}
               </div>
             </div>

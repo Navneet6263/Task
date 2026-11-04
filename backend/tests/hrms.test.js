@@ -220,3 +220,51 @@ test('turning on "show all tasks" in the console switches it on for the company 
   assert.ok(calls.some((sql) => sql.startsWith('MERGE org_task_settings')));
   assert.ok(calls.some((sql) => sql.startsWith('INSERT INTO team_members')));
 });
+
+test('signing up never makes an admin, never joins a company as a manager, and is closed where the company creates accounts', async (t) => {
+  const inserts = [];
+  let hrmsOn = false;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT id, org_id FROM teams')) return [[{ id: 5, org_id: 8 }]];
+    if (sql.startsWith('SELECT id FROM teams')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: hrmsOn }]];
+    if (sql.startsWith('INSERT INTO users')) { inserts.push(params); return [{ insertId: 90 }]; }
+    if (sql.startsWith('SELECT name, company_code FROM organizations')) return [[{ name: 'Org', company_code: 'ORG-X' }]];
+    return [[]];
+  });
+  const send = await client(t, authRouter);
+  const person = { name: 'New', email: 'new@example.com', password: 'secret12', team_code: 'TM1' };
+
+  const asAdmin = await send('/register', 'POST', { ...person, role: 'admin' });
+  assert.equal(asAdmin.status, 200);
+  assert.equal(asAdmin.body.role, 'person');
+  assert.equal(inserts[0][5], 'person');
+
+  const joinAsManager = await send('/register', 'POST', { ...person, role: 'manager', company_code: 'ORG-X' });
+  assert.equal(joinAsManager.status, 403);
+
+  hrmsOn = true;
+  const closed = await send('/register', 'POST', person);
+  assert.equal(closed.status, 403);
+  assert.equal(inserts.length, 1, 'no account was created after the first');
+});
+
+test('a sign-in lasts 30 days, or 12 hours without "Keep me signed in", and old never-ending ones stop working', async (t) => {
+  const { signSession } = require('../src/utils/session');
+  const { authenticate } = require('../src/middleware/auth');
+  const long = jwt.decode(signSession({ id: 1 }));
+  const short = jwt.decode(signSession({ id: 1 }, false));
+  assert.equal(long.exp - long.iat, 30 * 24 * 60 * 60);
+  assert.equal(short.exp - short.iat, 12 * 60 * 60);
+
+  const app = express();
+  app.get('/me', authenticate, (req, res) => res.json({ id: req.userId }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const call = (token) => fetch(`http://127.0.0.1:${server.address().port}/me`, { headers: { authorization: `Bearer ${token}` } });
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal((await call(signSession({ id: 1 }))).status, 200);
+  assert.equal((await call(jwt.sign({ id: 1, iat: now - 31 * 24 * 60 * 60 }, process.env.JWT_SECRET))).status, 401, 'old sign-in without an end date');
+  assert.equal((await call(jwt.sign({ id: 1, iat: now - 60 }, process.env.JWT_SECRET))).status, 200, 'recent one keeps working until its month is up');
+});

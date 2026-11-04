@@ -43,7 +43,7 @@ export default function AddMembers({ team, onAdded }) {
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Search people" placeholder="Search by name or email" className="min-w-[160px] flex-1" value={query} onChange={(e) => setQuery(e.target.value)} />
           <Select aria-label="Role for new members" className="!w-auto" value={role} onChange={(e) => setRole(e.target.value)}>
-            {TEAM_ROLES.filter((r) => r !== 'Reporting Manager').map((r) => <option key={r} value={r}>{r}</option>)}
+            {TEAM_ROLES.filter((r) => !['Team Leader', 'Reporting Manager'].includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}
           </Select>
         </div>
         <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">

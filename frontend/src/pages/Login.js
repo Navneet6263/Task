@@ -74,13 +74,13 @@ const Login = () => {
     const byCode = isLogin && loginWith === 'code';
     try {
       const payload = byCode
-        ? { employee_code: form.employee_code.trim(), password: form.password, ...(companyCode.trim() ? { company_code: companyCode.trim().toUpperCase() } : {}) }
+        ? { employee_code: form.employee_code.trim(), password: form.password, remember, ...(companyCode.trim() ? { company_code: companyCode.trim().toUpperCase() } : {}) }
         : isLogin
-        ? { email: form.email.trim(), password: form.password }
+        ? { email: form.email.trim(), password: form.password, remember }
         : {
             name: form.name.trim(), email: form.email.trim(), password: form.password, mobile: form.mobile.trim(),
             employee_id: form.employee_id.trim(), role: form.role, team_code: form.team_code.trim().toUpperCase(),
-            company_code: form.company_code.trim().toUpperCase(), company_name: form.company_name.trim(),
+            company_name: form.company_name.trim(),
           };
       const response = isLogin ? await auth.login(payload) : await auth.register(payload);
       persistWorkspaceSession(response.data);
@@ -157,7 +157,7 @@ const Login = () => {
             {isLogin && (
               <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
                 <input type="checkbox" className="h-4 w-4 rounded accent-[rgb(var(--c-accent))]" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                Keep me signed in on this device
+                Keep me signed in on this device for 30 days
               </label>
             )}
             <SubmitButton busy={busy} busyText={isLogin ? 'Signing in…' : 'Creating account…'}>{isLogin ? 'Sign in' : 'Create account'}</SubmitButton>

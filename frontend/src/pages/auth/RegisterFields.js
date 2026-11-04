@@ -3,7 +3,7 @@ import { AuthInput } from '../../components/auth/AuthFields';
 
 const ROLES = [
   ['person', 'Employee', 'Join your team with the code from your manager'],
-  ['manager', 'Manager', 'Lead a team, or start a new organization'],
+  ['manager', 'Manager', 'Start a new organization'],
 ];
 
 // Extra fields shown when someone creates a workspace account from the sign-in page.
@@ -35,13 +35,9 @@ export default function RegisterFields({ form, update }) {
       )}
       {form.role === 'manager' && (
         <>
-          <AuthInput label="Company code" icon="hash" placeholder="To join an existing company" className="[&_input]:font-mono [&_input]:uppercase"
-            value={form.company_code} onChange={(e) => update('company_code', e.target.value.toUpperCase())} />
-          {!form.company_code && (
-            <AuthInput label="Company name" icon="building" placeholder="To start a new organization" value={form.company_name} onChange={(e) => update('company_name', e.target.value)} />
-          )}
+          <AuthInput label="Company name" icon="building" placeholder="To start a new organization" required value={form.company_name} onChange={(e) => update('company_name', e.target.value)} />
           <p className="rounded-lg bg-subtle px-3 py-2 text-xs text-muted">
-            {form.company_code ? 'You will join this organization after verification.' : 'A new organization and a default team will be created for you.'}
+            A new organization and a default team will be created for you. Joining an existing company as a manager? Ask its admin to add you.
           </p>
         </>
       )}

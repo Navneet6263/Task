@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../config/database');
 const { authenticate, adminOnly } = require('../middleware/auth');
+const { pickedLeads, applyLeadsForRole, leadsFor } = require('../services/teamLeads');
 
 const router = express.Router();
 
@@ -56,8 +57,9 @@ router.get('/users', async (req, res) => {
       [...params, limit, offset]
     );
 
+    const leads = await leadsFor(users.map((u) => u.id));
     res.json({
-      data: users,
+      data: users.map((u) => ({ ...u, leads: leads[u.id] || [] })),
       pagination: { total, page, limit, total_pages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -75,11 +77,14 @@ router.put('/users/:id/role', async (req, res) => {
       [req.params.id, req.orgId]
     );
     if (!target) return res.status(404).json({ error: 'User not found in your organization' });
+    // A new manager can be put in charge of teams in the same step.
+    const leadIds = await pickedLeads(req.orgId, role, req.body);
 
     await db.execute('UPDATE users SET role = ? WHERE id = ? AND org_id = ?', [role, req.params.id, req.orgId]);
+    await applyLeadsForRole(Number(req.params.id), role, leadIds);
     res.json({ message: 'Role updated' });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
