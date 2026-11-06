@@ -56,10 +56,40 @@ cron.schedule('*/2 * * * *', async () => {
     });
   }
 
+  // "Sheet to task": read every linked sheet at the end of the working day, India time.
+  cron.schedule('0 19 * * *', () => {
+    require('../services/sheetToTask').syncAllSheets()
+      .then((r) => console.log(`[CRON] sheet to task: ${r.created} task(s) from ${r.links} sheet(s)`))
+      .catch((error) => console.error('[CRON] sheet to task failed:', error.message));
+  }, { timezone: 'Asia/Kolkata' });
+
+  // Developer API: webhook messages that are due (new ones and retries), every minute.
+  let sendingHooks = false;
+  cron.schedule('* * * * *', async () => {
+    if (sendingHooks) return;
+    sendingHooks = true;
+    try { await require('../services/webhooks').processQueue(); }
+    catch (error) { console.error('[CRON] webhook queue failed:', error.message); }
+    finally { sendingHooks = false; }
+  });
+
+  // Developer API: keep 30 days of logs, deliveries and finished queue rows; a day of rate counters.
+  cron.schedule('30 3 * * *', () => {
+    const db = require('../config/database');
+    db.execute('DELETE FROM api_request_logs WHERE created_at < DATEADD(DAY, -30, SYSDATETIME())')
+      .then(() => db.execute('DELETE FROM webhook_deliveries WHERE created_at < DATEADD(DAY, -30, SYSDATETIME())'))
+      .then(() => db.execute("DELETE FROM webhook_queue WHERE status IN ('sent', 'failed', 'dropped') AND created_at < DATEADD(DAY, -30, SYSDATETIME())"))
+      .then(() => db.execute('DELETE FROM inbound_hook_events WHERE created_at < DATEADD(DAY, -30, SYSDATETIME())'))
+      .then(() => db.execute('DELETE FROM api_rate_windows WHERE minute < ?', [Math.floor(Date.now() / 60000) - 1440]))
+      .catch((error) => console.error('[CRON] developer log cleanup failed:', error.message));
+  }, { timezone: 'Asia/Kolkata' });
+
   // "Show all tasks": keep new people and new teams in step every 10 minutes.
   cron.schedule('*/10 * * * *', () => {
     require('../services/employeeAccounts').syncAllTasksEverywhere()
-      .catch((error) => console.error('[CRON] all-tasks sync failed:', error.message));
+      .catch((error) => console.error('[CRON] all-tasks sync failed:', error.message))
+      .then(() => require('../services/teamSharing').syncTeamSharesEverywhere())
+      .catch((error) => console.error('[CRON] team sharing sync failed:', error.message));
   });
 
   if (process.env.ENABLE_RECURRING_TASKS === 'true') {

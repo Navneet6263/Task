@@ -1,6 +1,7 @@
 import React from 'react';
 import { Chip, EmptyRow, Select, Table, TableWrap, Td, Th } from '../../ui';
 import TaskActions from './TaskActions';
+import TaskBadges from '../../components/taskExtras/TaskBadges';
 import { DUE_TEXT, PRIORITY_TONE, STATUSES, dueInfo } from './taskMeta';
 
 export default function ListView({ tasks, onOpen, handleStatusChange, handlePriorityLock, openReassign }) {
@@ -16,6 +17,7 @@ export default function ListView({ tasks, onOpen, handleStatusChange, handlePrio
                 <Td className="align-middle">
                   <span className="flex flex-wrap items-center gap-1.5">
                     <strong className={`font-semibold ${task.status === 'DONE' ? 'text-muted line-through' : ''}`}>{task.title}</strong>
+                    <TaskBadges task={task} />
                     {task.blocked_reason && <span title={task.blocked_reason}><Chip tone="warn">Blocked</Chip></span>}
                     {task.unread_comments > 0 && <span className="rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">{task.unread_comments}</span>}
                   </span>

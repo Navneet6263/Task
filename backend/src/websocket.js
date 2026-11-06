@@ -153,6 +153,8 @@ function init(server) {
 }
 
 function broadcast(teamId, event, data, options = {}) {
+  // Company webhooks hear every task change, whether or not anyone has the team open.
+  try { require('./services/webhooks').onTaskEvent(teamId, event, data); } catch (error) { console.error('[webhooks]', error.message); }
   const key = normalizeTeamId(teamId);
   if (!teamRooms.has(key)) return;
 

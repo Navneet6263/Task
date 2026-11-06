@@ -8,6 +8,7 @@ const { listEmployees, importEmployees, buildLoginSheet, setShowAllTasks } = req
 const { isModuleEnabled } = require('../services/orgModules');
 const { seal, open } = require('../services/secretBox');
 const { testInbox } = require('../utils/emailToTask');
+const { createCompanyAdmin, handOverCompany, removeCompanyAdmin, resetCompanyAdminPassword } = require('../services/companyAccounts');
 const router = express.Router();
 
 // Sign-in (password + email code), password setup, and helper access live in their own routers.
@@ -271,6 +272,45 @@ router.patch('/company-admins/:id/limits', verifySA, async (req, res) => {
       `Updated limits for ${ca?.name}: companies=${max_companies}, managers=${max_managers_per_company}, staff=${max_staff_per_company}`, req.ip);
     res.json({ message: 'Limits updated' });
   } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// Company admin accounts: new company, hand-over to a new person, fresh password, remove an empty one.
+// Temporary passwords are returned once so the platform team can pass them on; they are never stored in clear.
+router.post('/company-admins', verifySA, async (req, res) => {
+  try {
+    const { limits, error } = readLimits(req.body, LIMIT_DEFAULTS);
+    if (error) return res.status(422).json({ error });
+    const created = await createCompanyAdmin(req.body, limits);
+    await saLog(req.saEmail, req.saName, 'CREATE_COMPANY', 'company_admin', created.id,
+      `Created company "${String(req.body.company_name).trim()}" with admin ${created.email}`, req.ip);
+    res.status(201).json(created);
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+
+router.post('/company-admins/:id/hand-over', verifySA, async (req, res) => {
+  try {
+    const [[old]] = await db.execute('SELECT name, email FROM company_admins WHERE id = ?', [req.params.id]);
+    const result = await handOverCompany(Number(req.params.id), req.body);
+    await saLog(req.saEmail, req.saName, 'HAND_OVER_COMPANY', 'company_admin', result.id,
+      `Handed over from ${old?.email} to ${result.email}. Old person ${result.old_kept ? 'kept as an admin' : 'lost access'}`, req.ip);
+    res.json(result);
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+
+router.post('/company-admins/:id/reset-password', verifySA, async (req, res) => {
+  try {
+    const ca = await resetCompanyAdminPassword(Number(req.params.id));
+    await saLog(req.saEmail, req.saName, 'RESET_COMPANY_PASSWORD', 'company_admin', ca.id, `New temporary password for ${ca.email}`, req.ip);
+    res.json({ email: ca.email, password: ca.password });
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+
+router.delete('/company-admins/:id', verifySA, async (req, res) => {
+  try {
+    const ca = await removeCompanyAdmin(Number(req.params.id));
+    await saLog(req.saEmail, req.saName, 'DELETE_COMPANY_ADMIN', 'company_admin', ca.id, `Removed ${ca.name} (${ca.email}), status ${ca.status}`, req.ip);
+    res.json({ message: 'Removed' });
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
 });
 
 // Activity logs

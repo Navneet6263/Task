@@ -68,7 +68,7 @@ export const ACTION_LABEL = {
   IMPORT_EMPLOYEES: 'Imported employees', LOGIN_SHEET: 'Downloaded login sheet',
   SAVE_EMAIL_INBOX: 'Saved task inbox', REMOVE_EMAIL_INBOX: 'Removed task inbox',
 };
-export const MODULE_NAMES = { timesheet: 'Timesheet', hrms_login: 'Employee code login', all_tasks: 'Show all tasks', communications: 'Communications', email_to_task: 'Email to task' };
+export const MODULE_NAMES = { timesheet: 'Timesheet', hrms_login: 'Employee code login', all_tasks: 'Show all tasks', communications: 'Communications', email_to_task: 'Email to task', sheet_to_task: 'Sheet to task', developer_api: 'Developer API' };
 export const ACTION_TONE = {
   APPROVE_COMPANY: 'ok', ENABLE_MODULE: 'ok', ADD_SUB_USER: 'info', REJECT_COMPANY: 'danger', DISABLE_MODULE: 'warn',
   REMOVE_SUB_USER: 'danger', UPDATE_LIMITS: 'info', LOGIN_FAILED: 'danger', SET_PASSWORD: 'ok', RESEND_INVITE: 'info',

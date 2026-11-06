@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SnoozeMenu from './SnoozeMenu';
 import { Button, Chip, Select } from '../../ui';
 import { PRIORITY_TONE, STATUS_LABEL } from './tones';
+import TaskBadges from '../../components/taskExtras/TaskBadges';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const SUMMARY_KEY = { TODO: 'todo', IN_PROGRESS: 'in_progress', PENDING: 'pending', DONE: 'done' };
@@ -20,6 +21,7 @@ function BoardCard({ task, status, dragging, userId, onOpen, onDragStart, onDrag
       {task.unread_comments > 0 && (
         <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-[20px] place-items-center rounded-full border-2 border-surface bg-danger px-1 text-[10px] font-bold text-white">{task.unread_comments}</span>
       )}
+      <TaskBadges task={task} />
       <h5 className="text-sm font-semibold">{task.title}</h5>
       <p className="text-xs text-muted">{task.assigned_to_name || 'Unassigned'}</p>
       <div className="flex items-center justify-between gap-2">

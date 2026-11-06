@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { tasks, teams } from '../../services/api';
+import { taskSheets, tasks, teams } from '../../services/api';
 import { readPreference, writePreference } from '../../services/preferences';
 import { notify } from '../../services/feedback';
 import { Button, CountBadge, ErrorText, PageHeader, Tabs } from '../../ui';
@@ -14,6 +14,8 @@ import AgendaView from './AgendaView';
 import ReassignModal from './ReassignModal';
 import { STATUSES } from './taskMeta';
 import { exportMyTasks } from './exportMyTasks';
+import SheetsModal from './sheets/SheetsModal';
+import { TaskExtrasProvider } from '../../components/taskExtras/taskExtrasStore';
 
 const PAGE_SIZE = { agenda: 100, board: 100, list: 25 };
 
@@ -40,6 +42,10 @@ export default function MyTasks() {
   const [section, setSection] = useState('tasks');
   const [reportCount, setReportCount] = useState(0);
   useEffect(() => { updatesApi.summary().then(({ data }) => setReportCount(Number(data.reports || 0))).catch(() => {}); }, [section]);
+  // "Sheet to task" shows only where the platform team turned it on.
+  const [sheetFields, setSheetFields] = useState(null);
+  const [showSheets, setShowSheets] = useState(false);
+  useEffect(() => { taskSheets.status().then(({ data }) => setSheetFields(data.enabled ? data.fields : null)).catch(() => {}); }, []);
 
   useEffect(() => { const timer = setTimeout(() => setDebounced(search.trim()), 300); return () => clearTimeout(timer); }, [search]);
   useEffect(() => { setPage(1); }, [status, focus, priorities, debounced, sort, view]);
@@ -89,7 +95,11 @@ export default function MyTasks() {
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
       <PageHeader title="My Tasks" subtitle={`${open_} open · ${Number(result.summary.overdue || 0)} overdue · across all your teams`}
-        actions={<Button onClick={download} disabled={exporting || !result.total}>{exporting ? 'Preparing…' : 'Export Excel'}</Button>} />
+        actions={<>
+          {sheetFields && <Button onClick={() => setShowSheets(true)}>Sheet to task</Button>}
+          <Button onClick={download} disabled={exporting || !result.total}>{exporting ? 'Preparing…' : 'Export Excel'}</Button>
+        </>} />
+      {showSheets && sheetFields && <SheetsModal fields={sheetFields} onClose={() => setShowSheets(false)} onTasksChanged={fetchTasks} />}
       <Tabs value={section} onChange={setSection} label="My work" tabs={[['tasks', 'Tasks'], ['reports', 'Private reports', <CountBadge key="r" count={reportCount} tone="accent" />]]} />
       {section === 'reports' ? (
         <section className="flex flex-col gap-2">
@@ -106,6 +116,7 @@ export default function MyTasks() {
       </div>
       <ErrorText onRetry={fetchTasks}>{error}</ErrorText>
 
+      <TaskExtrasProvider tasks={result.data}>
       {view === 'agenda' && <AgendaView tasks={result.data} onOpen={open} handleStatusChange={handleStatusChange} handlePriorityLock={handlePriorityLock} openReassign={openReassign} />}
       {view === 'list' && <ListView tasks={result.data} onOpen={open} handleStatusChange={handleStatusChange} handlePriorityLock={handlePriorityLock} openReassign={openReassign} />}
       {view === 'board' && (
@@ -115,6 +126,7 @@ export default function MyTasks() {
           ))}
         </section>
       )}
+      </TaskExtrasProvider>
       {result.pages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <Button size="sm" disabled={loading || page === 1} onClick={() => setPage(page - 1)}>Previous</Button>

@@ -69,6 +69,7 @@ const parseTaskQuery = (query = {}) => {
     assignees: parseIdList(query.assignees, 'assignees'),
     clients: parseList(query.clients, 'clients'),
     search: String(query.search || '').trim().slice(0, 120),
+    labels: parseIdList(query.labels, 'labels'),
     createdFrom,
     createdTo,
     focus,
@@ -97,8 +98,13 @@ const buildWhere = (teamId, filters, userId, orgId) => {
   addInFilter(clauses, params, 't.client_name', filters.clients);
 
   if (filters.search) {
-    clauses.push('(t.title LIKE ? OR t.description LIKE ?)');
-    params.push(`%${filters.search}%`, `%${filters.search}%`);
+    const keyId = (filters.search.match(/^(?:[A-Za-z]{1,10}-|#)(\d{1,9})$/) || [])[1];
+    clauses.push(keyId ? '(t.id = ? OR t.title LIKE ? OR t.description LIKE ?)' : '(t.title LIKE ? OR t.description LIKE ?)');
+    params.push(...(keyId ? [Number(keyId)] : []), `%${filters.search}%`, `%${filters.search}%`);
+  }
+  if (filters.labels?.length) {
+    clauses.push(`EXISTS (SELECT 1 FROM task_label_links ll WHERE ll.task_id = t.id AND ll.label_id IN (${filters.labels.map(() => '?').join(',')}))`);
+    params.push(...filters.labels);
   }
   if (filters.createdFrom) {
     clauses.push('t.created_at >= CAST(? AS DATE)');

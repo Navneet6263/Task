@@ -6,6 +6,7 @@ import UsersTab from './UsersTab';
 import OrganizationsTab from './OrganizationsTab';
 import AdminsTab from './AdminsTab';
 import AccessTab from './AccessTab';
+import DeveloperTab from './developer/DeveloperTab';
 import { adminIdentity, errorOf } from './adminShared';
 
 export default function AdminPanel() {
@@ -49,8 +50,8 @@ export default function AdminPanel() {
   if (!isCompanyAdmin && !isOrgAdmin) return <><PageHeader title="Admin" /><Banner tone="warn">Only admins can open this page.</Banner></>;
 
   const tabs = isCompanyAdmin
-    ? [['orgs', 'Organizations'], ['users', 'People'], ['admins', 'Admins'], ['access', 'Multi-org access']]
-    : [['users', 'People'], ['org', 'Organization']];
+    ? [['orgs', 'Organizations'], ['users', 'People'], ['admins', 'Admins'], ['access', 'Multi-org access'], ['developer', 'Developer']]
+    : [['users', 'People'], ['org', 'Organization'], ['developer', 'Developer']];
   const org = orgs[0];
 
   return (
@@ -73,6 +74,7 @@ export default function AdminPanel() {
       {tab === 'admins' && <AdminsTab orgs={orgs} onChanged={changed} />}
       {tab === 'access' && <AccessTab orgs={orgs} />}
       {tab === 'org' && <OrganizationsTab orgs={orgs} canCreate={false} onChanged={changed} />}
+      {tab === 'developer' && <DeveloperTab />}
     </div>
   );
 }

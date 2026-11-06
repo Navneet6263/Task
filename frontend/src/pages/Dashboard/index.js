@@ -7,6 +7,7 @@ import PriorityBreakdown from './PriorityBreakdown';
 import Reminders from './Reminders';
 import TaskDetailModal from './TaskDetailModal';
 import TaskWorkspace from './TaskWorkspace';
+import { TaskExtrasProvider } from '../../components/taskExtras/taskExtrasStore';
 import TeamSnapshot from './TeamSnapshot';
 import './dashboardLayout.css';
 import { Banner, Button, EmptyState } from '../../ui';
@@ -68,6 +69,7 @@ const Dashboard = () => {
         <section className={`dashboard-workspace-grid grid ${showInsights ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
           <div className="flex flex-col gap-3.5 min-w-0">
             {loading && <span role="status" className="text-xs font-semibold text-accent">Refreshing tasks...</span>}
+            <TaskExtrasProvider tasks={taskList}>
             <TaskWorkspace
               sort={data.sort} setSort={data.setSort} onUpdated={refreshWorkspace} view={view} setView={setView} selectedTeam={selectedTeam}
               filtered={taskList} paginated={taskList} members={members}
@@ -89,6 +91,7 @@ const Dashboard = () => {
               onBulkDelete={handleBulkDelete} page={page} setPage={setPage}
               totalPages={totalPages} totalTasks={totalTasks} summary={data.summary} loadBoardColumn={data.loadBoardColumn} boardBusy={data.boardBusy}
             />
+            </TaskExtrasProvider>
           </div>
 
           {showInsights && <aside className="dashboard-insights sticky top-[calc(var(--shell-header-height,57px)+16px)] flex min-w-0 flex-col gap-3.5">

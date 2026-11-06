@@ -10,6 +10,9 @@ import TaskTimeLog from './TaskTimeLog';
 import ClientPicker from '../../components/clients/ClientPicker';
 import AgentPicker from '../../components/clients/AgentPicker';
 import TimesheetLink from './TimesheetLink';
+import TaskExtrasPanel from '../../components/taskExtras/TaskExtrasPanel';
+import { useTaskMeta } from '../../components/taskExtras/taskExtrasStore';
+import { tasks as tasksApi } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Tabs } from '../../ui';
 import TaskDetailSummary, { ISSUE_TONE } from './TaskDetailSummary';
@@ -29,6 +32,13 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
   const dialogRef = useDialog(true, editor.close);
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
+  const { keyOf } = useTaskMeta();
+  // Subtasks and linked tasks open in this same window.
+  const openTask = async (id) => {
+    if (editor.dirty && !window.confirm('You have unsaved changes. Open the other task anyway?')) return;
+    try { const { data } = await tasksApi.getDetail(id); setSelectedTask(data); setSheetTab('details'); }
+    catch (err) { notify(err.response?.data?.error || 'Could not open that task.'); }
+  };
 
   const copyLink = async () => {
     const link = `${window.location.origin}/dashboard?task=${t.id}`;
@@ -51,6 +61,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
         <div className="flex min-w-0 flex-col overflow-hidden">
           <div className="px-6 pr-14 pt-2"><Tabs tabs={tabs} value={sheetTab} onChange={setSheetTab} label="Task sections" /></div>
           <div className="-mt-4 flex flex-wrap items-center gap-2 border-b border-line px-6 py-2.5">
+            <button type="button" title="Copy task key" onClick={() => navigator.clipboard?.writeText(keyOf(t.id)).then(() => notify(`${keyOf(t.id)} copied`, 'success')).catch(() => {})}
+              className="rounded-md bg-subtle px-2 py-1 font-mono text-xs font-bold text-accent hover:bg-accent-soft">{keyOf(t.id)}</button>
             <span role="status" className={`mr-auto text-sm ${editor.dirty ? 'font-medium text-warn' : 'text-muted'}`}>{editor.saving ? 'Saving...' : editor.dirty ? 'Unsaved changes' : editor.message || 'Up to date'}</span>
             <Button size="sm" variant="primary" disabled={!editor.dirty || editor.saving} onClick={editor.save}>Save changes</Button>
             <Button size="sm" disabled={editor.saving} onClick={editor.reload}>Reload latest</Button>
@@ -73,6 +85,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
                   {t.agent_name && <Row label="Agent">{t.agent_name}</Row>}
                   {t.client_name && <Row label="Client Name">{t.client_name}</Row>}
                 </Sec>
+
+                <TaskExtrasPanel key={`extras-${task.id}`} task={task} members={members} onOpenTask={openTask} onChanged={onSaved} />
 
                 {layout && <CustomFieldsDetail layout={layout} task={t} />}
                 {layout?.settings?.time_tracking && <TaskTimeLog key={task.id} task={task} members={members} />}

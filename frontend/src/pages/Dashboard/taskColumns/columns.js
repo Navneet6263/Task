@@ -1,6 +1,7 @@
 import React from 'react';
 import { Chip } from '../../../ui';
 import { PRIORITY_TONE, STATUS_TONE, statusLabel } from '../tones';
+import TaskBadges from '../../../components/taskExtras/TaskBadges';
 
 const ISSUE_TONE = { bug: 'danger', story: 'info', feature: 'ok', enhancement: 'warn' };
 const REVIEW_TONE = { READY: 'info', APPROVED: 'ok', CHANGES_REQUESTED: 'warn' };
@@ -38,6 +39,7 @@ export const COLUMNS = [
       <div className="flex flex-wrap items-center gap-1.5">
         {task.manager_assigned && <Chip tone="warn">MANAGER</Chip>}
         <strong className="font-semibold">{task.title}</strong>
+        <TaskBadges task={task} />
         {task.blocked_reason && <span title={task.blocked_reason}><Chip tone="warn">Blocked</Chip></span>}
         {task.unread_comments > 0 && <span className="grid h-4 min-w-[16px] place-items-center rounded-full bg-danger px-1 text-[9px] font-bold text-white" title="Unread comments">{task.unread_comments}</span>}
       </div>

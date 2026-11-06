@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { localDate } from '../../services/localDate';
-import { tasks } from '../../services/api';
+import { taskExtras, tasks } from '../../services/api';
+import { extrasPayload } from '../../components/taskExtras/ComposerExtras';
 import { notify } from '../../services/feedback';
 import { readPreference, writePreference } from '../../services/preferences';
 
@@ -113,7 +114,14 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
     if (!selectedTeam) return;
     const createAnother = event.nativeEvent?.submitter?.value === 'create-another';
     try {
-      const created = await tasks.create({ ...taskForm, title: taskForm.title.trim(), description: taskForm.description.trim(), team_id: selectedTeam.id, assigned_to: taskForm.assigned_to || null, task_type: taskForm.task_type || null, product: taskForm.product || null, category: taskForm.category || null, assigned_date: taskForm.assigned_date || null, start_date: taskForm.start_date || null, due_date: taskForm.due_date || null, reference_image: taskForm.reference_image || null });
+      const { extras, ...formFields } = taskForm;
+      const created = await tasks.create({ ...formFields, title: taskForm.title.trim(), description: taskForm.description.trim(), team_id: selectedTeam.id, assigned_to: taskForm.assigned_to || null, task_type: taskForm.task_type || null, product: taskForm.product || null, category: taskForm.category || null, assigned_date: taskForm.assigned_date || null, start_date: taskForm.start_date || null, due_date: taskForm.due_date || null, reference_image: taskForm.reference_image || null });
+      const picked = extrasPayload(extras);
+      if (picked) {
+        // Labels, parent and blockers are saved after the task exists; the task itself is already safe.
+        try { const { data } = await taskExtras.apply(created.data.id, picked); if (data.problems?.length) notify(data.problems[0]); }
+        catch (error) { notify(error.response?.data?.error || 'Task created, but its labels or links could not be saved.'); }
+      }
       notify(`Task #${created.data.id} created`, 'success');
       if (!createAnother) setShowTaskModal(false);
       const defaults = createAnother ? { assigned_to: taskForm.assigned_to, client_name: taskForm.client_name, issue_type: taskForm.issue_type, priority: taskForm.priority } : {};

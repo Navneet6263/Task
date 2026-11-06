@@ -45,6 +45,10 @@ const ensureWorkspaceSchema = async () => {
   await require('./clientsSchema').ensureClientsSchema();
   await require('./hrmsSchema').ensureHrmsSchema();
   await require('./emailInboxSchema').ensureEmailInboxSchema();
+  await require('./teamSharingSchema').ensureTeamSharingSchema();
+  await require('./sheetToTaskSchema').ensureSheetToTaskSchema();
+  await require('./taskExtrasSchema').ensureTaskExtrasSchema();
+  await require('./developerSchema').ensureDeveloperSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };

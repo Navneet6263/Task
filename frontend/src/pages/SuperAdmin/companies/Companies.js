@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { EmptyState, Input, Segmented, Select } from '../../../ui';
+import { Button, EmptyState, Input, Segmented, Select } from '../../../ui';
 import { initials, STATUS_TONE, timeAgo } from '../consoleUtils';
 import CompanyDetail from './CompanyDetail';
+import NewCompanyModal from './NewCompanyModal';
 
 const SORTS = {
   newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
@@ -18,6 +19,12 @@ export default function Companies({ sa, focus }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState(focus?.id || null);
+  const [adding, setAdding] = useState(false);
+  // After a new company or a hand-over, show that company (it is approved).
+  const open = async (id, refresh) => {
+    if (refresh) await sa.reload(true);
+    if (id) { setStatus('approved'); setSelected(id); }
+  };
 
   useEffect(() => {
     if (!focus) return;
@@ -47,6 +54,7 @@ export default function Companies({ sa, focus }) {
         <Select aria-label="Sort" className="!w-auto" value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="users">Most users</option><option value="name">Name A–Z</option>
         </Select>
+        <Button variant="primary" onClick={() => setAdding(true)}>+ Add company</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
@@ -79,9 +87,10 @@ export default function Companies({ sa, focus }) {
         </div>
 
         {current
-          ? <CompanyDetail key={current.id} sa={sa} summary={current} />
+          ? <CompanyDetail key={current.id} sa={sa} summary={current} onSelect={open} />
           : <EmptyState title="Pick a company">Choose a company on the left to see its details, limits and organizations.</EmptyState>}
       </div>
+      {adding && <NewCompanyModal onCreate={sa.actions.createCompany} onClose={() => setAdding(false)} onDone={(id) => { setAdding(false); open(id); }} />}
     </div>
   );
 }

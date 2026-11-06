@@ -1,6 +1,7 @@
 import React from 'react';
 import { Chip, Select } from '../../ui';
 import TaskActions from './TaskActions';
+import TaskBadges from '../../components/taskExtras/TaskBadges';
 import { DUE_TEXT, PRIORITY_TONE, STATUSES, dueInfo } from './taskMeta';
 
 // Board card: drag to another column to change status.
@@ -17,6 +18,7 @@ const TaskCard = ({ task, handleStatusChange, handlePriorityLock, openReassign, 
         <Chip tone={PRIORITY_TONE[task.priority] || 'warn'}>{task.priority}</Chip>
       </div>
       <h4 className="text-sm font-semibold leading-snug">{task.title}</h4>
+      <TaskBadges task={task} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span className={`font-medium ${DUE_TEXT[due.tone]}`}>{due.text}</span>
         <span className="text-muted">by {task.assigned_by_name || 'System'}</span>

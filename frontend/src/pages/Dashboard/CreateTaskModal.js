@@ -7,6 +7,7 @@ import TaskSummary from './TaskComposer/TaskSummary';
 import TaskTypeRail from './TaskComposer/TaskTypeRail';
 import TemplatePicker from './TaskComposer/TemplatePicker';
 import CustomComposer, { missingFields } from './TaskComposer/CustomComposer';
+import ComposerExtras from '../../components/taskExtras/ComposerExtras';
 import useDialog from '../../components/useDialog';
 import useTaskFormLayout from '../../components/taskForm/useTaskFormLayout';
 import { writePreference } from '../../services/preferences';
@@ -86,6 +87,7 @@ const CreateTaskModal = ({
                 <p className="mb-5 border-b border-line pb-3 text-sm font-semibold">Details</p>
                 <CustomComposer layout={layout} form={taskForm} update={updateTaskFormField} ctx={ctx} errors={errors} />
               </div>
+              <div className="mx-auto mt-4 max-w-3xl"><ComposerExtras value={taskForm.extras} onChange={(next) => updateTaskFormField('extras', next)} teamId={selectedTeam?.id} /></div>
             </div>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[190px_minmax(0,1fr)_285px] lg:overflow-hidden">
@@ -94,6 +96,7 @@ const CreateTaskModal = ({
                 <TemplatePicker key={selectedTeam?.id} teamId={selectedTeam?.id} form={taskForm} onApply={updateTaskFormField} />
                 <WorkflowSection taskForm={taskForm} updateTaskFormField={updateTaskFormField} />
                 <OwnershipSection taskForm={taskForm} updateTaskFormField={updateTaskFormField} members={members} />
+                <ComposerExtras value={taskForm.extras} onChange={(next) => updateTaskFormField('extras', next)} teamId={selectedTeam?.id} />
                 <TaskSetupSection taskForm={taskForm} updateTaskFormField={updateTaskFormField} availableTaskOptions={availableTaskOptions} createTaskCategories={createTaskCategories} />
                 <ReferenceSection taskForm={taskForm} updateTaskFormField={updateTaskFormField} handleReferenceImageChange={handleReferenceImageChange} />
               </main>

@@ -4,6 +4,9 @@ import { notify } from '../../services/feedback';
 import { Button, Chip, EmptyRow, Input, Select, Table, TableWrap, Td, Th } from '../../ui';
 import { Avatar, TEAM_ROLES, errorOf } from './shared';
 
+// In the team only because another team shares in; managed from Team sharing, not here.
+const shared = (member) => Boolean(member.auto_added && member.shared_from_team_id);
+
 const ACCESS = [['person', 'Member'], ['manager', 'Manager'], ['admin', 'Admin']];
 const ACCESS_LABEL = Object.fromEntries(ACCESS);
 
@@ -82,7 +85,7 @@ export default function MembersTable({ team, members, canManage, admin, onChange
                   <span className="flex items-center gap-3">
                     <Avatar name={member.name} id={member.id} />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-1.5 font-semibold">{member.name}{member.is_reporting_manager && <Chip tone="ok">Team leader</Chip>}</span>
+                      <span className="flex items-center gap-1.5 font-semibold">{member.name}{member.is_reporting_manager && <Chip tone="ok">Team leader</Chip>}{shared(member) && <Chip tone="info">Via {member.shared_from_name || 'shared team'}</Chip>}</span>
                       <span className="block truncate text-xs text-muted">{member.email}</span>
                     </span>
                   </span>
@@ -99,10 +102,10 @@ export default function MembersTable({ team, members, canManage, admin, onChange
                 <Td align="right" mono className="align-middle">{member.done_30d || 0}</Td>
                 {canManage && (
                   <Td align="right" className="align-middle">
-                    <span className="flex justify-end gap-1.5">
+                    {shared(member) ? <span className="text-xs text-muted" title="Comes from team sharing. Change it under Team sharing.">Shared</span> : <span className="flex justify-end gap-1.5">
                       {admin && !member.is_reporting_manager && <Button size="sm" className="opacity-60 group-hover:opacity-100" disabled={leading === member.id} onClick={() => makeLeader(member)}>{leading === member.id ? 'Saving…' : 'Make leader'}</Button>}
                       {(admin || !member.is_reporting_manager) && <Button size="sm" variant="danger" className="opacity-60 group-hover:opacity-100" disabled={removing === member.id} onClick={() => remove(member)}>Remove</Button>}
-                    </span>
+                    </span>}
                   </Td>
                 )}
               </tr>

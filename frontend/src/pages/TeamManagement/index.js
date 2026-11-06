@@ -7,6 +7,8 @@ import TeamList from './TeamList';
 import MembersTable from './MembersTable';
 import AddMembers from './AddMembers';
 import TeamFormModal from './TeamFormModal';
+import TeamSharing from './TeamSharing';
+import SharingMap from './SharingMap';
 import { canManageTeams, errorOf } from './shared';
 import { adminIdentity } from '../AdminPanel/adminShared';
 
@@ -22,6 +24,7 @@ export default function TeamManagement() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(null); // 'create' or a team to edit
+  const [showMap, setShowMap] = useState(false);
 
   const loadTeams = useCallback(async (preferId) => {
     try {
@@ -57,7 +60,10 @@ export default function TeamManagement() {
   return (
     <div className="mx-auto max-w-[1500px]">
       <PageHeader title="Teams" subtitle="Who works together, what each person is carrying, and how to bring new people in."
-        actions={canManage && <Button variant="primary" onClick={() => setForm('create')}>+ New team</Button>} />
+        actions={canManage && <>
+          {admin && teamList?.length > 1 && <Button onClick={() => setShowMap(true)}>Team sharing</Button>}
+          <Button variant="primary" onClick={() => setForm('create')}>+ New team</Button>
+        </>} />
       <ErrorText onRetry={() => loadTeams()}>{error}</ErrorText>
       {teamList === null && <Loading>Loading teams…</Loading>}
       {teamList && !teamList.length && (
@@ -95,11 +101,13 @@ export default function TeamManagement() {
                 <div className="min-w-0">{membersLoading && !members.length ? <Loading>Loading members…</Loading> : <MembersTable team={team} members={members} canManage={canManage} admin={admin} onChanged={refresh} />}</div>
                 {canManage && <AddMembers team={team} onAdded={refresh} />}
               </div>
+              <TeamSharing team={team} allTeams={teamList} canEdit={Boolean(admin)} onChanged={refresh} />
             </div>
           )}
         </div>
       )}
-      {form && <TeamFormModal team={form === 'create' ? null : form} onClose={() => setForm(null)} onSaved={(id) => { setForm(null); select(id); loadTeams(id); }} />}
+      {showMap && <SharingMap onClose={() => setShowMap(false)} onOpen={(id) => { setShowMap(false); select(id); }} />}
+      {form && <TeamFormModal team={form === 'create' ? null : form} admin={admin} onClose={() => setForm(null)} onSaved={(id) => { setForm(null); select(id); loadTeams(id); }} />}
     </div>
   );
 }

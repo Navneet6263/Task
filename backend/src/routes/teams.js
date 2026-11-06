@@ -8,6 +8,18 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const { canAccessTeam } = require('../utils/teamAccess');
 const { syncQuietly } = require('../services/employeeAccounts');
 const { setTeamLeader } = require('../services/teamLeads');
+const { syncTeamShares, sharesOfTeam, sharesOfOrgs, sameOrgTeams, addShare, removeShare } = require('../services/teamSharing');
+
+const isAdmin = (req) => ['admin', 'company_admin'].includes(req.userRole);
+// Organizations the caller runs: all of a company admin's, or the current one for an admin.
+async function adminOrgIds(req) {
+  if (req.userRole === 'company_admin') {
+    const [rows] = await db.execute('SELECT id FROM organizations WHERE company_admin_id = ?', [req.companyAdminId]);
+    return rows.map((row) => Number(row.id));
+  }
+  return req.userRole === 'admin' && req.orgId ? [Number(req.orgId)] : [];
+}
+const quietShares = (orgId) => syncTeamShares(orgId).catch((error) => console.error('[team-sharing] sync failed', error.message));
 
 const MANAGER_ROLES = ['admin', 'manager', 'company_admin'];
 const teamRoleText = (value) => {
@@ -88,15 +100,35 @@ router.post('/', authenticate, async (req, res) => {
 
     if (!resolvedOrgId) return res.status(422).json({ error: 'Organization context missing' });
 
+    // Admins may pick the leader and members right away; people must belong to the team's organization.
+    const leaderId = isAdmin(req) && req.body.leader_id ? Number(req.body.leader_id) : null;
+    const memberIds = isAdmin(req) && Array.isArray(req.body.member_ids)
+      ? [...new Set(req.body.member_ids.map(Number).filter((id) => Number.isInteger(id) && id > 0 && id !== leaderId))].slice(0, 500) : [];
+    const picked = [...(leaderId ? [leaderId] : []), ...memberIds];
+    if (picked.length) {
+      const [found] = await db.execute(
+        `SELECT id FROM users WHERE org_id = ? AND is_deleted = FALSE AND id IN (${picked.map(() => '?').join(',')})`,
+        [resolvedOrgId, ...picked]
+      );
+      if (found.length !== picked.length) return res.status(422).json({ error: 'Pick people from this organization' });
+    }
+
     const code = 'TM' + Math.random().toString(36).substring(2, 8).toUpperCase();
     const [result] = await db.execute(
       'INSERT INTO teams (name, type, team_code, created_by, org_id) VALUES (?, ?, ?, ?, ?)',
       [name, type, code, req.userId, resolvedOrgId]
     );
-    await db.execute(
-      'INSERT INTO team_members (team_id, user_id, role, is_reporting_manager) VALUES (?, ?, ?, ?)',
-      [result.insertId, req.userId, 'Reporting Manager', true]
-    );
+    // Without a chosen leader the creator leads the team, as before.
+    if (!leaderId) {
+      await db.execute(
+        'INSERT INTO team_members (team_id, user_id, role, is_reporting_manager) VALUES (?, ?, ?, ?)',
+        [result.insertId, req.userId, 'Reporting Manager', true]
+      );
+    }
+    for (const memberId of memberIds) {
+      await db.execute("INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'Member')", [result.insertId, memberId]);
+    }
+    if (leaderId) await setTeamLeader(result.insertId, leaderId);
     await syncQuietly(resolvedOrgId);
     res.json({ id: result.insertId, name, type, team_code: code });
   } catch (error) {
@@ -111,7 +143,8 @@ router.get('/:teamId/members', authenticate, async (req, res) => {
 
     const [members] = await db.execute(
       `SELECT u.id, u.name, u.email, u.mobile, u.employee_id, u.role, u.avatar,
-        tm.role as team_role, tm.is_reporting_manager,
+        tm.role as team_role, tm.is_reporting_manager, tm.auto_added, tm.shared_from_team_id,
+        (SELECT name FROM teams sf WHERE sf.id = tm.shared_from_team_id) as shared_from_name,
         (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND team_id = ? AND status != 'DONE' AND is_deleted = FALSE) as current_tasks,
         (SELECT COUNT(*) FROM tasks WHERE assigned_to = u.id AND team_id = ? AND status != 'DONE' AND is_deleted = FALSE
            AND due_date < CAST(GETDATE() AS DATE)) as overdue_tasks,
@@ -152,7 +185,7 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
     if (users.length === 0) return res.status(404).json({ error: 'No one with that email works in this organization' });
     // Already in the team only through "show all tasks": make the membership permanent instead.
     const [kept] = await db.execute(
-      'UPDATE team_members SET auto_added = 0, role = ? WHERE team_id = ? AND user_id = ? AND auto_added = 1',
+      'UPDATE team_members SET auto_added = 0, shared_from_team_id = NULL, role = ? WHERE team_id = ? AND user_id = ? AND auto_added = 1',
       [teamRole, req.params.teamId, users[0].id]
     );
     if (Number(kept?.affectedRows) > 0) return res.json({ message: 'Member added' });
@@ -162,6 +195,9 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
       'INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)',
       [req.params.teamId, users[0].id, teamRole]
     );
+    // A new member also reaches every team this team is allowed to see.
+    const [[team]] = await db.execute('SELECT org_id FROM teams WHERE id = ?', [req.params.teamId]);
+    await quietShares(team?.org_id);
     res.json({ message: 'Member added' });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -177,6 +213,8 @@ router.delete('/:teamId/members/:userId', authenticate, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: 'Team access denied' });
 
     await db.execute('DELETE FROM team_members WHERE team_id = ? AND user_id = ?', [req.params.teamId, req.params.userId]);
+    const [[team]] = await db.execute('SELECT org_id FROM teams WHERE id = ?', [req.params.teamId]);
+    await quietShares(team?.org_id);
     res.json({ message: 'Member removed' });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -238,6 +276,69 @@ router.put('/:teamId/leader', authenticate, async (req, res) => {
     const { promoted } = await setTeamLeader(Number(req.params.teamId), userId);
     res.json({ message: 'Team leader updated', promoted });
   } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not change the team leader' }); }
+});
+
+/* Team sharing: which teams see and work on which team's tasks. Only admins decide. */
+router.get('/sharing/overview', authenticate, async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Only admins can see team sharing' });
+    res.json(await sharesOfOrgs(await adminOrgIds(req)));
+  } catch (error) { res.status(500).json({ error: 'Could not load team sharing' }); }
+});
+
+router.get('/:teamId/sharing', authenticate, async (req, res) => {
+  try {
+    if (!await canAccessTeam(req, req.params.teamId)) return res.status(403).json({ error: 'Team access denied' });
+    res.json(await sharesOfTeam(Number(req.params.teamId)));
+  } catch (error) { res.status(500).json({ error: 'Could not load team sharing' }); }
+});
+
+// Let another team see and work on this team's tasks; both_ways shares the other team's tasks back.
+router.post('/:teamId/sharing', authenticate, async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Only admins can share a team' });
+    const teamId = Number(req.params.teamId);
+    const otherId = Number(req.body.team_id);
+    if (!await canAccessTeam(req, teamId) || !await canAccessTeam(req, otherId)) return res.status(403).json({ error: 'Team access denied' });
+    const orgId = await sameOrgTeams(teamId, otherId);
+    if (!orgId) return res.status(422).json({ error: 'Pick another team of the same organization' });
+    await addShare(orgId, teamId, otherId, req.userId);
+    if (req.body.both_ways === true) await addShare(orgId, otherId, teamId, req.userId);
+    await syncTeamShares(orgId);
+    res.json(await sharesOfTeam(teamId));
+  } catch (error) { res.status(500).json({ error: 'Could not share the team' }); }
+});
+
+// Stop sharing. direction: 'out' (they stop seeing this team), 'in' (this team stops seeing theirs) or 'both'.
+router.delete('/:teamId/sharing/:otherId', authenticate, async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Only admins can change team sharing' });
+    const teamId = Number(req.params.teamId);
+    const otherId = Number(req.params.otherId);
+    if (!await canAccessTeam(req, teamId)) return res.status(403).json({ error: 'Team access denied' });
+    const orgId = await sameOrgTeams(teamId, otherId);
+    if (!orgId) return res.status(404).json({ error: 'Team not found' });
+    const direction = ['in', 'both'].includes(req.query.direction) ? req.query.direction : 'out';
+    if (direction !== 'in') await removeShare(teamId, otherId);
+    if (direction !== 'out') await removeShare(otherId, teamId);
+    await syncTeamShares(orgId);
+    res.json(await sharesOfTeam(teamId));
+  } catch (error) { res.status(500).json({ error: 'Could not change team sharing' }); }
+});
+
+// People an admin can put in a new team: everyone active in that organization.
+router.get('/people/:orgId', authenticate, async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.status(403).json({ error: 'Only admins can pick people for a team' });
+    const orgId = Number(req.params.orgId);
+    if (!(await adminOrgIds(req)).includes(orgId)) return res.status(403).json({ error: 'Organization access denied' });
+    const [rows] = await db.execute(
+      `SELECT u.id, u.name, u.email, u.role, u.employee_id FROM users u
+       WHERE u.org_id = ? AND u.is_deleted = FALSE AND u.role IN ('admin', 'manager', 'person') ORDER BY u.name ASC`,
+      [orgId]
+    );
+    res.json(rows);
+  } catch (error) { res.status(500).json({ error: 'Could not load people' }); }
 });
 
 module.exports = router;

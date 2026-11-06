@@ -6,7 +6,9 @@ const db = require('../config/database');
 // all_tasks: the company admin may let everyone see and get every task, whatever their team.
 // communications: sending email to clients through GreenTask's own mail server.
 // email_to_task: emails to the organization's inbox become tasks (inbox set in the platform console).
-const KNOWN_MODULES = ['timesheet', 'hrms_login', 'all_tasks', 'communications', 'email_to_task'];
+// sheet_to_task: people link a Google Sheet in My Tasks and its new rows become their tasks.
+// developer_api: admins create API keys and webhooks so other software can work with tasks.
+const KNOWN_MODULES = ['timesheet', 'hrms_login', 'all_tasks', 'communications', 'email_to_task', 'sheet_to_task', 'developer_api'];
 
 const isTrue = (value) => value === true || value === 1;
 

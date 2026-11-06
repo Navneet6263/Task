@@ -58,6 +58,40 @@ export const teams = {
   candidates: (teamId, q = '', signal) => api.get(`/teams/${teamId}/candidates`, { params: { q }, signal }),
   updateMemberRole: (teamId, userId, role) => api.patch(`/teams/${teamId}/members/${userId}`, { role }),
   setLeader: (teamId, userId) => api.put(`/teams/${teamId}/leader`, { user_id: userId }),
+  people: (orgId) => api.get(`/teams/people/${orgId}`),
+  sharing: (teamId) => api.get(`/teams/${teamId}/sharing`),
+  share: (teamId, otherId, bothWays) => api.post(`/teams/${teamId}/sharing`, { team_id: otherId, both_ways: bothWays }),
+  unshare: (teamId, otherId, direction) => api.delete(`/teams/${teamId}/sharing/${otherId}`, { params: { direction } }),
+  sharingOverview: () => api.get('/teams/sharing/overview'),
+};
+
+// Jira-style extras: task keys, labels, subtasks and links between tasks.
+export const taskExtras = {
+  meta: () => api.get('/task-extras/meta'),
+  setPrefix: (prefix) => api.put('/task-extras/meta/prefix', { prefix }),
+  createLabel: (data) => api.post('/task-extras/labels', data),
+  updateLabel: (id, data) => api.patch(`/task-extras/labels/${id}`, data),
+  deleteLabel: (id) => api.delete(`/task-extras/labels/${id}`),
+  summary: (ids) => api.get('/task-extras/summary', { params: { ids: ids.join(',') } }),
+  search: (q, teamId) => api.get('/task-extras/search', { params: { q, ...(teamId ? { team_id: teamId } : {}) } }),
+  detail: (taskId) => api.get(`/task-extras/${taskId}`),
+  setLabels: (taskId, labelIds) => api.put(`/task-extras/${taskId}/labels`, { label_ids: labelIds }),
+  addSubtask: (taskId, data) => api.post(`/task-extras/${taskId}/subtasks`, data),
+  setParent: (taskId, parentId) => api.put(`/task-extras/${taskId}/parent`, { parent_id: parentId }),
+  addLink: (taskId, data) => api.post(`/task-extras/${taskId}/links`, data),
+  removeLink: (taskId, linkId) => api.delete(`/task-extras/${taskId}/links/${linkId}`),
+  apply: (taskId, data) => api.post(`/task-extras/${taskId}/apply`, data),
+};
+
+// "Sheet to task": a person's linked Google Sheets whose new rows become their tasks.
+export const taskSheets = {
+  status: () => api.get('/task-sheets/status'),
+  list: () => api.get('/task-sheets'),
+  preview: (url) => api.post('/task-sheets/preview', { url }),
+  create: (data) => api.post('/task-sheets', data),
+  update: (id, data) => api.put(`/task-sheets/${id}`, data),
+  sync: (id) => api.post(`/task-sheets/${id}/sync`),
+  remove: (id) => api.delete(`/task-sheets/${id}`),
 };
 
 // An admin changes what someone can do (member, manager, admin), optionally with the teams they lead.

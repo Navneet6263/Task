@@ -45,7 +45,7 @@ async function setTeamLeader(teamId, userId) {
     [teamId, userId]
   );
   const [updated] = await db.execute(
-    'UPDATE team_members SET is_reporting_manager = 1, auto_added = 0, role = ? WHERE team_id = ? AND user_id = ?',
+    'UPDATE team_members SET is_reporting_manager = 1, auto_added = 0, shared_from_team_id = NULL, role = ? WHERE team_id = ? AND user_id = ?',
     [LEADER_ROLE, teamId, userId]
   );
   if (!Number(updated?.affectedRows)) {

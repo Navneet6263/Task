@@ -5,6 +5,7 @@ import LimitsPanel from './LimitsPanel';
 import OrgTable from './OrgTable';
 import EmployeesPanel from './EmployeesPanel';
 import EmailInboxPanel from './EmailInboxPanel';
+import AccountPanel from './AccountPanel';
 
 const GROUPS = [
   ['Company', ['Company Name', 'Industry', 'Company Size', 'Headquarters', 'Website']],
@@ -30,7 +31,7 @@ function Stat({ label, value, sub, meter }) {
 }
 
 // One company account: profile, limits and approval, organizations and modules.
-export default function CompanyDetail({ sa, summary }) {
+export default function CompanyDetail({ sa, summary, onSelect }) {
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState(summary.status === 'pending' ? 'limits' : 'profile');
   const { loadDetail } = sa;
@@ -74,7 +75,7 @@ export default function CompanyDetail({ sa, summary }) {
       <div className="rounded-xl border border-line bg-surface px-4 pt-1 sm:px-5">
         <Tabs label="Company sections" value={tab} onChange={setTab}
           tabs={[['profile', 'Profile'], ['limits', detail.status === 'pending' ? 'Decision & limits' : 'Limits'], ['orgs', `Organizations · ${orgs.length}`],
-            ...(detail.status === 'approved' ? [['employees', 'Employees & logins'], ['inbox', 'Email to task']] : [])]} />
+            ...(detail.status === 'approved' ? [['employees', 'Employees & logins'], ['inbox', 'Email to task']] : []), ['account', 'Admin account']]} />
         <div key={tab} className="pb-5 motion-safe:animate-fade-in">
           {tab === 'profile' && (
             <div className="flex flex-col gap-5">
@@ -102,6 +103,7 @@ export default function CompanyDetail({ sa, summary }) {
           {tab === 'orgs' && <OrgTable orgs={orgs} onToggle={async (org, key, enabled) => after(await sa.actions.toggleModule(org, key, enabled))} />}
           {tab === 'employees' && <EmployeesPanel orgs={orgs} sa={sa} onChanged={reload} />}
           {tab === 'inbox' && <EmailInboxPanel orgs={orgs} sa={sa} onChanged={reload} />}
+          {tab === 'account' && <AccountPanel detail={detail} sa={sa} onReplaced={(id) => onSelect?.(id, true)} onRemoved={() => onSelect?.(null)} />}
         </div>
       </div>
     </section>

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { EmptyState, Switch, Table, TableWrap, Td, Th } from '../../../ui';
 
-const MODULES = [['timesheet', 'Timesheet'], ['hrms_login', 'Employee code login'], ['all_tasks', 'Show all tasks'], ['communications', 'Communications'], ['email_to_task', 'Email to task']];
+const MODULES = [['timesheet', 'Timesheet'], ['hrms_login', 'Employee code login'], ['all_tasks', 'Show all tasks'], ['communications', 'Communications'], ['email_to_task', 'Email to task'], ['sheet_to_task', 'Sheet to task'], ['developer_api', 'Developer API']];
 const MODULE_HELP = {
   timesheet: 'Timesheet: time entries, locks and timesheet reports.',
   hrms_login: 'Employee code login: staff sign in with their HRMS employee code; the admin imports them from the HRMS sheet.',
   all_tasks: 'Show all tasks: the company admin can let everyone see and get every task, whatever their team.',
   communications: 'Communications: send emails to clients from GreenTask\'s own mail server. Off by default.',
   email_to_task: 'Email to task: emails to the organization\'s inbox become tasks. Set the inbox in the "Email to task" tab. Off by default.',
+  developer_api: 'Developer API: the company admin creates API keys and webhooks so their CRM, HRMS or any software can create and read tasks. Off by default.',
+  sheet_to_task: 'Sheet to task: people link a Google Sheet in My Tasks; its new rows become their tasks every evening at 7 pm. Off by default.',
 };
 
 // Organizations of one company, with paid add-on modules that can be switched per organization.

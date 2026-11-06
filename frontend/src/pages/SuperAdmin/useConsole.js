@@ -72,6 +72,10 @@ export default function useConsole({ onSignedOut }) {
       (r) => (r.invite_sent ? `Access given. ${email} got an email to set their password.` : 'Access given, but the email could not be sent. Share the setup link yourself.'), 'Could not add this person.'),
     resendInvite: (user) => run(() => saApi.post(`/sub-users/${user.id}/invite`),
       (r) => (r.invite_sent ? `New setup link sent to ${user.email}.` : 'The email could not be sent. Share the setup link yourself.'), 'Could not send a new link.'),
+    createCompany: (form) => run(() => saApi.post('/company-admins', form), `${form.company_name.trim()} is created and approved.`, 'Could not create the company.'),
+    handOver: (admin, form) => run(() => saApi.post(`/company-admins/${admin.id}/hand-over`, form), (r) => `${r.email} is now the company admin.`, 'Could not hand the company over.', async () => {}),
+    resetAdminPassword: (admin) => run(() => saApi.post(`/company-admins/${admin.id}/reset-password`), 'New temporary password made.', 'Could not reset the password.'),
+    removeAdmin: (admin) => run(() => saApi.delete(`/company-admins/${admin.id}`), `${admin.name} was removed.`, 'Could not remove this account.'),
     removeSubUser: (user) => run(() => saApi.delete(`/sub-users/${user.id}`), `${user.email} no longer has access.`, 'Could not remove access.'),
   };
 

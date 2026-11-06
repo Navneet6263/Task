@@ -79,8 +79,12 @@ async function syncAllTasksEverywhere() {
   for (const row of rows) await syncAllTasksMembership(row.org_id);
 }
 
-// Never let a background sync break the request that triggered it.
-const syncQuietly = (orgId) => syncAllTasksMembership(orgId).catch((error) => console.error('[all-tasks] sync failed', error.message));
+// Never let a background sync break the request that triggered it. Team shares run after, because
+// turning "show all tasks" off can remove rows a share still needs.
+const syncQuietly = (orgId) => syncAllTasksMembership(orgId)
+  .catch((error) => console.error('[all-tasks] sync failed', error.message))
+  .then(() => require('./teamSharing').syncTeamShares(orgId))
+  .catch((error) => console.error('[team-sharing] sync failed', error.message));
 
 module.exports = {
   PLACEHOLDER_DOMAIN, normalizeCode, isValidCode, placeholderEmail, isPlaceholderEmail, visibleEmail, isEmail,
