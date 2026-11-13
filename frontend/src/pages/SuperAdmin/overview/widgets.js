@@ -36,7 +36,7 @@ export function KpiRow({ data, counts, go }) {
   return (
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <Kpi label="Companies" value={data.admins.length} hint={`${counts.approved} approved`} tone="ok" onClick={() => go('companies', { status: 'all' })} />
-      <Kpi label="Organizations" value={data.total_orgs} hint="Workspaces across all companies" tone="info" />
+      <Kpi label="Workspaces" value={data.total_orgs} hint="Workspaces across all companies" tone="info" />
       <Kpi label="Users" value={data.total_users} hint="Active people on the platform" tone="info" />
       <Kpi label="Pending" value={data.pending_count} hint={data.pending_count ? 'Waiting for your decision' : 'Nothing waiting'} tone="warn" onClick={() => go('companies', { status: 'pending' })} />
     </div>

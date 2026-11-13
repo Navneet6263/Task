@@ -87,7 +87,7 @@ export default function TeamSharing({ team, allTeams, canEdit, onChanged }) {
                 </p>
                 <Button variant="primary" size="sm" className="self-start" disabled={!other || busy} onClick={share}>{busy ? 'Saving…' : 'Share'}</Button>
               </>
-            ) : <p className="text-xs text-muted">No other team in this organization to share with yet.</p>}
+            ) : <p className="text-xs text-muted">No other team in this workspace to share with yet.</p>}
           </div>
         )}
       </div>

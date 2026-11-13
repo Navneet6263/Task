@@ -126,7 +126,7 @@ router.get('/organizations', async (req, res) => {
 router.post('/organizations', async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name || !String(name).trim()) return res.status(422).json({ error: 'Organization name required' });
+    if (!name || !String(name).trim()) return res.status(422).json({ error: 'Workspace name required' });
 
     const [[limits]] = await db.execute(
       'SELECT max_companies FROM company_admins WHERE id = ?',
@@ -138,7 +138,7 @@ router.post('/organizations', async (req, res) => {
     );
 
     if (limits && Number(current.count) >= Number(limits.max_companies || 0)) {
-      return res.status(403).json({ error: 'Organization limit reached for this company account' });
+      return res.status(403).json({ error: 'Workspace limit reached for this company account' });
     }
 
     const cleanName = String(name).trim();
@@ -168,13 +168,13 @@ const PREFIX_RE = /^[A-Z][A-Z0-9]{1,5}$/;
 router.patch('/organizations/:id', async (req, res) => {
   try {
     const orgId = Number(req.params.id);
-    if (!orgId || !(await orgBelongsToCompanyAdmin(req.companyAdminId, orgId))) return res.status(404).json({ error: 'Organization not found' });
+    if (!orgId || !(await orgBelongsToCompanyAdmin(req.companyAdminId, orgId))) return res.status(404).json({ error: 'Workspace not found' });
     const sets = [];
     const params = [];
     if (req.body?.name !== undefined) {
       const name = String(req.body.name ?? '').trim().replace(/\s+/g, ' ');
-      if (name.length < 2) return res.status(422).json({ error: 'Type the organization name', fields: { name: 'Name is required' } });
-      if (name.length > 120) return res.status(422).json({ error: 'Organization name must be at most 120 characters', fields: { name: 'Too long' } });
+      if (name.length < 2) return res.status(422).json({ error: 'Type the workspace name', fields: { name: 'Name is required' } });
+      if (name.length > 120) return res.status(422).json({ error: 'Workspace name must be at most 120 characters', fields: { name: 'Too long' } });
       sets.push('name = ?'); params.push(name);
     }
     if (req.body?.task_prefix !== undefined) {
@@ -200,7 +200,7 @@ router.get('/users', async (req, res) => {
 
     const orgFilter = req.query.org_id ? Number(req.query.org_id) : null;
     if (orgFilter && !orgIds.includes(orgFilter)) {
-      return res.status(403).json({ error: 'Organization access denied' });
+      return res.status(403).json({ error: 'Workspace access denied' });
     }
 
     const roleFilter = req.query.role ? String(req.query.role) : '';
@@ -269,12 +269,12 @@ router.post('/admins', async (req, res) => {
     const { org_id, mobile, employee_id } = req.body || {};
     const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
     const email = String(req.body?.email ?? '').trim().toLowerCase();
-    if (!name || !email || !org_id) return res.status(422).json({ error: 'Name, email and organization are required' });
+    if (!name || !email || !org_id) return res.status(422).json({ error: 'Name, email and workspace are required' });
     if (!EMAIL_RE.test(email)) return res.status(422).json({ error: 'Type a valid email address', fields: { email: 'Not a valid email' } });
 
     const orgId = Number(org_id);
     if (!orgId || !(await orgBelongsToCompanyAdmin(req.companyAdminId, orgId))) {
-      return res.status(403).json({ error: 'Organization access denied' });
+      return res.status(403).json({ error: 'Workspace access denied' });
     }
 
     const [[limits]] = await db.execute(
@@ -289,7 +289,7 @@ router.post('/admins', async (req, res) => {
     );
 
     if (limits && Number(existingAdmins.count) >= Number(limits.max_managers_per_company || 0)) {
-      return res.status(403).json({ error: 'Manager and admin limit reached for this organization' });
+      return res.status(403).json({ error: 'Manager and admin limit reached for this workspace' });
     }
 
     const [[taken]] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE', [email]);
@@ -330,7 +330,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
        WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
       [Number(req.params.id), req.companyAdminId]
     );
-    if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspaces' });
     if (Number(target.id) === Number(req.userId)) return res.status(400).json({ error: 'Change your own password from your profile.' });
     res.json(await resetUserPassword(target, { password: req.body?.password, mustChange: req.body?.must_change !== false }));
   } catch (error) {
@@ -386,7 +386,7 @@ router.put('/users/:id/role', async (req, res) => {
        WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
       [targetUserId, req.companyAdminId]
     );
-    if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspaces' });
     if (role !== 'admin' && await coAdminGuard(targetUserId, res)) return;
 
     const [[companyAdmin]] = await db.execute(
@@ -409,7 +409,7 @@ router.put('/users/:id/role', async (req, res) => {
         [target.org_id]
       );
       if (limits && Number(count.count) >= Number(limits.max_managers_per_company || 0)) {
-        return res.status(403).json({ error: 'Manager and admin limit reached for this organization' });
+        return res.status(403).json({ error: 'Manager and admin limit reached for this workspace' });
       }
     }
 
@@ -433,7 +433,7 @@ router.delete('/users/:id', async (req, res) => {
       [targetUserId, req.companyAdminId]
     );
 
-    if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspaces' });
     if (await coAdminGuard(targetUserId, res)) return;
 
     const [[companyAdmin]] = await db.execute(
@@ -466,7 +466,7 @@ router.get('/users/:id/org-access', async (req, res) => {
        WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
       [targetUserId, req.companyAdminId]
     );
-    if (!user) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!user) return res.status(404).json({ error: 'User not found in your workspaces' });
 
     const [orgs] = await db.execute(
       `SELECT o.id, o.name, o.company_code,
@@ -508,7 +508,7 @@ router.post('/org-access', async (req, res) => {
     }
 
     if (!(await orgBelongsToCompanyAdmin(req.companyAdminId, targetOrgId))) {
-      return res.status(403).json({ error: 'Organization access denied' });
+      return res.status(403).json({ error: 'Workspace access denied' });
     }
 
     const [[user]] = await db.execute(
@@ -518,12 +518,12 @@ router.post('/org-access', async (req, res) => {
        WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
       [targetUserId, req.companyAdminId]
     );
-    if (!user) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!user) return res.status(404).json({ error: 'User not found in your workspaces' });
     if (!['admin', 'manager'].includes(user.role)) {
-      return res.status(400).json({ error: 'Only admin or manager can be assigned to multiple organizations' });
+      return res.status(400).json({ error: 'Only admin or manager can be assigned to multiple workspaces' });
     }
     if (Number(user.org_id) === targetOrgId) {
-      return res.status(400).json({ error: 'Primary organization is already assigned' });
+      return res.status(400).json({ error: 'Primary workspace is already assigned' });
     }
 
     await db.execute(
@@ -550,9 +550,9 @@ router.delete('/org-access/:userId/:orgId', async (req, res) => {
        WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
       [targetUserId, req.companyAdminId]
     );
-    if (!user) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (!user) return res.status(404).json({ error: 'User not found in your workspaces' });
     if (Number(user.org_id) === targetOrgId) {
-      return res.status(400).json({ error: 'Primary organization access cannot be removed' });
+      return res.status(400).json({ error: 'Primary workspace access cannot be removed' });
     }
 
     await db.execute(

@@ -44,10 +44,10 @@ export default function NewCompanyModal({ onCreate, onClose, onDone }) {
   }
 
   return (
-    <Modal title="Add a company" subtitle="Creates the company, its first organization and its company admin, approved straight away." onClose={onClose}
+    <Modal title="Add a company" subtitle="Creates the company, its first workspace and its company admin, approved straight away." onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><span className="flex-1" /><Button variant="primary" disabled={busy} onClick={submit}>{busy ? 'Creating…' : 'Create company'}</Button></>}>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <Row label="Company name" hint="Also the name of its first organization. They can add more later."><Input autoFocus maxLength={200} placeholder="e.g. Accountrust" value={form.company_name} onChange={set('company_name')} /></Row>
+        <Row label="Company name" hint="Also the name of its first workspace. They can add more later."><Input autoFocus maxLength={200} placeholder="e.g. Accountrust" value={form.company_name} onChange={set('company_name')} /></Row>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Row label="Company admin's name"><Input maxLength={255} value={form.name} onChange={set('name')} /></Row>
           <Row label="Mobile" hint="Optional"><Input maxLength={20} value={form.mobile} onChange={set('mobile')} /></Row>

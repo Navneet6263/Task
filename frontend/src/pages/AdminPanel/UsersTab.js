@@ -70,15 +70,15 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
         <Input aria-label="Search people" placeholder="Search name, email or employee ID" className="min-w-[220px] flex-1" value={q} onChange={(e) => setQ(e.target.value)} />
         <Segmented label="Role" value={role} onChange={(v) => { setRole(v); setPage(1); }} options={ROLES} />
         {isCompanyAdmin && orgs.length > 1 && (
-          <Select aria-label="Organization" className="!w-auto" value={org} onChange={(e) => setOrg(e.target.value)}>
-            <option value="">All organizations</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          <Select aria-label="Workspace" className="!w-auto" value={org} onChange={(e) => setOrg(e.target.value)}>
+            <option value="">All workspaces</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </Select>
         )}
       </div>
       <p className="text-xs text-muted">{loading ? 'Loading…' : `${total} ${total === 1 ? 'person' : 'people'}`}. Admins manage everything, managers lead the teams you give them, members work on tasks.</p>
       <TableWrap>
         <Table>
-          <thead><tr><Th>Person</Th>{isCompanyAdmin && <Th>Organization</Th>}<Th>Role</Th><Th>Leads</Th><Th>Employee ID</Th><Th>Joined</Th>{!isCompanyAdmin && <Th>Last active</Th>}<Th><span className="sr-only">Actions</span></Th></tr></thead>
+          <thead><tr><Th>Person</Th>{isCompanyAdmin && <Th>Workspace</Th>}<Th>Role</Th><Th>Leads</Th><Th>Employee ID</Th><Th>Joined</Th>{!isCompanyAdmin && <Th>Last active</Th>}<Th><span className="sr-only">Actions</span></Th></tr></thead>
           <tbody>
             {rows.map((person) => {
               const self = Number(person.id) === Number(selfId);

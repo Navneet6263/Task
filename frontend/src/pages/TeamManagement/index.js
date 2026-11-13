@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import TeamPhoto from '../../components/shell/TeamPhoto';
 import { Link, useSearchParams } from 'react-router-dom';
 import { teams } from '../../services/api';
 import { readPreference, writePreference } from '../../services/preferences';
@@ -76,7 +77,7 @@ export default function TeamManagement() {
       {teamList === null && <Loading>Loading teams…</Loading>}
       {teamList && !teamList.length && (
         <EmptyState title="No teams yet" action={canManage && <Button variant="primary" onClick={() => setForm('create')}>Create your first team</Button>}>
-          {canManage ? 'Create a team, then add people from your organization.' : 'Ask your admin to add you to a team.'}
+          {canManage ? 'Create a team, then add people from your workspace.' : 'Ask your admin to add you to a team.'}
         </EmptyState>
       )}
       {teamList?.length > 0 && (
@@ -85,7 +86,8 @@ export default function TeamManagement() {
           {team && (
             <div className="flex min-w-0 flex-col gap-4">
               <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
-                <div className="min-w-0">
+                <TeamPhoto team={team} canEdit={canManage} onChanged={() => loadTeams()} />
+                <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold uppercase tracking-wider text-accent">{team.type || 'General'} team</p>
                   <h2 className="truncate text-xl font-bold">{team.name}</h2>
                   <p className="text-xs text-muted">Created by {team.creator_name || '—'}</p>

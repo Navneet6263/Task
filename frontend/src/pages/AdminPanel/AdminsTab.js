@@ -17,12 +17,12 @@ export default function AdminsTab({ orgs, onChanged }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">Admins manage people, teams and settings inside their organization.</p>
+        <p className="text-sm text-muted">Admins manage people, teams and settings inside their workspace.</p>
         <Button variant="primary" disabled={!orgs.length} onClick={() => setOpen({ kind: 'add' })}>+ Add admin</Button>
       </div>
       <TableWrap>
         <Table>
-          <thead><tr><Th>Admin</Th><Th>Organization</Th><Th>Since</Th><Th align="right">Actions</Th></tr></thead>
+          <thead><tr><Th>Admin</Th><Th>Workspace</Th><Th>Since</Th><Th align="right">Actions</Th></tr></thead>
           <tbody>
             {admins.map((a) => (
               <tr key={a.id} className="hover:bg-subtle">
@@ -37,7 +37,7 @@ export default function AdminsTab({ orgs, onChanged }) {
                 </Td>
               </tr>
             ))}
-            {!admins.length && <EmptyRow colSpan={4}>No organization admins yet. Use “+ Add admin”.</EmptyRow>}
+            {!admins.length && <EmptyRow colSpan={4}>No workspace admins yet. Use “+ Add admin”.</EmptyRow>}
           </tbody>
         </Table>
       </TableWrap>

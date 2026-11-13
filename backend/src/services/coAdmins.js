@@ -61,7 +61,7 @@ async function addCoAdmin(companyAdminId, userId, byUserId) {
     `SELECT u.id, u.name, u.email, u.role FROM users u JOIN organizations o ON o.id = u.org_id
      WHERE u.id = ? AND u.is_deleted = 0 AND o.company_admin_id = ?`,
     [userId, companyAdminId]);
-  if (!user) throw fail(404, 'Person not found in your organizations');
+  if (!user) throw fail(404, 'Person not found in your workspaces');
   if (user.role !== 'admin') throw fail(422, `${user.name} is not an admin yet. Make them an admin first, then a company admin.`);
   const [[owner]] = await db.execute('SELECT email FROM company_admins WHERE id = ?', [companyAdminId]);
   if (owner && String(owner.email).toLowerCase() === String(user.email).toLowerCase()) throw fail(409, `${user.name} already runs this company`);

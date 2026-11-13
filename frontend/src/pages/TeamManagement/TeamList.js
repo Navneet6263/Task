@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SpaceAvatar } from '../../components/shell/spaces';
 import { Input } from '../../ui';
 
 // Left column: every team the user can see, searchable.
@@ -15,7 +16,7 @@ export default function TeamList({ teams, selectedId, onSelect }) {
             <li key={team.id}>
               <button type="button" aria-current={active ? 'true' : undefined} onClick={() => onSelect(team.id)}
                 className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition ${active ? 'border-accent/50 bg-accent-soft' : 'border-transparent hover:bg-subtle'}`}>
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-bold ${active ? 'bg-accent text-accent-fg' : 'bg-subtle text-muted'}`}>{team.name.slice(0, 2).toUpperCase()}</span>
+                <SpaceAvatar team={team} size="h-9 w-9 text-xs" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">{team.name}</span>
                   <span className="block truncate text-xs text-muted">{team.type || 'General'} · {team.member_count || 0} members</span>

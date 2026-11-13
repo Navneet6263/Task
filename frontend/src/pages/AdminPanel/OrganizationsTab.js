@@ -49,7 +49,7 @@ function OrgCard({ org, admins, canManage, canEdit, onEdit, onAddAdmin, onReset,
                 </li>
               ))}
             </ul>
-          ) : <p className="rounded-md bg-warn-soft px-3 py-2 text-sm">No admin yet. Add one so someone can manage this organization’s people and teams.</p>}
+          ) : <p className="rounded-md bg-warn-soft px-3 py-2 text-sm">No admin yet. Add one so someone can manage this workspace’s people and teams.</p>}
         </div>
       )}
       {onViewUsers && <div className="border-t border-line px-4 py-3"><Button size="sm" onClick={() => onViewUsers(org.id)}>View everyone</Button></div>}
@@ -75,11 +75,11 @@ export default function OrganizationsTab({ orgs, canCreate, canEdit = canCreate,
     <div className="flex flex-col gap-4">
       {canCreate && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">Each organization has its own people, teams, tasks and company code. Edit one or look after its admins from its card.</p>
-          <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>+ New organization</Button>
+          <p className="text-sm text-muted">Each workspace has its own people, teams, tasks and company code. Edit one or look after its admins from its card.</p>
+          <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>+ New workspace</Button>
         </div>
       )}
-      {!orgs.length && <EmptyState title="No organizations yet" action={canCreate && <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>+ New organization</Button>}>Create your first organization and its admin in one step.</EmptyState>}
+      {!orgs.length && <EmptyState title="No workspaces yet" action={canCreate && <Button variant="primary" onClick={() => setOpen({ kind: 'new' })}>+ New workspace</Button>}>Create your first workspace and its admin in one step.</EmptyState>}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {orgs.map((org) => (
           <OrgCard key={org.id} org={org} admins={adminsOf(org)} canManage={canCreate} canEdit={canEdit} onViewUsers={onViewUsers}

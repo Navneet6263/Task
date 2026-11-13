@@ -33,7 +33,7 @@ export default function LeadTeamsModal({ person, role, onClose, onSave }) {
       footer={<><span className="flex-1" /><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving || all === null} onClick={save}>{saving ? 'Saving…' : changing ? 'Save role and teams' : 'Save teams'}</Button></>}>
       {error && <p role="alert" className="mb-3 text-sm text-danger">{error}</p>}
       {all === null && <p role="status" className="text-sm text-muted">Loading teams…</p>}
-      {all?.length === 0 && !error && <p className="text-sm text-muted">This organization has no teams yet. Create one in Teams first.</p>}
+      {all?.length === 0 && !error && <p className="text-sm text-muted">This workspace has no teams yet. Create one in Teams first.</p>}
       <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
         {(all || []).map((team) => (
           <li key={team.id}>

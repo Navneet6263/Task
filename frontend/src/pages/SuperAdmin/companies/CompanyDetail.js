@@ -66,7 +66,7 @@ export default function CompanyDetail({ sa, summary, onSelect }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Stat label="Organizations" value={orgs.length} sub={`of ${detail.max_companies || '—'} allowed`} meter={detail.status === 'approved' ? [orgs.length, Number(detail.max_companies || 1)] : null} />
+        <Stat label="Workspaces" value={orgs.length} sub={`of ${detail.max_companies || '—'} allowed`} meter={detail.status === 'approved' ? [orgs.length, Number(detail.max_companies || 1)] : null} />
         <Stat label="Managers" value={managers} sub={`up to ${detail.max_managers_per_company || '—'} per org`} />
         <Stat label="Staff" value={staff} sub={`up to ${detail.max_staff_per_company || '—'} per org`} />
         <Stat label="Requested" value={detail.expected_staff ?? '—'} sub={`staff · ${detail.expected_managers ?? '—'} managers · ${detail.expected_companies ?? '—'} orgs`} />
@@ -74,7 +74,7 @@ export default function CompanyDetail({ sa, summary, onSelect }) {
 
       <div className="rounded-xl border border-line bg-surface px-4 pt-1 sm:px-5">
         <Tabs label="Company sections" value={tab} onChange={setTab}
-          tabs={[['profile', 'Profile'], ['limits', detail.status === 'pending' ? 'Decision & limits' : 'Limits'], ['orgs', `Organizations · ${orgs.length}`],
+          tabs={[['profile', 'Profile'], ['limits', detail.status === 'pending' ? 'Decision & limits' : 'Limits'], ['orgs', `Workspaces · ${orgs.length}`],
             ...(detail.status === 'approved' ? [['employees', 'Employees & logins'], ['inbox', 'Email to task']] : []), ['account', 'Admin account']]} />
         <div key={tab} className="pb-5 motion-safe:animate-fade-in">
           {tab === 'profile' && (

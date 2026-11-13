@@ -18,7 +18,7 @@ const ManagerAssignModal = ({ showMgrModal, setShowMgrModal, mgrForm, updateMgrF
   </>;
 
   return (
-    <Modal title="Assign Task" subtitle="Delegate work to organization members directly" onClose={close} footer={footer} size="lg">
+    <Modal title="Assign Task" subtitle="Delegate work to workspace members directly" onClose={close} footer={footer} size="lg">
       <form className="flex flex-col gap-5" onSubmit={handleManagerAssign}>
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1 md:col-span-2">
@@ -32,7 +32,7 @@ const ManagerAssignModal = ({ showMgrModal, setShowMgrModal, mgrForm, updateMgrF
           <div className="flex flex-col gap-1">
             <Label htmlFor="mgr-assignee" required>Assignee</Label>
             <Select id="mgr-assignee" value={mgrForm.assigned_to} onChange={(event) => updateMgrFormField('assigned_to', event.target.value)} required>
-              <option value="">Select organization member...</option>
+              <option value="">Select workspace member...</option>
               {orgUsers.map((orgUser) => <option key={orgUser.id} value={orgUser.id}>{orgUser.name} ({orgUser.role})</option>)}
             </Select>
           </div>

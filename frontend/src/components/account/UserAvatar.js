@@ -16,6 +16,13 @@ export default function UserAvatar({ name, src, size = 'h-8 w-8 text-xs', tint =
   return <span className={`grid shrink-0 place-items-center rounded-full font-bold ${size} ${tint} ${className}`} aria-hidden="true">{initialsOf(name)}</span>;
 }
 
+// Why a chosen file cannot be used as a photo, or '' when it can. Checked before the crop window opens.
+export function photoProblem(file) {
+  if (!/^image\/(png|jpeg|webp|gif|bmp)$/.test(file?.type || '')) return 'Choose a PNG, JPEG or WebP picture';
+  if (file.size > 15 * 1024 * 1024) return 'The picture is too big (over 15 MB)';
+  return '';
+}
+
 // Shrink any picture to a 256 px square (centre crop) in the browser, as a small JPEG.
 export function squarePhoto(file, side = 256) {
   return new Promise((resolve, reject) => {

@@ -31,7 +31,7 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel, onSearch, onC
       <div className="flex min-w-0 items-center gap-2.5 pl-1 lg:pl-3">
         <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-md bg-subtle text-muted md:grid"><BuildingIcon /></span>
         {accessibleOrgs.length > 1 ? (
-          <Select aria-label="Switch organization" className="!w-auto max-w-[150px] py-1.5 font-semibold sm:max-w-[240px]" value={activeOrgId} onChange={(event) => handleOrgSwitch(event.target.value)}>
+          <Select aria-label="Switch workspace" className="!w-auto max-w-[150px] py-1.5 font-semibold sm:max-w-[240px]" value={activeOrgId} onChange={(event) => handleOrgSwitch(event.target.value)}>
             {accessibleOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
           </Select>
         ) : (

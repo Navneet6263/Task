@@ -88,7 +88,7 @@ export default function Companies({ sa, focus }) {
 
         {current
           ? <CompanyDetail key={current.id} sa={sa} summary={current} onSelect={open} />
-          : <EmptyState title="Pick a company">Choose a company on the left to see its details, limits and organizations.</EmptyState>}
+          : <EmptyState title="Pick a company">Choose a company on the left to see its details, limits and workspaces.</EmptyState>}
       </div>
       {adding && <NewCompanyModal onCreate={sa.actions.createCompany} onClose={() => setAdding(false)} onDone={(id) => { setAdding(false); open(id); }} />}
     </div>

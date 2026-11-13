@@ -28,10 +28,10 @@ export function EditOrgModal({ org, endpoint = `/company-admin/organizations/${o
   };
 
   return (
-    <Modal size="md" title="Edit organization" subtitle={org.name} onClose={onClose}
+    <Modal size="md" title="Edit workspace" subtitle={org.name} onClose={onClose}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim() || !changed || busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</Button></>}>
       <form onSubmit={save} className="flex flex-col gap-4">
-        <Field label="Organization name *"><Input autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Workspace name *"><Input autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Task code" hint={`Task numbers will look like ${shown}-142. Leave empty to use ${defaultPrefix(org).toUpperCase()}.`}>
           <Input maxLength={6} placeholder={defaultPrefix(org).toUpperCase()} value={prefix} className="uppercase" onChange={(e) => setPrefix(e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase())} />
         </Field>
@@ -69,27 +69,27 @@ export function NewOrgModal({ onClose, onDone }) {
     } catch (err) {
       // The organization exists even if its admin could not be added: say so, and let them add the admin from its card.
       if (org) { onDone?.(); setDone({ org, adminError: errorOf(err, 'The admin could not be added.') }); }
-      else setError(errorOf(err, 'Could not create the organization.'));
+      else setError(errorOf(err, 'Could not create the workspace.'));
     } finally { setBusy(false); }
   };
 
   if (done) {
     return (
-      <Modal size="md" title="Organization created" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
+      <Modal size="md" title="Workspace created" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
         <div className="flex flex-col gap-3 text-sm">
           <p><span className="font-semibold">{done.org.name}</span> is ready. Its company code is <span className="font-semibold">{done.org.company_code}</span>.</p>
           {done.admin && <><p><span className="font-semibold">{done.admin.name}</span> is its admin.</p><PasswordReveal email={done.admin.email} password={done.admin.password} note="They will be asked to choose their own password the first time they sign in." /></>}
-          {done.adminError && <Banner tone="warn">{done.adminError} Use “+ Add admin” on the organization’s card to try again.</Banner>}
+          {done.adminError && <Banner tone="warn">{done.adminError} Use “+ Add admin” on the workspace’s card to try again.</Banner>}
         </div>
       </Modal>
     );
   }
 
   return (
-    <Modal size="md" title="New organization" subtitle="Each organization has its own people, teams, tasks and company code." onClose={onClose}
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!ready || busy} onClick={save}>{busy ? 'Creating…' : 'Create organization'}</Button></>}>
+    <Modal size="md" title="New workspace" subtitle="Each workspace has its own people, teams, tasks and company code." onClose={onClose}
+      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!ready || busy} onClick={save}>{busy ? 'Creating…' : 'Create workspace'}</Button></>}>
       <form onSubmit={save} className="flex flex-col gap-4">
-        <Field label="Organization name *"><Input autoFocus maxLength={120} placeholder="e.g. Acme India Pvt Ltd" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Workspace name *"><Input autoFocus maxLength={120} placeholder="e.g. Acme India Pvt Ltd" value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--c-accent))]" checked={withAdmin} onChange={(e) => setWithAdmin(e.target.checked)} />
           Add its admin now

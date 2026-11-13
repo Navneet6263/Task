@@ -87,7 +87,7 @@ test('disconnect retries with backoff but unmount cancels the retry', () => {
   expect(FakeSocket.instances).toHaveLength(2);
 });
 
-test('changing organization retires the old socket without touching the new one', () => {
+test('changing workspace retires the old socket without touching the new one', () => {
   render(); advance(0);
   const oldSocket = FakeSocket.instances[0];
   render({ orgId: '5' }); advance(0);

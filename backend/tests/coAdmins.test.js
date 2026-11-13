@@ -35,7 +35,7 @@ test('an admin of one of the company organizations can be made a company admin; 
   await assert.rejects(coAdmins.addCoAdmin(22, 28, 3), /already a company admin/);
   await assert.rejects(coAdmins.addCoAdmin(22, 40, 3), /not an admin yet/);
   await assert.rejects(coAdmins.addCoAdmin(22, 41, 3), /already runs this company/);
-  await assert.rejects(coAdmins.addCoAdmin(99, 28, 3), /not found in your organizations/);
+  await assert.rejects(coAdmins.addCoAdmin(99, 28, 3), /not found in your workspaces/);
 });
 
 test('a co-admin signs in with their own password and gets the company admin view of that company', async (t) => {

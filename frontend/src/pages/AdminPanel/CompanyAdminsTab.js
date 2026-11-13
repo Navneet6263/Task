@@ -45,7 +45,7 @@ export default function CompanyAdminsTab() {
     setBusy(true);
     try {
       await api.delete(`/company-admin/company-admins/${removing.id}`);
-      notify(`${removing.name} is no longer a company admin. They stay an admin of their organization.`, 'success');
+      notify(`${removing.name} is no longer a company admin. They stay an admin of their workspace.`, 'success');
       setRemoving(null); load();
     } catch (err) { notify(errorOf(err, 'Could not remove the company admin.')); }
     finally { setBusy(false); }
@@ -54,7 +54,7 @@ export default function CompanyAdminsTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-muted">Company admins run the whole company: they create organizations, add admins and see everyone. They sign in with their own email and password, the same as always.</p>
+        <p className="max-w-3xl text-sm text-muted">Company admins run the whole company: they create workspaces, add admins and see everyone. They sign in with their own email and password, the same as always.</p>
         <Button variant="primary" onClick={() => { setAdding(true); setError(''); }}>+ Add company admin</Button>
       </div>
       <Card>
@@ -96,7 +96,7 @@ export default function CompanyAdminsTab() {
       {removing && (
         <Modal size="sm" title={`Remove ${removing.name} as company admin?`} onClose={() => setRemoving(null)}
           footer={<><Button onClick={() => setRemoving(null)}>Cancel</Button><Button variant="primary" disabled={busy} onClick={remove}>{busy ? 'Removing…' : 'Remove'}</Button></>}>
-          <p className="text-sm text-muted">They lose the company admin view straight away and stay an admin of {removing.org_name || 'their organization'}. Their account and work are not touched.</p>
+          <p className="text-sm text-muted">They lose the company admin view straight away and stay an admin of {removing.org_name || 'their workspace'}. Their account and work are not touched.</p>
         </Modal>
       )}
     </div>

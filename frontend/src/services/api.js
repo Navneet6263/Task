@@ -54,6 +54,8 @@ export const teams = {
   },
   create: (data) => api.post('/teams', data),
   getMembers: (teamId) => cachedGet(api, `/teams/${teamId}/members`),
+  uploadPhoto: (teamId, image) => api.post(`/teams/${teamId}/photo`, { image }),
+  removePhoto: (teamId) => api.delete(`/teams/${teamId}/photo`),
   addMember: (teamId, data) => api.post(`/teams/${teamId}/members`, data),
   removeMember: (teamId, userId) => api.delete(`/teams/${teamId}/members/${userId}`),
   update: (teamId, data) => api.patch(`/teams/${teamId}`, data),

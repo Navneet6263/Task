@@ -52,14 +52,14 @@ export default function AccessTab({ orgs }) {
         </ul>
       </Card>
       {!selected || !access ? (
-        <EmptyState title="Pick a person">Choose a manager or admin on the left to let them switch between more organizations.</EmptyState>
+        <EmptyState title="Pick a person">Choose a manager or admin on the left to let them switch between more workspaces.</EmptyState>
       ) : (
         <Card className="flex flex-col gap-4 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Person name={access.user?.name} email={access.user?.email} id={access.user?.id} />
             <div className="flex gap-2">
-              <Select aria-label="Organization to grant" className="!w-auto" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
-                <option value="">Add an organization…</option>{missing.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              <Select aria-label="Workspace to grant" className="!w-auto" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+                <option value="">Add a workspace…</option>{missing.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </Select>
               <Button variant="primary" disabled={!orgId} onClick={grant}>Grant access</Button>
             </div>
@@ -68,11 +68,11 @@ export default function AccessTab({ orgs }) {
             {(access.organizations || orgs).filter((o) => o.has_access).map((o) => (
               <li key={o.id} className="flex items-center justify-between gap-2 px-3 py-2.5">
                 <span><span className="font-medium">{o.name}</span> <span className="font-mono text-xs text-muted">{o.company_code}</span></span>
-                {o.is_primary ? <Chip tone="ok">Home organization</Chip> : <Button size="sm" variant="danger" onClick={() => revoke(o)}>Remove</Button>}
+                {o.is_primary ? <Chip tone="ok">Home workspace</Chip> : <Button size="sm" variant="danger" onClick={() => revoke(o)}>Remove</Button>}
               </li>
             ))}
           </ul>
-          <p className="text-xs text-muted">People with access can switch organization from the top bar. Their home organization cannot be removed here.</p>
+          <p className="text-xs text-muted">People with access can switch workspace from the top bar. Their home workspace cannot be removed here.</p>
         </Card>
       )}
     </div>

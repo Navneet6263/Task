@@ -3,7 +3,7 @@ import { readConsolePref, writeConsolePref } from '../consoleUtils';
 
 // Overview widgets: [key, title, what it shows, default size].
 export const WIDGETS = [
-  ['kpis', 'Key numbers', 'Companies, organizations, users and pending approvals', 'full'],
+  ['kpis', 'Key numbers', 'Companies, workspaces, users and pending approvals', 'full'],
   ['queue', 'Approval queue', 'Companies waiting for a decision, oldest first', 'half'],
   ['status', 'Account status', 'Approved, pending and rejected companies', 'half'],
   ['growth', 'New companies', 'Registrations in each of the last six months', 'half'],

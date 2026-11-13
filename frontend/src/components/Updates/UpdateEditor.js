@@ -6,7 +6,7 @@ const blank = { title: '', summary: '', why_text: '', how_text: '', performance_
 const templates = {
   saved: { title: 'Saved views: return to your preferred task setup', summary: 'Save a named task view with the filters and layout you choose.',
     why_text: 'Useful when you repeatedly check the same kind of work, such as bugs or your daily queue.',
-    how_text: 'Choose your task filters. Select Save current view beside Focus. Name the view, choose which settings to include, and save. Select the saved view to restore those settings. Views are personal to your account and organization in this browser; they remain after refresh, but clearing browser storage removes them.', performance_text: '' },
+    how_text: 'Choose your task filters. Select Save current view beside Focus. Name the view, choose which settings to include, and save. Select the saved view to restore those settings. Views are personal to your account and workspace in this browser; they remain after refresh, but clearing browser storage removes them.', performance_text: '' },
   header: { title: 'A clearer header and collapsible sidebar', summary: 'A cleaner header with your workspace name, and a sidebar you can collapse.',
     why_text: 'Keep navigation recognizable while giving your tasks more horizontal room.',
     how_text: 'Use the Collapse button at the bottom of the sidebar to collapse or expand it. Your workspace name sits in the header next to the logo. On mobile, use the menu button.', performance_text: '' },
@@ -35,7 +35,7 @@ export default function UpdateEditor({ initial, onSaved, onBusy }) {
   };
   return (
     <form className="updates-form flex max-w-3xl flex-col gap-4 rounded-lg border border-line bg-surface p-4 sm:p-5" onSubmit={submit}>
-      <Banner tone="warn">Everyone using GreenTask can read this after publishing, across all organizations. Do not include private team or client information. The date and time are recorded automatically.</Banner>
+      <Banner tone="warn">Everyone using GreenTask can read this after publishing, across all workspaces. Do not include private team or client information. The date and time are recorded automatically.</Banner>
       {!initial && (
         <label className="flex flex-col gap-1"><span className="text-sm font-medium">Optional starting template</span>
           <Select defaultValue="" onChange={e => { if (templates[e.target.value]) setDraft(templates[e.target.value]); }}>

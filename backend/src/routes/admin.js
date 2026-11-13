@@ -27,7 +27,7 @@ router.get('/organizations', async (req, res) => {
 });
 
 router.post('/organizations', async (req, res) => {
-  return res.status(403).json({ error: 'Organization creation is managed by company admin' });
+  return res.status(403).json({ error: 'Workspace creation is managed by company admin' });
 });
 
 // An admin renames the organization they are in, and sets the letters in front of task numbers.
@@ -35,13 +35,13 @@ router.post('/organizations', async (req, res) => {
 const PREFIX_RE = /^[A-Z][A-Z0-9]{1,5}$/;
 router.patch('/organization', async (req, res) => {
   try {
-    if (!req.orgId) return res.status(422).json({ error: 'Organization context missing' });
+    if (!req.orgId) return res.status(422).json({ error: 'Workspace context missing' });
     const sets = [];
     const params = [];
     if (req.body?.name !== undefined) {
       const name = String(req.body.name ?? '').trim().replace(/\s+/g, ' ');
-      if (name.length < 2) return res.status(422).json({ error: 'Type the organization name', fields: { name: 'Name is required' } });
-      if (name.length > 120) return res.status(422).json({ error: 'Organization name must be at most 120 characters', fields: { name: 'Too long' } });
+      if (name.length < 2) return res.status(422).json({ error: 'Type the workspace name', fields: { name: 'Name is required' } });
+      if (name.length > 120) return res.status(422).json({ error: 'Workspace name must be at most 120 characters', fields: { name: 'Too long' } });
       sets.push('name = ?'); params.push(name);
     }
     if (req.body?.task_prefix !== undefined) {
@@ -63,7 +63,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
   try {
     if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'Change your own password from your profile.' });
     const [[target]] = await db.execute('SELECT id, email, org_id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE', [req.params.id, req.orgId]);
-    if (!target) return res.status(404).json({ error: 'User not found in your organization' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspace' });
     res.json(await resetUserPassword(target, { password: req.body?.password, mustChange: req.body?.must_change !== false }));
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message, ...(error.fields ? { fields: error.fields } : {}) });
@@ -71,7 +71,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
 });
 
 router.delete('/organizations/:id', async (req, res) => {
-  return res.status(403).json({ error: 'Organization deletion is managed by company admin' });
+  return res.status(403).json({ error: 'Workspace deletion is managed by company admin' });
 });
 
 router.get('/users', async (req, res) => {
@@ -117,7 +117,7 @@ router.put('/users/:id/role', async (req, res) => {
       'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
     );
-    if (!target) return res.status(404).json({ error: 'User not found in your organization' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspace' });
     // A new manager can be put in charge of teams in the same step.
     const leadIds = await pickedLeads(req.orgId, role, req.body);
 
@@ -136,7 +136,7 @@ router.delete('/users/:id', async (req, res) => {
       'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
     );
-    if (!target) return res.status(404).json({ error: 'User not found in your organization' });
+    if (!target) return res.status(404).json({ error: 'User not found in your workspace' });
 
     await db.execute(
       'UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ? AND org_id = ?',

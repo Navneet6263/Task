@@ -22,6 +22,21 @@ async function ensureAvatarSchema() {
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_user_avatars_token' AND object_id = OBJECT_ID('dbo.user_avatars'))
       CREATE UNIQUE INDEX ux_user_avatars_token ON dbo.user_avatars(token);
   `);
+  // Team photos work the same way: teams.photo keeps only the link.
+  await db.query(`
+    IF OBJECT_ID('dbo.team_photos', 'U') IS NULL
+      CREATE TABLE dbo.team_photos (
+        team_id INT NOT NULL PRIMARY KEY REFERENCES dbo.teams(id),
+        token CHAR(32) NOT NULL,
+        mime VARCHAR(20) NOT NULL,
+        image VARBINARY(MAX) NOT NULL,
+        updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME());
+  `);
+  await db.query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_team_photos_token' AND object_id = OBJECT_ID('dbo.team_photos'))
+      CREATE UNIQUE INDEX ux_team_photos_token ON dbo.team_photos(token);
+  `);
+  await db.query(`IF COL_LENGTH('dbo.teams', 'photo') IS NULL ALTER TABLE dbo.teams ADD photo NVARCHAR(255) NULL;`);
 }
 
 // Only real PNG, JPEG or WebP pictures, checked by their first bytes, never SVG (it can carry script).
@@ -70,4 +85,36 @@ async function serveAvatar(req, res) {
   } catch { return res.status(500).end(); }
 }
 
-module.exports = { MAX_BYTES, ensureAvatarSchema, readImage, saveAvatar, removeAvatar, serveAvatar };
+// A team's photo (its logo), shown instead of the coloured letters.
+async function saveTeamPhoto(teamId, dataUrl, baseUrl) {
+  const { mime, bytes } = readImage(dataUrl);
+  const token = crypto.randomBytes(16).toString('hex');
+  await db.execute(
+    `MERGE team_photos AS p USING (SELECT ? AS team_id) AS s ON p.team_id = s.team_id
+     WHEN MATCHED THEN UPDATE SET token = ?, mime = ?, image = ?, updated_at = SYSDATETIME()
+     WHEN NOT MATCHED THEN INSERT (team_id, token, mime, image) VALUES (s.team_id, ?, ?, ?);`,
+    [teamId, token, mime, bytes, token, mime, bytes]
+  );
+  const url = `${baseUrl}/api/teams/photo/${token}`;
+  await db.execute('UPDATE teams SET photo = ? WHERE id = ?', [url, teamId]);
+  return url;
+}
+
+async function removeTeamPhoto(teamId) {
+  await db.execute('DELETE FROM team_photos WHERE team_id = ?', [teamId]);
+  await db.execute('UPDATE teams SET photo = NULL WHERE id = ?', [teamId]);
+}
+
+// GET /api/teams/photo/:token, open to <img> tags like profile photos.
+async function serveTeamPhoto(req, res) {
+  const token = String(req.params.token || '');
+  if (!/^[a-f0-9]{32}$/.test(token)) return res.status(404).end();
+  try {
+    const [[row]] = await db.execute('SELECT p.mime, p.image FROM team_photos p JOIN teams t ON t.id = p.team_id AND t.is_deleted = 0 WHERE p.token = ?', [token]);
+    if (!row) return res.status(404).end();
+    res.set({ 'Content-Type': row.mime, 'Cache-Control': 'public, max-age=86400, immutable', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'" });
+    return res.send(Buffer.from(row.image));
+  } catch { return res.status(500).end(); }
+}
+
+module.exports = { MAX_BYTES, ensureAvatarSchema, readImage, saveAvatar, removeAvatar, serveAvatar, saveTeamPhoto, removeTeamPhoto, serveTeamPhoto };

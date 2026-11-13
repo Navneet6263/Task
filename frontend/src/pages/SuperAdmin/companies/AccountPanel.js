@@ -53,11 +53,11 @@ export default function AccountPanel({ detail, sa, onReplaced, onRemoved }) {
         <Action title="Give a new temporary password" text="For a forgotten password. The old one stops working at once.">
           <Button onClick={() => setDialog('reset')}>Reset password</Button>
         </Action>
-        <Action title="Hand the company to someone else" text={`A new company admin takes over all ${orgs.length} organization${orgs.length === 1 ? '' : 's'}, with their people, teams and tasks. Nothing is lost.`}>
+        <Action title="Hand the company to someone else" text={`A new company admin takes over all ${orgs.length} workspace${orgs.length === 1 ? '' : 's'}, with their people, teams and tasks. Nothing is lost.`}>
           <Button variant="primary" onClick={() => setDialog('handover')}>Change company admin</Button>
         </Action>
       </>}
-      <Action title="Remove this account" text={orgs.length ? 'Only possible without organizations. To replace the person, use "Change company admin".' : 'Deletes this company admin account. It has no organizations, so no work is lost.'}>
+      <Action title="Remove this account" text={orgs.length ? 'Only possible without workspaces. To replace the person, use "Change company admin".' : 'Deletes this company admin account. It has no workspaces, so no work is lost.'}>
         <Button variant="danger" className="!border-danger/40" disabled={orgs.length > 0} onClick={() => setDialog('remove')}>Remove account</Button>
       </Action>
 

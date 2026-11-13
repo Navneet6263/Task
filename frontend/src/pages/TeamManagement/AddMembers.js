@@ -38,7 +38,7 @@ export default function AddMembers({ team, onAdded }) {
 
   return (
     <Card>
-      <CardHeader title="Add people" aside="From your organization" />
+      <CardHeader title="Add people" aside="From your workspace" />
       <div className="flex flex-col gap-3 p-3">
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Search people" placeholder="Search by name or email" className="min-w-[160px] flex-1" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -48,7 +48,7 @@ export default function AddMembers({ team, onAdded }) {
         </div>
         <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
           {loading && !people.length && <li role="status" className="px-2 py-4 text-sm text-muted">Searching…</li>}
-          {!loading && !people.length && <li className="px-2 py-4 text-center text-sm text-muted">{query ? 'No one matches. They may already be in the team, or not have an account yet.' : 'Everyone in your organization is already in this team.'}</li>}
+          {!loading && !people.length && <li className="px-2 py-4 text-center text-sm text-muted">{query ? 'No one matches. They may already be in the team, or not have an account yet.' : 'Everyone in your workspace is already in this team.'}</li>}
           {people.map((person) => (
             <li key={person.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-subtle">
               <Avatar name={person.name} id={person.id} size="h-8 w-8 text-[11px]" />

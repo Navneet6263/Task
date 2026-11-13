@@ -34,7 +34,7 @@ function PeoplePicker({ admin, orgId, setOrgId, leaderId, setLeaderId, members, 
     <div className="flex flex-col gap-4 border-t border-line pt-4">
       {orgs.length > 1 && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted">Organization</span>
+          <span className="text-xs font-medium text-muted">Workspace</span>
           <Select value={orgId} onChange={(e) => { setOrgId(e.target.value); setLeaderId(''); setMembers(new Set()); }}>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </Select>

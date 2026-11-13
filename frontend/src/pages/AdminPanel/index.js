@@ -51,18 +51,18 @@ export default function AdminPanel() {
   if (!isCompanyAdmin && !isOrgAdmin) return <><PageHeader title="Admin" /><Banner tone="warn">Only admins can open this page.</Banner></>;
 
   const tabs = isCompanyAdmin
-    ? [['orgs', 'Organizations'], ['users', 'People'], ['admins', 'Admins'], ['company-admins', 'Company admins'], ['access', 'Multi-org access'], ['developer', 'Developer']]
-    : [['users', 'People'], ['org', 'Organization'], ['developer', 'Developer']];
+    ? [['orgs', 'Workspaces'], ['users', 'People'], ['admins', 'Admins'], ['company-admins', 'Company admins'], ['access', 'Multi-workspace access'], ['developer', 'Developer']]
+    : [['users', 'People'], ['org', 'Workspace'], ['developer', 'Developer']];
   const org = orgs[0];
 
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
-      <PageHeader title={isCompanyAdmin ? 'Company admin' : 'Admin'} subtitle={isCompanyAdmin ? 'Your organizations, their admins, and who can work across more than one.' : `People and access for ${org?.name || 'your organization'}.`}
+      <PageHeader title={isCompanyAdmin ? 'Company admin' : 'Admin'} subtitle={isCompanyAdmin ? 'Your workspaces, their admins, and who can work across more than one.' : `People and access for ${org?.name || 'your workspace'}.`}
         actions={<Button onClick={() => navigate('/audit-logs')}>Audit logs</Button>} />
       {error && <Banner tone="danger" action={<Button size="sm" onClick={load}>Retry</Button>}>{error}</Banner>}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {isCompanyAdmin ? <>
-          <StatTile label="Organizations" value={stats.orgs ?? 0} /><StatTile label="People" value={stats.users ?? 0} />
+          <StatTile label="Workspaces" value={stats.orgs ?? 0} /><StatTile label="People" value={stats.users ?? 0} />
           <StatTile label="Admins & managers" value={(stats.admins || 0) + (stats.managers || 0)} /><StatTile label="Members" value={stats.staff ?? 0} />
         </> : <>
           <StatTile label="People" value={stats.users ?? 0} /><StatTile label="Teams" value={stats.teams ?? 0} />

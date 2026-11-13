@@ -227,7 +227,7 @@ export default function useLayout() {
             {
               path: '/admin',
               label: 'Admin Panel',
-              note: 'Organization level controls',
+              note: 'Workspace level controls',
               section: 'Control',
               icon: <AdminIcon />,
             },

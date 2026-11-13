@@ -38,7 +38,7 @@ export default function EmailInboxPanel({ orgs, sa, onChanged }) {
   }, [org]);
   useEffect(() => { setData(null); setMessage(null); load(); }, [load]);
 
-  if (!org) return <p className="text-sm text-muted">This company has no organizations yet.</p>;
+  if (!org) return <p className="text-sm text-muted">This company has no workspaces yet.</p>;
   const on = Boolean(org.modules?.email_to_task);
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const preset = PRESETS.find(([host]) => host === form.host);
@@ -59,8 +59,8 @@ export default function EmailInboxPanel({ orgs, sa, onChanged }) {
     <div className="flex flex-col gap-4">
       {orgs.length > 1 && (
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">Organization</span>
-          <Select aria-label="Organization" value={org.id} onChange={(e) => setOrgId(Number(e.target.value))} className="w-auto">
+          <span className="text-muted">Workspace</span>
+          <Select aria-label="Workspace" value={org.id} onChange={(e) => setOrgId(Number(e.target.value))} className="w-auto">
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </Select>
         </label>
@@ -69,7 +69,7 @@ export default function EmailInboxPanel({ orgs, sa, onChanged }) {
       <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 ${on ? 'border-accent/40 bg-accent-soft/40' : 'border-line'}`}>
         <div className="min-w-0">
           <p className="font-semibold">Email to task for {org.name} <Chip tone={on ? 'ok' : 'neutral'}>{on ? 'On' : 'Off'}</Chip></p>
-          <p className="mt-0.5 text-sm text-muted">Emails sent to this organization&apos;s inbox become tasks automatically (checked every 2 minutes). Off for every company until you turn it on here.</p>
+          <p className="mt-0.5 text-sm text-muted">Emails sent to this workspace&apos;s inbox become tasks automatically (checked every 2 minutes). Off for every company until you turn it on here.</p>
         </div>
         <Button variant={on ? 'secondary' : 'primary'} disabled={busy === 'toggle'} onClick={toggle}>{busy === 'toggle' ? 'Saving…' : on ? 'Turn off' : 'Turn on'}</Button>
       </div>
@@ -87,7 +87,7 @@ export default function EmailInboxPanel({ orgs, sa, onChanged }) {
             )}
           </div>
           {data.inbox?.last_error && <Banner tone="warn"><strong>Last check failed:</strong> {data.inbox.last_error}</Banner>}
-          {!data.teams.length && <Banner tone="warn">This organization has no teams yet. Create a team first; new tasks go into it.</Banner>}
+          {!data.teams.length && <Banner tone="warn">This workspace has no teams yet. Create a team first; new tasks go into it.</Banner>}
 
           <Row label="Mail provider" help={preset?.[2]}>
             <Select aria-label="Mail provider" value={preset ? form.host : 'other'} onChange={(e) => setForm((f) => ({ ...f, host: e.target.value === 'other' ? '' : e.target.value }))}>

@@ -9,6 +9,7 @@ import QuickChat from './chat/QuickChat';
 import NotesPanel from './notes/NotesPanel';
 import ScreenShare from './screenShare/ScreenShare';
 import EmailReminder from './account/EmailReminder';
+import PhotoNudge from './account/PhotoNudge';
 import CommandPalette from './shell/CommandPalette';
 import WorkTypePicker from './shell/WorkTypePicker';
 import { useTaskMeta } from './taskExtras/taskExtrasStore';
@@ -74,6 +75,7 @@ const Layout = () => {
       <div className={`shell-main transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'}`}>
         <main className="shell-content min-w-0 px-4 py-5 sm:px-6" onClick={closeTransientUi}>
           <EmailReminder />
+          <PhotoNudge />
           {redesigned ? <Outlet /> : <div className="theme-light min-h-[60vh] rounded-xl bg-canvas text-ink"><Outlet /></div>}
         </main>
       </div>

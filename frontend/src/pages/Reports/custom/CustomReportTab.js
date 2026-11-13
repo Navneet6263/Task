@@ -49,7 +49,7 @@ export default function CustomReportTab({ taskRows, from, to, team }) {
   const dims = dimensionsFor(source), metrics = metricsFor(source);
   const title = reportTitle(view);
   const hoursLabel = include === 'timesheet' ? 'Timesheet hours' : include === 'task' ? 'Hours logged on tasks' : 'All hours worked';
-  const scopeLabel = source === 'time' ? `${hoursLabel} · whole organization` : `Tasks · ${team?.name || 'team'}`;
+  const scopeLabel = source === 'time' ? `${hoursLabel} · whole workspace` : `Tasks · ${team?.name || 'team'}`;
   const ready = TEMPLATES.filter((t) => !t.needsTime || hoursOn);
   const savedName = saved.find((s) => JSON.stringify(s.config) === JSON.stringify(view))?.name;
 

@@ -4,19 +4,21 @@ import { teams } from '../../services/api';
 import { writePreference } from '../../services/preferences';
 import { notify } from '../../services/feedback';
 import { Button, Chip, EmptyState, Loading } from '../../ui';
-import { SpaceAvatar, useSpaces, visitSpace } from '../../components/shell/spaces';
+import { useSpaces, visitSpace } from '../../components/shell/spaces';
 import { PlusIcon, StarIcon } from '../../components/shell/icons';
 import { adminIdentity } from '../AdminPanel/adminShared';
 import TeamSharing from '../TeamManagement/TeamSharing';
 import SpaceSummary from './SpaceSummary';
 import SpaceCalendar from './SpaceCalendar';
 import UserAvatar from '../../components/account/UserAvatar';
+import TeamPhoto from '../../components/shell/TeamPhoto';
+import PersonHoverCard from '../../components/people/PersonHoverCard';
 
 const Dashboard = lazy(() => import('../Dashboard/index'));
 
 const TABS = [['summary', 'Summary'], ['board', 'Board'], ['list', 'List'], ['timeline', 'Timeline'], ['calendar', 'Calendar'], ['people', 'People']];
 
-function People({ team, members }) {
+function People({ team, members, meId }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -26,7 +28,11 @@ function People({ team, members }) {
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {members.map((m) => (
           <li key={m.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
-            <UserAvatar name={m.name} src={m.avatar} size="h-10 w-10 text-sm" />
+            <PersonHoverCard person={m} canMeet={String(m.id) !== String(meId)}>
+              <span tabIndex={0} className="block rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent/40" aria-label={`About ${m.name}`}>
+                <UserAvatar name={m.name} src={m.avatar} size="h-10 w-10 text-sm" />
+              </span>
+            </PersonHoverCard>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1.5 truncate font-semibold">{m.name}{m.is_reporting_manager && <Chip tone="ok">Leader</Chip>}</span>
               <span className="block truncate text-xs text-muted">{m.team_role || 'Member'}{m.shared_from_name ? ` · via ${m.shared_from_name}` : ''}</span>
@@ -44,12 +50,13 @@ export default function TeamSpace() {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const { spaces, isStarred, toggleStar } = useSpaces();
+  const { spaces, isStarred, toggleStar, reload: reloadSpaces } = useSpaces();
   const [members, setMembers] = useState([]);
   const [createSignal, setCreateSignal] = useState(0);
   const tab = TABS.some(([k]) => k === params.get('tab')) ? params.get('tab') : 'summary';
   const team = (spaces || []).find((t) => String(t.id) === String(teamId));
-  const { isCompanyAdmin, isOrgAdmin } = adminIdentity();
+  const { isCompanyAdmin, isOrgAdmin, user } = adminIdentity();
+  const canEditTeam = isCompanyAdmin || isOrgAdmin || user.role === 'manager';
 
   useEffect(() => { if (team) visitSpace(team.id); }, [team]);
   useEffect(() => { teams.getMembers(teamId).then((r) => setMembers(Array.isArray(r.data) ? r.data : [])).catch(() => setMembers([])); }, [teamId]);
@@ -73,7 +80,7 @@ export default function TeamSpace() {
       <header className="flex flex-col gap-3 border-b border-line pb-0">
         <nav aria-label="Breadcrumb" className="text-xs text-muted"><Link to="/spaces" className="hover:text-accent hover:underline">Spaces</Link> <span aria-hidden="true">/</span> {team.name}</nav>
         <div className="flex flex-wrap items-center gap-3">
-          <SpaceAvatar team={team} size="h-10 w-10 text-sm" />
+          <TeamPhoto team={team} size="h-10 w-10 text-sm" canEdit={canEditTeam} compact onChanged={reloadSpaces} />
           <div className="min-w-0">
             <h1 className="truncate text-[22px] font-bold tracking-tight">{team.name}</h1>
             <p className="text-xs text-muted">{team.type || 'General'} space · {members.length} people</p>
@@ -100,7 +107,7 @@ export default function TeamSpace() {
       {tab === 'summary' && <SpaceSummary teamId={team.id} onGo={go} />}
       {workTab && <Suspense fallback={<Loading>Loading tasks…</Loading>}><Dashboard space={{ teamId: team.id, view: tab, createSignal }} /></Suspense>}
       {tab === 'calendar' && <SpaceCalendar teamId={team.id} />}
-      {tab === 'people' && <People team={team} members={members} />}
+      {tab === 'people' && <People team={team} members={members} meId={user.id} />}
       {tab === 'sharing' && <TeamSharing team={team} allTeams={spaces} canEdit onChanged={() => {}} />}
     </div>
   );

@@ -10,7 +10,13 @@ export const spaceInitials = (name) => {
   return ((parts[0]?.[0] || '?') + (parts[1]?.[0] || '')).toUpperCase();
 };
 
+// The team's photo when it has one, else its colour and initials.
 export function SpaceAvatar({ team, size = 'h-6 w-6 text-[10px]', className = '' }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => { setBroken(false); }, [team?.photo]);
+  if (team?.photo && !broken) {
+    return <img src={team.photo} alt="" onError={() => setBroken(true)} className={`shrink-0 rounded-md bg-surface object-cover shadow-sm ${size} ${className}`} />;
+  }
   return (
     <span className={`grid shrink-0 place-items-center rounded-md font-bold text-white shadow-sm ${size} ${className}`} style={{ backgroundColor: spaceColor(team?.id) }} aria-hidden="true">
       {spaceInitials(team?.name)}

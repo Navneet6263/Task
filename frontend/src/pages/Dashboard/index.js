@@ -10,6 +10,7 @@ import TaskDetailModal from './TaskDetailModal';
 import TaskWorkspace from './TaskWorkspace';
 import { TaskExtrasProvider } from '../../components/taskExtras/taskExtrasStore';
 import TeamSnapshot from './TeamSnapshot';
+import TeamSpaceCard from './TeamSpaceCard';
 import './dashboardLayout.css';
 import { Banner, Button, EmptyState } from '../../ui';
 import { readPreference, writePreference } from '../../services/preferences';
@@ -86,6 +87,10 @@ const Dashboard = ({ space = null }) => {
       {selectedTeam && (
         <section className={`dashboard-workspace-grid grid ${showInsights && !space ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
           <div className="flex flex-col gap-3.5 min-w-0">
+            {!space && (
+              <TeamSpaceCard team={selectedTeam} stats={stats} members={members} meId={user.id}
+                filters={{ focusMode, setFocusMode, filterStatus, setFilterStatus, filterAssignee, setFilterAssignee }} />
+            )}
             {loading && <span role="status" className="text-xs font-semibold text-accent">Refreshing tasks...</span>}
             <TaskExtrasProvider tasks={taskList}>
             <TaskWorkspace hideViewSwitch={Boolean(space)}

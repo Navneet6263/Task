@@ -31,7 +31,7 @@ export default function EmployeesPanel({ orgs, sa, onChanged }) {
   }, [org]);
   useEffect(() => { setData(null); load(); }, [load]);
 
-  if (!org) return <p className="text-sm text-muted">This company has no organizations yet.</p>;
+  if (!org) return <p className="text-sm text-muted">This company has no workspaces yet.</p>;
   const hrmsOn = Boolean(org.modules?.hrms_login);
   const allOn = Boolean(org.modules?.all_tasks);
   const people = (data?.employees || []).filter((e) => e.login_code);
@@ -57,8 +57,8 @@ export default function EmployeesPanel({ orgs, sa, onChanged }) {
     <div className="flex flex-col gap-4">
       {orgs.length > 1 && (
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">Organization</span>
-          <Select aria-label="Organization" value={org.id} onChange={(e) => setOrgId(Number(e.target.value))} className="w-auto">
+          <span className="text-muted">Workspace</span>
+          <Select aria-label="Workspace" value={org.id} onChange={(e) => setOrgId(Number(e.target.value))} className="w-auto">
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </Select>
         </label>

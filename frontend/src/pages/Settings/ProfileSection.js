@@ -4,7 +4,8 @@ import { notify } from '../../services/feedback';
 import { Button, Card, Chip, Input, Modal } from '../../ui';
 import { updateStoredUser } from '../../services/accountState';
 import EmailVerifyForm from '../../components/account/EmailVerifyForm';
-import UserAvatar, { AVATAR_CHANGED, squarePhoto } from '../../components/account/UserAvatar';
+import UserAvatar, { AVATAR_CHANGED, photoProblem } from '../../components/account/UserAvatar';
+import PhotoCropper from '../../components/account/PhotoCropper';
 import Section, { SettingRow } from './Section';
 
 const roleText = (role) => ({ company_admin: 'Company admin', admin: 'Admin', manager: 'Manager', person: 'Member' }[role] || 'Member');
@@ -31,12 +32,19 @@ export default function ProfileSection({ user, teamCount }) {
     updateStoredUser({ avatar });
     window.dispatchEvent(new CustomEvent(AVATAR_CHANGED, { detail: avatar }));
   };
-  const uploadPhoto = async (event) => {
+  const [cropFile, setCropFile] = useState(null);
+  // Pick a picture, choose the part to keep in the crop window, then save it.
+  const uploadPhoto = (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    const problem = photoProblem(file);
+    if (problem) notify(problem); else setCropFile(file);
+  };
+  const savePhoto = async (image) => {
+    setCropFile(null);
     setPhotoBusy(true);
-    try { const image = await squarePhoto(file); const { data } = await users.uploadAvatar(image); await setPhoto(data.avatar); notify('Photo updated.', 'success'); }
+    try { const { data } = await users.uploadAvatar(image); await setPhoto(data.avatar); notify('Photo updated.', 'success'); }
     catch (err) { notify(err.response?.data?.error || err.message || 'Could not upload the photo.'); }
     finally { setPhotoBusy(false); }
   };
@@ -80,6 +88,7 @@ export default function ProfileSection({ user, teamCount }) {
             <span className="absolute inset-0 grid place-items-center rounded-full bg-black/50 text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">{photoBusy ? '…' : 'Change'}</span>
             <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Upload a profile photo" disabled={photoBusy} onChange={uploadPhoto} />
           </label>
+          {cropFile && <PhotoCropper file={cropFile} onCancel={() => setCropFile(null)} onDone={savePhoto} />}
           {profile.avatar && <button type="button" disabled={photoBusy} onClick={removePhoto} className="text-[11px] font-semibold text-muted hover:text-danger">Remove</button>}
         </div>
         <div className="min-w-0 flex-1">

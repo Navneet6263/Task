@@ -56,12 +56,12 @@ export default function AddAdminModal({ orgs, orgId: fixedOrg = null, people = [
   }
 
   return (
-    <Modal size="md" title="Add an admin" subtitle={org && fixedOrg ? `For ${org.name}` : 'Admins manage people, teams and settings in their organization.'} onClose={onClose}
+    <Modal size="md" title="Add an admin" subtitle={org && fixedOrg ? `For ${org.name}` : 'Admins manage people, teams and settings in their workspace.'} onClose={onClose}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!ready || busy} onClick={save}>{busy ? 'Adding…' : 'Make admin'}</Button></>}>
       <form onSubmit={save} className="flex flex-col gap-4">
         {!fixedOrg && orgs.length > 1 && (
-          <label className="flex flex-col gap-1"><span className="text-xs font-medium text-muted">Organization</span>
-            <Select aria-label="Organization" value={orgId} onChange={(e) => { setOrgId(e.target.value); setPersonId(''); }}>
+          <label className="flex flex-col gap-1"><span className="text-xs font-medium text-muted">Workspace</span>
+            <Select aria-label="Workspace" value={orgId} onChange={(e) => { setOrgId(e.target.value); setPersonId(''); }}>
               {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </Select></label>
         )}
@@ -77,7 +77,7 @@ export default function AddAdminModal({ orgs, orgId: fixedOrg = null, people = [
                 emptyText="Nobody with that name." options={candidates.map((p) => ({ value: String(p.id), label: p.name, hint: `${ROLE_LABEL[p.role] || 'Member'} · ${p.email}` }))} />
               <span className="text-xs text-muted">They keep their own sign-in. Only their role changes to Admin.</span>
             </label>
-          ) : <Banner tone="info">Nobody else is in {org?.name || 'this organization'} yet. Choose “A new person”.</Banner>
+          ) : <Banner tone="info">Nobody else is in {org?.name || 'this workspace'} yet. Choose “A new person”.</Banner>
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

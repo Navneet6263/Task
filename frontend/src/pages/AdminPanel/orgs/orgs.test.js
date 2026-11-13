@@ -34,7 +34,7 @@ const type = (el, value) => act(() => { Object.getOwnPropertyDescriptor(HTMLInpu
 const dialog = () => document.querySelector('[role="dialog"]');
 const inDialog = (label) => [...dialog().querySelectorAll('label')].find((l) => l.textContent.startsWith(label)).querySelector('input');
 
-test('each organization card shows its task code and admins, and an organization without an admin says so', async () => {
+test('each workspace card shows its task code and admins, and a workspace without an admin says so', async () => {
   await act(async () => r.render(<OrganizationsTab orgs={orgs} canCreate onChanged={() => {}} />));
   await flush();
   expect(c.textContent).toContain('Task numbers: ACC-142');
@@ -48,7 +48,7 @@ test('each organization card shows its task code and admins, and an organization
   expect(c.textContent).not.toContain('+ Add admin');
 });
 
-test('editing an organization changes its name and task code, and shows how task numbers will look', async () => {
+test('editing a workspace changes its name and task code, and shows how task numbers will look', async () => {
   h.patch = jest.fn(async () => ({ data: {} }));
   const onChanged = jest.fn();
   await act(async () => r.render(<OrganizationsTab orgs={orgs} canCreate onChanged={onChanged} />));
@@ -57,7 +57,7 @@ test('editing an organization changes its name and task code, and shows how task
   expect(dialog().textContent).toContain('Task numbers will look like ACC-142');
   expect(dialog().textContent).toContain('This does not change, because people already use it to join.');
   expect(button('Save changes').disabled).toBe(true);
-  type(inDialog('Organization name'), 'Accountrust');
+  type(inDialog('Workspace name'), 'Accountrust');
   type(inDialog('Task code'), 'a-c t!');
   expect(dialog().textContent).toContain('Task numbers will look like ACT-142');
   await act(async () => button('Save changes').click());
@@ -65,27 +65,27 @@ test('editing an organization changes its name and task code, and shows how task
   expect(onChanged).toHaveBeenCalled();
 });
 
-test('a new organization can get its admin in the same step, and the password is made and shown once', async () => {
+test('a new workspace can get its admin in the same step, and the password is made and shown once', async () => {
   h.post = jest.fn(async (url) => (url.endsWith('/organizations')
     ? { data: { id: 10, name: 'Leeds Office', company_code: 'ORG-LEE-3' } }
     : { data: { id: 90, email: 'priya@x.com', temporary_password: 'Ab3De-fG7hJ' } }));
   await act(async () => r.render(<OrganizationsTab orgs={orgs} canCreate onChanged={() => {}} />));
   await flush();
-  await act(async () => button('+ New organization').click());
-  expect(button('Create organization').disabled).toBe(true);
-  type(inDialog('Organization name'), 'Leeds Office');
+  await act(async () => button('+ New workspace').click());
+  expect(button('Create workspace').disabled).toBe(true);
+  type(inDialog('Workspace name'), 'Leeds Office');
   type(inDialog('Admin’s full name'), 'Priya Shah');
   type(inDialog('Admin’s work email'), 'Priya@x.com');
   // No password field to fill.
   expect(dialog().querySelector('input[type="password"]')).toBeNull();
-  await act(async () => button('Create organization').click());
+  await act(async () => button('Create workspace').click());
   expect(h.post.mock.calls).toEqual([['/company-admin/organizations', { name: 'Leeds Office' }], ['/company-admin/admins', { name: 'Priya Shah', email: 'Priya@x.com', org_id: 10 }]]);
   expect(dialog().textContent).toContain('ORG-LEE-3');
   expect(dialog().textContent).toContain('Ab3De-fG7hJ');
   expect(dialog().textContent).toContain('choose their own password the first time they sign in');
 });
 
-test('an admin can be someone already in the organization, picked by search; only their role changes', async () => {
+test('an admin can be someone already in the workspace, picked by search; only their role changes', async () => {
   h.put = jest.fn(async () => ({ data: {} }));
   await act(async () => r.render(<OrganizationsTab orgs={orgs} canCreate onChanged={() => {}} />));
   await flush();
@@ -144,12 +144,12 @@ test('any person can get a new password from the People tab: made for them, or t
   expect(dialog().textContent).toContain('They can sign in with this one.');
 });
 
-test('an organization admin can rename their own organization', async () => {
+test('a workspace admin can rename their own workspace', async () => {
   h.patch = jest.fn(async () => ({ data: {} }));
   await act(async () => r.render(<OrganizationsTab orgs={[{ id: 4, name: 'Niraj Jena Workspace', company_code: 'ORG-NIRA-1', user_count: 9, team_count: 2 }]} canCreate={false} canEdit onChanged={() => {}} />));
   expect(c.textContent).not.toContain('+ Add admin');
   await act(async () => button('Edit').click());
-  type(inDialog('Organization name'), 'Greencall');
+  type(inDialog('Workspace name'), 'Greencall');
   await act(async () => button('Save changes').click());
   expect(h.patch).toHaveBeenCalledWith('/admin/organization', { name: 'Greencall', task_prefix: '' });
 });

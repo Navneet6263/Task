@@ -26,7 +26,7 @@ test('handing a company over shows the new password once and then opens the new 
   expect(onReplaced).toHaveBeenCalledWith(30);
 });
 
-test('an account without organizations can be removed', async () => {
+test('an account without workspaces can be removed', async () => {
   const removeAdmin = jest.fn(async () => true);
   const onRemoved = jest.fn();
   await act(async () => r.render(<AccountPanel detail={{ ...detail, status: 'pending', organizations: [] }} sa={{ actions: { removeAdmin } }} onReplaced={() => {}} onRemoved={onRemoved} />));

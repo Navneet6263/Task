@@ -79,7 +79,7 @@ export default function TaskFormSection() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <Section title="Task form options" description="The dropdown choices people see when they create a task. Changes apply to everyone in this organization.">
+    <Section title="Task form options" description="The dropdown choices people see when they create a task. Changes apply to everyone in this workspace.">
       {!options ? <Loading>Loading options…</Loading> : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           {GROUPS.map((group) => <OptionGroup key={group.key} group={group} options={options[group.list] || []} taskTypes={options.task_types || []} onSaved={load} />)}

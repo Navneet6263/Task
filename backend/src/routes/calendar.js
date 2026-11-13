@@ -2,6 +2,8 @@ const router = require('express').Router();
 const { authenticate } = require('../middleware/auth');
 const { orgMembers } = require('../utils/orgMember');
 const { RESPONSES, fail, validateRange, validateEvent, sqlDateTime } = require('../services/calendarRules');
+const { emailInvites } = require('../services/inviteMail');
+const { isModuleEnabled } = require('../services/orgModules');
 const {
   db, route, requireMember, positive, EVENT_COLUMNS, shapeEvent, attendeesFor, loadVisibleEvent, validAttendees, notifyUsers,
 } = require('./calendarSupport');
@@ -9,6 +11,11 @@ const {
 router.use(authenticate, requireMember);
 
 const when = (event) => (event.all_day ? event.start_at.slice(0, 10) : event.start_at.replace('T', ' '));
+// The address people use to open GreenTask, for the link in invite emails.
+const appUrl = (req) => String(process.env.APP_FRONTEND_URL || process.env.FRONTEND_URL || req.headers.origin || '').replace(/\/+$/, '');
+// Email invites go out after the reply, so a slow mail server never holds the screen up.
+const mailLater = (req, ids, event) => emailInvites(req.orgId, req.userId, ids, event, { appUrl: appUrl(req) })
+  .catch((error) => console.error('[calendar] invite email failed', error.message));
 const label = (type) => ({ MEETING: 'meeting', REMINDER: 'reminder' }[type] || 'event');
 
 router.get('/members', route(async (req, res) => {
@@ -70,7 +77,9 @@ router.post('/events', route(async (req, res) => {
   if (attendees.length) {
     await notifyUsers(attendees, 'calendar_invite', `You are invited to the ${label(event.event_type)} "${event.title}" on ${when(event)}`, { event_id: result.insertId });
   }
-  res.status(201).json({ id: result.insertId });
+  const emailing = attendees.length > 0 && event.event_type !== 'REMINDER' && await isModuleEnabled(req.orgId, 'communications').catch(() => false);
+  res.status(201).json({ id: result.insertId, emailed: Boolean(emailing) });
+  if (emailing) mailLater(req, attendees, { ...event, id: result.insertId });
 }));
 
 router.put('/events/:id', route(async (req, res) => {
@@ -102,6 +111,7 @@ router.put('/events/:id', route(async (req, res) => {
   if (!result.rows?.[0]?.ok) throw fail(409, 'This event changed. Reload it and try again.');
   const kept = attendees.filter((id) => before.includes(id));
   if (added.length) await notifyUsers(added, 'calendar_invite', `You are invited to the ${label(event.event_type)} "${event.title}" on ${when(event)}`, { event_id: current.id });
+  if (added.length && event.event_type !== 'REMINDER') mailLater(req, added, { ...event, id: current.id });
   if (kept.length) await notifyUsers(kept, 'calendar_updated', `"${event.title}" was updated${timeChanged ? `: now on ${when(event)}` : ''}`, { event_id: current.id });
   if (removed.length) await notifyUsers(removed, 'calendar_cancelled', `You were removed from "${current.title}"`, { event_id: current.id });
   res.json({ id: current.id, version: version + 1 });

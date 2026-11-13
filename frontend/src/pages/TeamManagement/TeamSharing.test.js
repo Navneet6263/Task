@@ -16,7 +16,7 @@ afterEach(() => { act(() => r.unmount()); c.remove(); });
 const pick = async (selector, value) => act(async () => { const el = c.querySelector(selector); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event('change', { bubbles: true })); });
 const button = (text) => [...c.querySelectorAll('button')].find((b) => b.textContent === text);
 
-test('an admin makes two teams of the same organization work together', async () => {
+test('an admin makes two teams of the same workspace work together', async () => {
   h.sharing = jest.fn(async () => ({ data: { shared_with: [], sees: [] } }));
   h.share = jest.fn(async () => ({ data: { shared_with: [{ id: 8, name: 'Audit', members: 3, both_ways: true }], sees: [{ id: 8, name: 'Audit', members: 3, both_ways: true }] } }));
   const onChanged = jest.fn();

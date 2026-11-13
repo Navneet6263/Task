@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Button, Modal, Textarea } from '../../../ui';
 
 const FIELDS = [
-  ['max_companies', 'Organizations', 'How many workspaces this company can create'],
-  ['max_managers_per_company', 'Managers per organization', 'Team leads who can create teams and assign work'],
-  ['max_staff_per_company', 'Staff per organization', 'Employees who receive and complete tasks'],
+  ['max_companies', 'Workspaces', 'How many workspaces this company can create'],
+  ['max_managers_per_company', 'Managers per workspace', 'Team leads who can create teams and assign work'],
+  ['max_staff_per_company', 'Staff per workspace', 'Employees who receive and complete tasks'],
 ];
 const PRESETS = [['Starter', 1, 5, 20], ['Growth', 3, 10, 50], ['Scale', 10, 50, 500]];
 const valid = (value) => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 100000;

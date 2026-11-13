@@ -31,3 +31,38 @@ test('a photo link with a bad token is a plain 404, without touching the databas
   assert.equal(res.code, 404);
   assert.equal(queried, false);
 });
+
+test('a team photo is saved the same way, and only admins and managers of the team can change it', async (t) => {
+  const express = require('express');
+  const jwt = require('jsonwebtoken');
+  const calls = [];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM teams') && sql.includes('org_id')) return [[{ id: 7, org_id: 4 }]];
+    if (sql.includes('team_members')) return [[{ id: 1 }]];
+    return [{ affectedRows: 1 }];
+  });
+  process.env.JWT_SECRET = 'team-photo-test-only';
+  const app = express(); app.use(express.json({ limit: '1mb' })); app.use(require('../src/routes/teams'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const send = (role, method = 'POST', body = { image: asUrl('image/png', png) }) => fetch(`http://127.0.0.1:${server.address().port}/7/photo`, {
+    method, headers: { authorization: `Bearer ${jwt.sign({ id: 5, role, org_id: 4 }, process.env.JWT_SECRET)}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  assert.equal((await send('person')).status, 403);
+  const ok = await send('admin');
+  assert.equal(ok.status, 200);
+  const { photo } = await ok.json();
+  assert.match(photo, /\/api\/teams\/photo\/[a-f0-9]{32}$/);
+  const merge = calls.find((c) => c.sql.startsWith('MERGE team_photos'));
+  assert.equal(merge.params[0], 7);
+  assert.ok(Buffer.isBuffer(merge.params[3]));
+  assert.deepEqual(calls.find((c) => c.sql.startsWith('UPDATE teams SET photo')).params, [photo, 7]);
+  assert.equal((await send('admin', 'POST', { image: asUrl('image/svg+xml', Buffer.from('<svg/>')) })).status, 422);
+  assert.equal((await send('admin', 'DELETE')).status, 200);
+  assert.ok(calls.some((c) => c.sql.startsWith('DELETE FROM team_photos')));
+  const res = { status(code) { this.code = code; return this; }, end() { return this; } };
+  await avatars.serveTeamPhoto({ params: { token: 'nope' } }, res);
+  assert.equal(res.code, 404);
+});

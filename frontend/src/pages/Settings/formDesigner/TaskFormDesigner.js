@@ -52,7 +52,7 @@ export default function TaskFormDesigner() {
       const { data } = await taskFormApi.save(payload, state.version);
       const next = { ...state, layout: { ...data.layout, version: data.version }, version: data.version };
       setState(next); setDraft(clone(data.layout)); announceTaskFormChange(next);
-      notify('Form saved. Everyone in this organization now sees it when they create a task.', 'success');
+      notify('Form saved. Everyone in this workspace now sees it when they create a task.', 'success');
     } catch (err) {
       if (err.response?.status === 409) setConflict(err.response.data.error);
       notify(err.response?.data?.error || 'Could not save the form.');
@@ -80,7 +80,7 @@ export default function TaskFormDesigner() {
       <div className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${state.layout ? 'border-accent/30 bg-accent-soft' : 'border-line bg-subtle'}`}>
         <span className={`h-2.5 w-2.5 rounded-full ${state.layout ? 'bg-accent' : 'bg-muted'}`} />
         <span className="flex-1">{state.layout
-          ? <><strong>Live:</strong> “{state.layout.name}” is the Create task form for everyone in this organization.</>
+          ? <><strong>Live:</strong> “{state.layout.name}” is the Create task form for everyone in this workspace.</>
           : <><strong>Classic form in use.</strong> Pick a template below to customise it. Nothing changes for your team until you save.</>}</span>
         {state.layout && canEdit && <Button size="sm" variant="ghost" onClick={() => setConfirm({ kind: 'classic' })}>Back to classic form</Button>}
       </div>
