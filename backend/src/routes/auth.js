@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../config/database');
+const { companyOfCoAdmin } = require('../services/coAdmins');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
@@ -219,6 +220,21 @@ router.post('/login', async (req, res) => {
 
     if (companyAdmin && companyAdmin.status === 'approved') {
       return respondAsCompanyAdmin(companyAdmin);
+    }
+
+    // A co-admin signs in with their own account and gets the company admin view of that company.
+    const coCompany = await companyOfCoAdmin(user.id);
+    if (coCompany) {
+      const [coOrgs] = await db.execute('SELECT id FROM organizations WHERE company_admin_id = ? ORDER BY id ASC', [coCompany.id]);
+      const coOrgIds = coOrgs.map((org) => org.id);
+      const primary = coOrgIds.includes(user.org_id) ? user.org_id : coOrgIds[0];
+      const coToken = signSession({ id: user.id, role: 'company_admin', company_admin_id: coCompany.id, co_admin: true, org_id: primary, org_ids: coOrgIds }, req.body.remember);
+      return res.json({
+        token: coToken, id: user.id, name: user.name, email: normalizedEmail, role: 'company_admin', co_admin: true,
+        org_id: primary, org_ids: coOrgIds,
+        limits: { max_companies: coCompany.max_companies, max_managers: coCompany.max_managers_per_company, max_staff: coCompany.max_staff_per_company },
+        ...accountFlags(user),
+      });
     }
 
     const orgIds = await getAccessibleOrgIds(db, user.id, user.org_id);

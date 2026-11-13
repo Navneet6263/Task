@@ -9,7 +9,9 @@ const api = axios.create({
 
 // The sign-in has expired or is no longer valid: forget it and show the sign-in page.
 const SESSION_ENDED = ['Invalid token', 'Authentication required'];
-export const endedSession = (error) => error?.response?.status === 401 && SESSION_ENDED.includes(error.response.data?.error);
+// A removed company admin (co-admin) signs in again and carries on as a normal admin.
+export const endedSession = (error) => error?.response?.status === 401
+  && (SESSION_ENDED.includes(error.response.data?.error) || error.response.data?.code === 'CO_ADMIN_REMOVED');
 
 api.interceptors.response.use(response => {
   if (!['get', 'head'].includes(response.config.method)) clearQueryCache();

@@ -4,6 +4,7 @@ import { notify } from '../../services/feedback';
 import { Button, Chip, EmptyRow, Input, Modal, Segmented, Select, Table, TableWrap, Td, Th } from '../../ui';
 import { Person, ROLE_LABEL, ROLE_TONE, dateLabel, errorOf, lastSeen } from './adminShared';
 import LeadTeamsModal from '../TeamManagement/LeadTeamsModal';
+import { ResetPasswordModal } from './orgs/OrgModals';
 
 const ROLES = [['', 'Everyone'], ['admin', 'Admins'], ['manager', 'Managers'], ['person', 'Members']];
 const PAGE = 50;
@@ -20,6 +21,7 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
   const [loading, setLoading] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [leading, setLeading] = useState(null); // { person, role }: choosing the teams a manager leads
+  const [password, setPassword] = useState(null); // the person whose password is being changed
 
   useEffect(() => { const t = setTimeout(() => { setQuery(q.trim()); setPage(1); }, 300); return () => clearTimeout(t); }, [q]);
   const load = useCallback(async () => {
@@ -101,7 +103,12 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
                   <Td className="align-middle font-mono text-xs">{person.employee_id || '—'}</Td>
                   <Td className="whitespace-nowrap align-middle text-muted">{dateLabel(person.created_at)}</Td>
                   {!isCompanyAdmin && <Td className={`whitespace-nowrap align-middle ${lastSeen(person.last_active) === 'Online now' ? 'font-semibold text-accent' : 'text-muted'}`}>{lastSeen(person.last_active)}</Td>}
-                  <Td align="right" className="align-middle">{!self && <Button size="sm" variant="danger" className="opacity-60 group-hover:opacity-100" onClick={() => setConfirm(person)}>Remove</Button>}</Td>
+                  <Td align="right" className="whitespace-nowrap align-middle">{!self && (
+                    <span className="inline-flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setPassword(person)} aria-label={`Change ${person.name}’s password`}>Password</Button>
+                      <Button size="sm" variant="danger" className="opacity-60 group-hover:opacity-100" onClick={() => setConfirm(person)}>Remove</Button>
+                    </span>
+                  )}</Td>
                 </tr>
               );
             })}
@@ -116,6 +123,7 @@ export default function UsersTab({ isCompanyAdmin, orgs, initialOrg = '', selfId
           <Button size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
       )}
+      {password && <ResetPasswordModal person={password} endpoint={isCompanyAdmin ? `/company-admin/users/${password.id}/reset-password` : `/admin/users/${password.id}/reset-password`} onClose={() => setPassword(null)} />}
       {leading && <LeadTeamsModal person={leading.person} role={leading.role} onClose={() => setLeading(null)} onSave={(ids) => saveRole(leading.person, leading.role, ids)} />}
       {confirm && (
         <Modal title={`Remove ${confirm.name}?`} onClose={() => setConfirm(null)}

@@ -44,6 +44,8 @@ test('a hand-over moves every organization in one transaction and closes the old
   const move = calls.find((c) => c.sql.startsWith('SET XACT_ABORT ON'));
   assert.match(move.sql, /UPDATE organizations SET company_admin_id = @new_id WHERE company_admin_id = \?/);
   assert.match(move.sql, /DELETE FROM company_admins WHERE id = \?/);
+  // Co-admins move with the company.
+  assert.match(move.sql, /UPDATE company_co_admins SET company_admin_id = @new_id WHERE company_admin_id = \?/);
   assert.ok(await bcrypt.compare(result.password, move.params[2]), 'only the hash is stored');
   const closed = calls.find((c) => c.sql.startsWith('UPDATE users SET is_deleted = TRUE'));
   assert.deepEqual(closed.params, ['old@example.com', 99]);
@@ -55,12 +57,13 @@ test('a company that still has organizations cannot be deleted, only handed over
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.startsWith('SELECT id, name, email, status FROM company_admins')) return [[{ id: 4, name: 'A', email: 'a@x.com', status: 'pending' }]];
     if (sql.startsWith('SELECT COUNT(*) AS orgs')) return [[{ orgs }]];
-    if (sql.startsWith('DELETE')) { deleted.push(params); return [{ affectedRows: 1 }]; }
+    if (sql.startsWith('DELETE')) { deleted.push([sql.split(' ')[2], ...params]); return [{ affectedRows: 1 }]; }
     throw Error(`Unexpected query: ${sql.slice(0, 50)}`);
   });
   await assert.rejects(accounts.removeCompanyAdmin(4), /Hand it over/);
   assert.equal(deleted.length, 0);
   orgs = 0;
   await accounts.removeCompanyAdmin(4);
-  assert.deepEqual(deleted, [[4]]);
+  // Its co-admins go with it.
+  assert.deepEqual(deleted, [['company_co_admins', 4], ['company_admins', 4]]);
 });

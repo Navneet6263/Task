@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../config/database');
 const { authenticate, adminOnly } = require('../middleware/auth');
 const { pickedLeads, applyLeadsForRole, leadsFor } = require('../services/teamLeads');
+const { resetUserPassword } = require('../services/passwordReset');
 
 const router = express.Router();
 
@@ -27,6 +28,46 @@ router.get('/organizations', async (req, res) => {
 
 router.post('/organizations', async (req, res) => {
   return res.status(403).json({ error: 'Organization creation is managed by company admin' });
+});
+
+// An admin renames the organization they are in, and sets the letters in front of task numbers.
+// The company code never changes here: people already use it to join.
+const PREFIX_RE = /^[A-Z][A-Z0-9]{1,5}$/;
+router.patch('/organization', async (req, res) => {
+  try {
+    if (!req.orgId) return res.status(422).json({ error: 'Organization context missing' });
+    const sets = [];
+    const params = [];
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name ?? '').trim().replace(/\s+/g, ' ');
+      if (name.length < 2) return res.status(422).json({ error: 'Type the organization name', fields: { name: 'Name is required' } });
+      if (name.length > 120) return res.status(422).json({ error: 'Organization name must be at most 120 characters', fields: { name: 'Too long' } });
+      sets.push('name = ?'); params.push(name);
+    }
+    if (req.body?.task_prefix !== undefined) {
+      const prefix = String(req.body.task_prefix ?? '').trim().toUpperCase();
+      if (prefix && !PREFIX_RE.test(prefix)) return res.status(422).json({ error: 'Task code must be 2 to 6 letters or numbers, starting with a letter', fields: { task_prefix: '2 to 6 letters or numbers' } });
+      sets.push('task_prefix = ?'); params.push(prefix || null);
+    }
+    if (!sets.length) return res.status(422).json({ error: 'Nothing to change' });
+    await db.execute(`UPDATE organizations SET ${sets.join(', ')} WHERE id = ?`, [...params, req.orgId]);
+    const [[org]] = await db.execute('SELECT id, name, company_code, task_prefix FROM organizations WHERE id = ?', [req.orgId]);
+    res.json(org);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// A new password for someone in this organization: typed here or made for them, shown once.
+router.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'Change your own password from your profile.' });
+    const [[target]] = await db.execute('SELECT id, email, org_id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE', [req.params.id, req.orgId]);
+    if (!target) return res.status(404).json({ error: 'User not found in your organization' });
+    res.json(await resetUserPassword(target, { password: req.body?.password, mustChange: req.body?.must_change !== false }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message, ...(error.fields ? { fields: error.fields } : {}) });
+  }
 });
 
 router.delete('/organizations/:id', async (req, res) => {

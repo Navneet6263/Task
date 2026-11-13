@@ -6,6 +6,9 @@ const { generateCompanyCode } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
 const { ensureUserOrgAccessTable } = require('../utils/orgAccess');
 const { pickedLeads, applyLeadsForRole, leadsFor } = require('../services/teamLeads');
+const { strongTemporaryPassword } = require('../services/companyAccounts');
+const coAdmins = require('../services/coAdmins');
+const { resetUserPassword } = require('../services/passwordReset');
 
 const router = express.Router();
 
@@ -159,6 +162,37 @@ router.post('/organizations', async (req, res) => {
   }
 });
 
+// Edit an organization: its name and the letters in front of task numbers (ACC-142).
+// The company code never changes here: people already use it to join.
+const PREFIX_RE = /^[A-Z][A-Z0-9]{1,5}$/;
+router.patch('/organizations/:id', async (req, res) => {
+  try {
+    const orgId = Number(req.params.id);
+    if (!orgId || !(await orgBelongsToCompanyAdmin(req.companyAdminId, orgId))) return res.status(404).json({ error: 'Organization not found' });
+    const sets = [];
+    const params = [];
+    if (req.body?.name !== undefined) {
+      const name = String(req.body.name ?? '').trim().replace(/\s+/g, ' ');
+      if (name.length < 2) return res.status(422).json({ error: 'Type the organization name', fields: { name: 'Name is required' } });
+      if (name.length > 120) return res.status(422).json({ error: 'Organization name must be at most 120 characters', fields: { name: 'Too long' } });
+      sets.push('name = ?'); params.push(name);
+    }
+    if (req.body?.task_prefix !== undefined) {
+      const prefix = String(req.body.task_prefix ?? '').trim().toUpperCase();
+      if (prefix && !PREFIX_RE.test(prefix)) {
+        return res.status(422).json({ error: 'Task code must be 2 to 6 letters or numbers, starting with a letter', fields: { task_prefix: '2 to 6 letters or numbers' } });
+      }
+      sets.push('task_prefix = ?'); params.push(prefix || null);
+    }
+    if (!sets.length) return res.status(422).json({ error: 'Nothing to change' });
+    await db.execute(`UPDATE organizations SET ${sets.join(', ')} WHERE id = ? AND company_admin_id = ?`, [...params, orgId, req.companyAdminId]);
+    const [[org]] = await db.execute('SELECT id, name, company_code, task_prefix FROM organizations WHERE id = ?', [orgId]);
+    res.json(org);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.get('/users', async (req, res) => {
   try {
     const orgIds = await getCompanyOrgIds(req.companyAdminId);
@@ -228,13 +262,15 @@ router.get('/users/search', async (req, res) => {
   }
 });
 
+// A new organization admin. The password is made here and shown once; they choose their own at first sign-in.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 router.post('/admins', async (req, res) => {
   try {
-    const { name, email, password, org_id, mobile, employee_id } = req.body;
-
-    if (!name || !email || !password || !org_id) {
-      return res.status(422).json({ error: 'name, email, password, org_id are required' });
-    }
+    const { org_id, mobile, employee_id } = req.body || {};
+    const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    if (!name || !email || !org_id) return res.status(422).json({ error: 'Name, email and organization are required' });
+    if (!EMAIL_RE.test(email)) return res.status(422).json({ error: 'Type a valid email address', fields: { email: 'Not a valid email' } });
 
     const orgId = Number(org_id);
     if (!orgId || !(await orgBelongsToCompanyAdmin(req.companyAdminId, orgId))) {
@@ -256,20 +292,17 @@ router.post('/admins', async (req, res) => {
       return res.status(403).json({ error: 'Manager and admin limit reached for this organization' });
     }
 
+    const [[taken]] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE', [email]);
+    if (taken) return res.status(409).json({ error: `${email} already has an account. Pick them from "Someone already here" instead.`, fields: { email: 'Already has an account' } });
+
+    const password = String(req.body?.password || '') || strongTemporaryPassword();
+    if (password.length < 8) return res.status(422).json({ error: 'The password must be at least 8 characters', fields: { password: 'At least 8 characters' } });
     const hashed = await bcrypt.hash(password, 10);
     const safeEmployeeId = await ensureUniqueEmployeeId(db, employee_id, 'ADM');
     const [result] = await db.execute(
-      `INSERT INTO users (name, email, password, mobile, employee_id, role, org_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        String(name).trim(),
-        String(email).trim().toLowerCase(),
-        hashed,
-        mobile || null,
-        safeEmployeeId,
-        'admin',
-        orgId,
-      ]
+      `INSERT INTO users (name, email, password, mobile, employee_id, role, org_id, must_change_password)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      [name, email, hashed, mobile || null, safeEmployeeId, 'admin', orgId]
     );
 
     res.status(201).json({
@@ -277,6 +310,9 @@ router.post('/admins', async (req, res) => {
       id: result.insertId,
       role: 'admin',
       org_id: orgId,
+      email,
+      // Shown once on screen; only the hash is stored.
+      temporary_password: password,
     });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY' || error.number === 2627 || error.number === 2601) {
@@ -285,6 +321,56 @@ router.post('/admins', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// A new password for someone in one of your organizations: typed here or made for them, shown once.
+router.post('/users/:id/reset-password', async (req, res) => {
+  try {
+    const [[target]] = await db.execute(
+      `SELECT u.id, u.email, u.org_id FROM users u JOIN organizations o ON o.id = u.org_id
+       WHERE u.id = ? AND u.is_deleted = FALSE AND o.company_admin_id = ?`,
+      [Number(req.params.id), req.companyAdminId]
+    );
+    if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (Number(target.id) === Number(req.userId)) return res.status(400).json({ error: 'Change your own password from your profile.' });
+    res.json(await resetUserPassword(target, { password: req.body?.password, mustChange: req.body?.must_change !== false }));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message, ...(error.fields ? { fields: error.fields } : {}) });
+  }
+});
+
+// Company admins: the owner and the co-admins who run the company with them.
+router.get('/company-admins', async (req, res) => {
+  try {
+    const [[owner]] = await db.execute('SELECT id, name, email FROM company_admins WHERE id = ?', [req.companyAdminId]);
+    res.json({ owner, co_admins: await coAdmins.listCoAdmins(req.companyAdminId), me: req.userId });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/company-admins', async (req, res) => {
+  try {
+    const user = await coAdmins.addCoAdmin(req.companyAdminId, Number(req.body?.user_id), req.userId);
+    res.status(201).json({ id: user.id, name: user.name, email: user.email });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+router.delete('/company-admins/:userId', async (req, res) => {
+  try {
+    await coAdmins.removeCoAdmin(req.companyAdminId, Number(req.params.userId));
+    res.json({ message: 'Removed as company admin' });
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.message });
+  }
+});
+
+const coAdminGuard = async (userId, res) => {
+  if (!(await coAdmins.isCoAdmin(userId))) return false;
+  res.status(409).json({ error: 'This person is a company admin. Remove them under Company admins first.' });
+  return true;
+};
 
 router.put('/users/:id/role', async (req, res) => {
   try {
@@ -301,6 +387,7 @@ router.put('/users/:id/role', async (req, res) => {
       [targetUserId, req.companyAdminId]
     );
     if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (role !== 'admin' && await coAdminGuard(targetUserId, res)) return;
 
     const [[companyAdmin]] = await db.execute(
       'SELECT email FROM company_admins WHERE id = ?',
@@ -347,6 +434,7 @@ router.delete('/users/:id', async (req, res) => {
     );
 
     if (!target) return res.status(404).json({ error: 'User not found in your organizations' });
+    if (await coAdminGuard(targetUserId, res)) return;
 
     const [[companyAdmin]] = await db.execute(
       'SELECT email FROM company_admins WHERE id = ?',

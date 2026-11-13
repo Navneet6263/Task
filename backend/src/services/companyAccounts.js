@@ -81,12 +81,14 @@ async function handOverCompany(oldId, body) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', GETDATE(), ?, ?, ?);
      SET @new_id = SCOPE_IDENTITY();
      UPDATE organizations SET company_admin_id = @new_id WHERE company_admin_id = ?;
+     IF OBJECT_ID('dbo.company_co_admins', 'U') IS NOT NULL
+       UPDATE company_co_admins SET company_admin_id = @new_id WHERE company_admin_id = ?;
      DELETE FROM company_admins WHERE id = ?;
      COMMIT;
      SELECT @new_id AS insertId;`,
     [person.name, person.email, await bcrypt.hash(password, 10), person.mobile, old.company_description,
       old.expected_companies, old.expected_managers, old.expected_staff,
-      old.max_companies, old.max_managers_per_company, old.max_staff_per_company, oldId, oldId]
+      old.max_companies, old.max_managers_per_company, old.max_staff_per_company, oldId, oldId, oldId]
   );
   const newId = Number(moved.insertId);
   const bootstrap = await ensureCompanyAdminBootstrap(db, newId);
@@ -104,6 +106,7 @@ async function removeCompanyAdmin(id) {
   if (!ca) throw fail(404, 'Company admin not found');
   const [[{ orgs }]] = await db.execute('SELECT COUNT(*) AS orgs FROM organizations WHERE company_admin_id = ?', [id]);
   if (Number(orgs) > 0) throw fail(409, 'This company still has organizations. Hand it over to a new admin instead.');
+  await db.execute('DELETE FROM company_co_admins WHERE company_admin_id = ?', [id]);
   await db.execute('DELETE FROM company_admins WHERE id = ?', [id]);
   return ca;
 }

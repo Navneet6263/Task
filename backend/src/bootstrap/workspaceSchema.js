@@ -50,6 +50,7 @@ const ensureWorkspaceSchema = async () => {
   await require('./taskExtrasSchema').ensureTaskExtrasSchema();
   await require('./developerSchema').ensureDeveloperSchema();
   await require('../services/avatars').ensureAvatarSchema();
+  await require('../services/coAdmins').ensureCoAdminSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };
