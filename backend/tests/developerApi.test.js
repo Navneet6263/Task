@@ -65,6 +65,8 @@ function fakeDb(t, overrides = {}) {
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.includes('FROM api_keys k JOIN users u')) return [[params[0] === state.key.key_prefix ? state.key : undefined].filter(Boolean)];
     if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: state.enabled }]];
+    // The shared per-minute counter: always well under the limit here, so tests never depend on timing.
+    if (sql.startsWith('MERGE api_rate_windows')) return [{ rows: [{ used: 1 }] }];
     if (sql.startsWith('INSERT INTO api_request_logs') || sql.startsWith('UPDATE api_keys')) return [{}];
     if (sql.startsWith('SELECT id, name FROM teams WHERE org_id')) return [params[0] === 1 ? [{ id: 7, name: 'Payroll' }, { id: 8, name: 'Audit' }] : []];
     if (sql.startsWith('SELECT u.id FROM users u WHERE u.email')) return [params[0] === 'asha@acme.com' && params[1] === 1 ? [{ id: 12 }] : []];

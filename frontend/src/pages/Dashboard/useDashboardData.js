@@ -9,7 +9,8 @@ const EMPTY_SUMMARY = {
   overdue: 0, high: 0, medium: 0, low: 0,
 };
 
-export const useDashboardData = () => {
+// `teamId` pins the workspace to one team (a team's space page); without it the last team is used.
+export const useDashboardData = ({ teamId } = {}) => {
   const location = useLocation();
   const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const [teamList, setTeamList] = useState([]);
@@ -55,12 +56,13 @@ export const useDashboardData = () => {
     teams.getAll().then((response) => {
       const list = Array.isArray(response.data) ? response.data : [];
       setTeamList(list);
-      if (list.length > 0) selectTeam(list.find(team => team.id === readPreference('team', null)) || list[0]);
+      const wanted = teamId ? Number(teamId) : readPreference('team', null);
+      if (list.length > 0) selectTeam(list.find(team => Number(team.id) === Number(wanted)) || list[0]);
     }).catch(() => setLoadError('Unable to load teams.'));
     tasks.getClients().then((response) => {
       setClientNameOptions(Array.isArray(response.data) ? response.data : []);
     }).catch(() => {});
-  }, [selectTeam, teamRetry]);
+  }, [selectTeam, teamRetry, teamId]);
   useEffect(() => {
     setClientNameOptions(prev => [...new Set([...prev, ...taskList.map(task => task.client_name).filter(Boolean)])].sort());
   }, [taskList]);

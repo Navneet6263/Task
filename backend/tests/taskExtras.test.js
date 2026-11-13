@@ -97,3 +97,40 @@ test('searching ACC-142 finds task 142 in the task list, and labels filter it', 
   assert.ok(filtered.params.includes(142));
   assert.match(filtered.sql, /ll\.label_id IN \(\?,\?\)/);
 });
+
+test('a space summary is only for people who can see the team', async (t) => {
+  const send = await (async () => {
+    process.env.JWT_SECRET = 'task-extras-test-only';
+    const app = express(); app.use(express.json()); app.use(require('../src/routes/teams'));
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+    const token = jwt.sign({ id: 10, role: 'person', org_id: 1 }, process.env.JWT_SECRET);
+    return (path) => fetch(`http://127.0.0.1:${server.address().port}${path}`, { headers: { authorization: `Bearer ${token}` } });
+  })();
+  let member = false;
+  t.mock.method(db, 'execute', async (sql) => {
+    if (sql.startsWith('SELECT tm.id')) return [member ? [{ id: 1 }] : []];
+    if (sql.includes('COUNT(*) AS total')) return [[{ total: 3, done_7d: 1 }]];
+    return [[]];
+  });
+  assert.equal((await send('/7/summary')).status, 403);
+  member = true;
+  const ok = await send('/7/summary');
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).counts.total, 3);
+});
+
+test('only admins pick the kind of work, and only new companies are asked', async (t) => {
+  t.mock.method(db, 'execute', async (sql) => {
+    if (sql.startsWith('SELECT work_type, created_at')) return [[{ work_type: null, created_at: new Date(Date.now() - 30 * 86400000) }]];
+    if (sql.startsWith('SELECT task_prefix')) return [[{ company_code: 'ORG-ACCO-1' }]];
+    return [[]];
+  });
+  const asPerson = await client(t, { id: 10, role: 'person', org_id: 1 });
+  assert.equal((await asPerson('/meta/work-type', 'PUT', { work_type: 'accounting' })).status, 403);
+  const meta = await (await asPerson('/meta')).json();
+  assert.equal(meta.ask_work_type, false, 'a month-old company is never asked');
+  const asAdmin = await client(t, { id: 10, role: 'admin', org_id: 1 });
+  assert.equal((await asAdmin('/meta/work-type', 'PUT', { work_type: 'astrology' })).status, 422);
+});

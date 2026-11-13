@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
 import { exportTimesheetReport } from './exportTimesheet';
-import { Banner, Button, Card, EmptyState, ErrorText, Field, Input, Select } from '../../../ui';
+import { Banner, Button, Card, EmptyState, ErrorText, Field, Input, SearchSelect, Select } from '../../../ui';
 import { errorOf } from '../format';
 import { ClientBreakdown, HoursByPerson, ReportStats } from './ReportSections';
 import { defaultScope, hasTeam, teamPeople } from '../team';
@@ -46,9 +46,8 @@ export default function ReportsTab({ config }) {
       <Card className="p-4">
         <form onSubmit={run} className="flex flex-wrap items-end gap-3">
           <Field label="Client" htmlFor="ts-report-client">
-            <Select id="ts-report-client" className="min-w-[190px]" value={filters.client_id} onChange={set('client_id')}>
-              <option value="">All clients</option>{config.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
-            </Select>
+            <SearchSelect id="ts-report-client" className="min-w-[220px]" placeholder="All clients" value={filters.client_id} onChange={(value) => setFilters((prev) => ({ ...prev, client_id: value }))}
+              options={config.clients.map((client) => ({ value: String(client.id), label: client.name }))} emptyText="No client with that name." />
           </Field>
           <Field label="From" htmlFor="ts-report-from"><Input id="ts-report-from" type="date" required value={filters.from} max={filters.to} onChange={set('from')} /></Field>
           <Field label="To" htmlFor="ts-report-to"><Input id="ts-report-to" type="date" required value={filters.to} min={filters.from} onChange={set('to')} /></Field>

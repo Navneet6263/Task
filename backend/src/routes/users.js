@@ -75,6 +75,22 @@ router.put('/me', authenticate, async (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+// Profile photo: a small square picture made in the browser (PNG, JPEG or WebP, under 300 KB).
+router.post('/me/avatar', authenticate, async (req, res) => {
+  try {
+    const { saveAvatar } = require('../services/avatars');
+    const url = await saveAvatar(req.userId, req.body?.image, `${req.protocol}://${req.get('host')}`);
+    res.json({ avatar: url });
+  } catch (error) { res.status(error.status || 400).json({ error: error.status ? error.message : 'Could not save the photo' }); }
+});
+
+router.delete('/me/avatar', authenticate, async (req, res) => {
+  try {
+    await require('../services/avatars').removeAvatar(req.userId);
+    res.json({ avatar: null });
+  } catch (error) { res.status(400).json({ error: 'Could not remove the photo' }); }
+});
+
 router.put('/me/password', authenticate, async (req, res) => {
   try {
     const { current, newPass } = req.body;

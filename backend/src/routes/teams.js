@@ -278,6 +278,54 @@ router.put('/:teamId/leader', authenticate, async (req, res) => {
   } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not change the team leader' }); }
 });
 
+// A team's Summary page: the last 7 days, where work stands, who carries it, and what just happened.
+router.get('/:teamId/summary', authenticate, async (req, res) => {
+  try {
+    const teamId = Number(req.params.teamId);
+    if (!await canAccessTeam(req, teamId)) return res.status(403).json({ error: 'Team access denied' });
+    const [[counts]] = await db.execute(
+      `SELECT COUNT(*) AS total,
+         SUM(CASE WHEN status = 'TODO' THEN 1 ELSE 0 END) AS todo,
+         SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
+         SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END) AS done,
+         SUM(CASE WHEN status = 'DONE' AND completed_at >= DATEADD(DAY, -7, SYSDATETIME()) THEN 1 ELSE 0 END) AS done_7d,
+         SUM(CASE WHEN created_at >= DATEADD(DAY, -7, SYSDATETIME()) THEN 1 ELSE 0 END) AS created_7d,
+         SUM(CASE WHEN updated_at >= DATEADD(DAY, -7, SYSDATETIME()) THEN 1 ELSE 0 END) AS updated_7d,
+         SUM(CASE WHEN status <> 'DONE' AND due_date >= CAST(GETDATE() AS DATE) AND due_date <= DATEADD(DAY, 7, CAST(GETDATE() AS DATE)) THEN 1 ELSE 0 END) AS due_7d,
+         SUM(CASE WHEN status <> 'DONE' AND due_date < CAST(GETDATE() AS DATE) THEN 1 ELSE 0 END) AS overdue,
+         SUM(CASE WHEN status <> 'DONE' AND priority = 'HIGH' THEN 1 ELSE 0 END) AS high,
+         SUM(CASE WHEN status <> 'DONE' AND priority = 'MEDIUM' THEN 1 ELSE 0 END) AS medium,
+         SUM(CASE WHEN status <> 'DONE' AND priority = 'LOW' THEN 1 ELSE 0 END) AS low
+       FROM tasks WHERE team_id = ? AND is_deleted = FALSE`, [teamId]
+    );
+    const [types] = await db.execute(
+      'SELECT issue_type, COUNT(*) AS count FROM tasks WHERE team_id = ? AND is_deleted = FALSE GROUP BY issue_type ORDER BY COUNT(*) DESC', [teamId]
+    );
+    const [workload] = await db.execute(
+      `SELECT TOP 8 t.assigned_to AS id, u.name,
+         SUM(CASE WHEN t.status <> 'DONE' THEN 1 ELSE 0 END) AS open_tasks,
+         SUM(CASE WHEN t.status <> 'DONE' AND t.due_date < CAST(GETDATE() AS DATE) THEN 1 ELSE 0 END) AS overdue,
+         SUM(CASE WHEN t.status = 'DONE' AND t.completed_at >= DATEADD(DAY, -30, SYSDATETIME()) THEN 1 ELSE 0 END) AS done_30d
+       FROM tasks t LEFT JOIN users u ON u.id = t.assigned_to
+       WHERE t.team_id = ? AND t.is_deleted = FALSE
+       GROUP BY t.assigned_to, u.name
+       ORDER BY SUM(CASE WHEN t.status <> 'DONE' THEN 1 ELSE 0 END) DESC`, [teamId]
+    );
+    const [activity] = await db.execute(
+      `SELECT TOP 12 a.id, a.activity, a.task_details, a.task_id, a.created_at, u.name AS user_name
+       FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE a.team_id = ? ORDER BY a.id DESC`, [teamId]
+    );
+    const num = (v) => Number(v || 0);
+    res.json({
+      counts: Object.fromEntries(Object.entries(counts || {}).map(([k, v]) => [k, num(v)])),
+      types: types.map((t) => ({ type: t.issue_type || 'task', count: num(t.count) })),
+      workload: workload.map((w) => ({ id: w.id, name: w.name || 'Unassigned', open: num(w.open_tasks), overdue: num(w.overdue), done_30d: num(w.done_30d) })),
+      activity,
+    });
+  } catch (error) { res.status(500).json({ error: 'Could not load the summary' }); }
+});
+
 /* Team sharing: which teams see and work on which team's tasks. Only admins decide. */
 router.get('/sharing/overview', authenticate, async (req, res) => {
   try {

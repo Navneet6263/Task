@@ -92,3 +92,35 @@ test('agents: managers add them, clients sit under one, and a task takes its cli
   assert.equal(await resolveAgent(1, null, 'ABC One Ltd'), 3);
   await assert.rejects(resolveAgent(1, 4, 'ABC One Ltd'), /belongs to ABR Accountants/);
 });
+
+test('a client list is uploaded under one agent: new names go in, existing ones are left alone', async (t) => {
+  let insert;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 5, role: 'manager' }]];
+    if (sql.startsWith('SELECT id FROM org_agents WHERE id = ?')) { assert.deepEqual(params, [3, 8]); return [[{ id: 3 }]]; }
+    if (sql.startsWith('SELECT c.name, c.is_active, c.agent_id FROM org_clients c JOIN (VALUES (?), (?))')) return [[{ name: 'Core Talent Group Ltd', is_active: 1, agent_id: 3 }]];
+    if (sql.startsWith('INSERT INTO org_clients')) { insert = params; return [{ affectedRows: 1 }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 70)}`);
+  });
+  const send = await client(t, { id: 5, role: 'manager', org_id: 8 });
+  const response = await send('/import', 'POST', { agent_id: 3, names: ['  Zyplo   Limited ', 'Core Talent Group Ltd', 'zyplo limited', '', null] });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { added: 1, invalid: 2, existing: [{ name: 'Core Talent Group Ltd', is_active: true, agent_id: 3 }] });
+  // Organization and creator come from the token; names are cleaned and repeated ones sent once.
+  assert.deepEqual(insert, [8, 5, 3, 'Zyplo Limited', 'Core Talent Group Ltd', 8]);
+});
+
+test('client upload is for managers and admins, and takes at most 200 names', async (t) => {
+  let role = 'person';
+  const writes = [];
+  t.mock.method(db, 'execute', async (sql) => {
+    if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 5, role }]];
+    writes.push(sql); return [[]];
+  });
+  const send = await client(t, { id: 5, role: 'person', org_id: 8 });
+  assert.equal((await send('/import', 'POST', { names: ['A Ltd'] })).status, 403);
+  role = 'admin';
+  assert.equal((await send('/import', 'POST', { names: Array.from({ length: 201 }, (_, i) => `Client ${i}`) })).status, 422);
+  assert.equal((await send('/import', 'POST', { names: [] })).status, 422);
+  assert.equal(writes.length, 0);
+});

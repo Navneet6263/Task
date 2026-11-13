@@ -5,7 +5,7 @@ import { updatesApi } from './Updates/updatesApi';
 import useWorkspaceSocket from './useWorkspaceSocket';
 import useShellUnread from './useShellUnread';
 import { clearAuthentication } from '../services/preferences';
-import { parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon } from './LayoutParts';
+import { parseStoredUser, getTokenRole, UploadIcon, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon } from './LayoutParts';
 export default function useLayout() {
   const navigate = useNavigate();
   const hasCompanyToken = Boolean(localStorage.getItem('company_token'));
@@ -192,6 +192,14 @@ export default function useLayout() {
             },
           ]
         : []),
+      // Added on request: one place for every sheet upload (tasks, clients, timesheet entries).
+      {
+        path: '/bulk-upload',
+        label: 'Bulk Upload',
+        note: 'Tasks, clients and timesheets from a sheet',
+        section: 'Main',
+        icon: <UploadIcon />,
+      },
       {
         path: '/settings',
         label: 'Settings',

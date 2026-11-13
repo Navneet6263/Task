@@ -33,6 +33,11 @@ beforeEach(() => {
   c = document.createElement('div'); document.body.append(c); r = createRoot(c);
 });
 afterEach(() => { act(() => r.unmount()); c.remove(); announceTaskFormChange(null); });
+const choose = async (sel, text, option = text) => {
+  const el = document.querySelector(sel);
+  act(() => { el.focus(); el.dispatchEvent(new FocusEvent('focus')); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, text); el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent.includes(option)).click());
+};
 
 test('manager picks a template, renames a question, adds one and saves', async () => {
   h.get = async () => ({ data: { layout: null, version: 0, can_edit: true, templates } });
@@ -63,12 +68,12 @@ test('the create task window uses the designed form and blocks missing answers',
   await act(async () => {});
   expect(document.body.textContent).toContain('Client job sheet');
   const clientSelect = document.querySelector('#compose-client_name');
-  expect(clientSelect.tagName).toBe('SELECT');
+  expect(clientSelect.getAttribute('role')).toBe('combobox');
   expect(form.custom_fields.date_worked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   await act(async () => document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   expect(create).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain('Client is required');
-  act(() => { type(document.querySelector('#compose-client_name'), 'Riverside Motors'); });
+  await choose('#compose-client_name', 'river', 'Riverside Motors');
   act(() => { type(document.querySelector('#compose-job_type'), 'Payroll'); });
   act(() => { type(document.querySelector('#compose-hours'), '2.5'); });
   await act(async () => document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));

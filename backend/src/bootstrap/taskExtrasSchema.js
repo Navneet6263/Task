@@ -10,6 +10,8 @@ async function ensureTaskExtrasSchema() {
   `);
   // Letters before a task number, e.g. ACC in ACC-142. Empty means "taken from the company code".
   await db.query(`IF COL_LENGTH('dbo.organizations', 'task_prefix') IS NULL ALTER TABLE dbo.organizations ADD task_prefix NVARCHAR(10) NULL;`);
+  // What the company mostly works on, picked once by an admin; it seeds labels that fit that work.
+  await db.query(`IF COL_LENGTH('dbo.organizations', 'work_type') IS NULL ALTER TABLE dbo.organizations ADD work_type NVARCHAR(40) NULL;`);
   await db.query(`
     IF OBJECT_ID('dbo.task_labels', 'U') IS NULL
       CREATE TABLE dbo.task_labels (

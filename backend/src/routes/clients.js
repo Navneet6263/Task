@@ -76,6 +76,39 @@ router.post('/', route(async (req, res) => {
   }
 }));
 
+// Upload a client list: many names at once under one agent (or none). Names already in the list
+// are left exactly as they are, so uploading the same sheet twice changes nothing.
+const IMPORT_NAMES = 200;
+router.post('/import', route(async (req, res) => {
+  await requireManager(req);
+  const raw = req.body?.names;
+  if (!Array.isArray(raw) || !raw.length) throw fail(422, 'The sheet has no client names');
+  if (raw.length > IMPORT_NAMES) throw fail(422, `Send at most ${IMPORT_NAMES} names at a time`);
+  const agentId = await agentOf(req, req.body?.agent_id);
+  const seen = new Set();
+  const names = [];
+  let invalid = 0;
+  raw.forEach((value) => {
+    let name;
+    try { name = cleanName(value); } catch { invalid += 1; return; }
+    if (seen.has(name.toLowerCase())) return;
+    seen.add(name.toLowerCase()); names.push(name);
+  });
+  if (!names.length) throw fail(422, 'The sheet has no client names');
+  const values = names.map(() => '(?)').join(', ');
+  const [existing] = await db.execute(
+    `SELECT c.name, c.is_active, c.agent_id FROM org_clients c JOIN (VALUES ${values}) v(name) ON c.name = v.name WHERE c.org_id = ?`, [...names, req.orgId]);
+  const [result] = await db.execute(
+    `INSERT INTO org_clients (org_id, name, created_by, agent_id)
+     SELECT ?, v.name, ?, ? FROM (VALUES ${values}) v(name)
+     WHERE NOT EXISTS (SELECT 1 FROM org_clients c WHERE c.org_id = ? AND c.name = v.name)`,
+    [req.orgId, req.userId || null, agentId, ...names, req.orgId]);
+  res.json({
+    added: Number(result.affectedRows || 0), invalid,
+    existing: existing.map((c) => ({ name: c.name, is_active: Boolean(Number(c.is_active)), agent_id: c.agent_id })),
+  });
+}));
+
 // Renaming also updates the client name on this organization's tasks, so history stays together.
 router.patch('/:id', route(async (req, res) => {
   await requireManager(req);

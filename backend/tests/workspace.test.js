@@ -108,3 +108,68 @@ test('review changes require an explanation', async t => {
   const response = await request(t, require('../src/routes/taskWorkflow'), '/8', 'PATCH', { version: 3, review_status: 'CHANGES_REQUESTED', review_note: '' });
   assert.equal(response.status, 422);
 });
+
+test('a task sheet upload saves each row with the form rules, reports bad rows, and sends one notification per person', async t => {
+  const inserts = [];
+  const notes = [];
+  const ws = require('../src/websocket');
+  t.mock.method(ws, 'broadcast', () => {});
+  t.mock.method(db, 'execute', async (sql, params) => {
+    const q = sql.trim();
+    if (q.startsWith('SELECT org_id FROM teams WHERE id = ?')) return [[Number(params[0]) === 2 ? { org_id: 1 } : undefined].filter(Boolean)];
+    if (q.startsWith('SELECT id FROM team_members WHERE team_id = ? AND user_id = ?')) return [[{ id: 1 }]];
+    if (q.startsWith('SELECT tm.id')) return [Number(params[1]) === 12 ? [{ id: 5 }] : []];
+    if (q.startsWith('SELECT id FROM tasks WHERE assigned_to = ?')) return [[]];
+    if (q.startsWith('INSERT INTO tasks')) { inserts.push(params); return [{ insertId: 100 + inserts.length }]; }
+    if (q.startsWith('INSERT INTO notifications')) { notes.push(params); return [{}]; }
+    return [[]];
+  });
+  const rows = [
+    { team_id: 2, title: 'VAT return', assigned_to: 12, priority: 'HIGH', due_date: '2026-12-01' },
+    { team_id: 2, title: '' },
+    { team_id: 2, title: 'Payroll run', assigned_to: 12 },
+    { team_id: 99, title: 'Other team' },
+    { team_id: 2, title: 'Not in team', assigned_to: 55 },
+    'junk',
+  ];
+  const response = await request(t, require('../src/routes/tasks'), '/bulk', 'POST', { rows });
+  assert.equal(response.status, 200);
+  const { results } = await response.json();
+  assert.deepEqual(results.map((r) => r.ok), [true, false, true, false, false, false]);
+  assert.equal(results[0].id, 101);
+  assert.equal(results[0].assigned_to, undefined);
+  assert.match(results[1].error, /title/);
+  assert.match(results[3].error, /Team not found/);
+  assert.match(results[4].error, /Assignee must belong/);
+  assert.equal(inserts.length, 2);
+  // Creator and organization come from the token, never from the sheet.
+  inserts.forEach((params) => { assert.equal(params[5], 10); assert.equal(params[14], 1); });
+  // Two tasks for one person: a single notification, pointing at the first task.
+  assert.equal(notes.length, 1);
+  assert.deepEqual([notes[0][0], notes[0][3]], [12, 101]);
+  assert.match(notes[0][2], /2 new tasks assigned/);
+  const tooMany = await request(t, require('../src/routes/tasks'), '/bulk', 'POST', { rows: Array.from({ length: 26 }, () => rows[0]) });
+  assert.equal(tooMany.status, 422);
+});
+
+test('creating one task still answers as before and notifies the assignee', async t => {
+  const notes = [];
+  const ws = require('../src/websocket');
+  t.mock.method(ws, 'broadcast', () => {});
+  t.mock.method(db, 'execute', async (sql, params) => {
+    const q = sql.trim();
+    if (q.startsWith('SELECT org_id FROM teams WHERE id = ?')) return [[{ org_id: 1 }]];
+    if (q.startsWith('SELECT id FROM team_members')) return [[{ id: 1 }]];
+    if (q.startsWith('SELECT tm.id')) return [[{ id: 5 }]];
+    if (q.startsWith('INSERT INTO tasks')) return [{ insertId: 300 }];
+    if (q.startsWith('INSERT INTO notifications')) { notes.push(params); return [{}]; }
+    return [[]];
+  });
+  const ok = await request(t, require('../src/routes/tasks'), '/', 'POST', { team_id: 2, title: 'One task', assigned_to: 12 });
+  assert.equal(ok.status, 201);
+  assert.deepEqual(await ok.json(), { id: 300, title: 'One task', status: 'TODO', issue_type: 'task' });
+  assert.equal(notes.length, 1);
+  const bad = await request(t, require('../src/routes/tasks'), '/', 'POST', { title: 'No team' });
+  assert.equal(bad.status, 422);
+  assert.deepEqual(await bad.json(), { error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
+});

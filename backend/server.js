@@ -60,6 +60,7 @@ app.get('/api', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' 
 // Rate limiting
 app.use('/api/auth', authLimiter);
 app.use(['/api/sa/login', '/api/sa/setup-password'], consoleAuthLimiter);
+app.get('/api/users/avatar/:token', require('./src/services/avatars').serveAvatar);
 app.use('/api', apiLimiter);
 
 // Routes

@@ -50,6 +50,12 @@ const buildRequest = (pool, params) => {
       return;
     }
 
+    // Binary data (profile photos) stays binary.
+    if (Buffer.isBuffer(value)) {
+      request.input(name, sql.VarBinary(sql.MAX), value);
+      return;
+    }
+
     if (typeof value === 'number' && Number.isFinite(value)) {
       if (Number.isInteger(value)) {
         if (value > 2147483647 || value < -2147483648) {

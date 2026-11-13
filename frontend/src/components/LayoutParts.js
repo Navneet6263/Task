@@ -146,4 +146,12 @@ const ChevronIcon = () => (
 );
 
 
-export { formatNotificationTime, parseStoredUser, getTokenRole, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };
+const UploadIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 16V4" />
+    <polyline points="7 9 12 4 17 9" />
+    <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+  </svg>
+);
+
+export { formatNotificationTime, parseStoredUser, getTokenRole, UploadIcon, GridIcon, ListIcon, TeamIcon, ReportsIcon, SettingsIcon, LogsIcon, PmsIcon, MailIcon, AdminIcon, ClockIcon, CalendarIcon, MenuIcon, SearchIcon, BellIcon, ChevronIcon };

@@ -12,7 +12,8 @@ export const initials = (name) => {
 
 // Stable, theme-safe avatar tint per person so a team list is easy to scan.
 const TINTS = ['bg-accent-soft text-accent', 'bg-info-soft text-info', 'bg-warn-soft text-warn', 'bg-danger-soft text-danger', 'bg-subtle text-ink'];
-export function Avatar({ name, id, size = 'h-9 w-9 text-xs' }) {
+export function Avatar({ name, id, src, size = 'h-9 w-9 text-xs' }) {
+  if (src) return <img src={src} alt="" className={`shrink-0 rounded-full object-cover ${size}`} />;
   return <span className={`grid shrink-0 place-items-center rounded-full font-bold ${size} ${TINTS[Number(id || 0) % TINTS.length]}`}>{initials(name)}</span>;
 }
 

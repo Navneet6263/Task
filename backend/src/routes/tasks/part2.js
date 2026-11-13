@@ -5,14 +5,16 @@ const { resolveTaskClient, resolveAgent } = require('../../services/orgClients')
 const { cleanCustomValues, missingCoreFields, buildTitle } = require('../../services/taskFormLayout');
 const timeLogs = require('./timeLogs');
 
-router.post('/', authenticate, async (req, res) => {
-  try {
-    const { team_id } = req.body;
-    const taskPayload = normalizeTaskPayload(req.body);
-    const assignedTo = normalizeUserId(req.body.assigned_to);
+// One task, with every rule of the Create task form. The form and the sheet upload both come through here.
+// A refusal is thrown as { reply: { status, body } }. `quiet` leaves the "assigned" notification to the caller.
+const refuse = (status, body) => Object.assign(new Error(body.error), { reply: { status, body } });
+async function createTask(req, body, { quiet = false } = {}) {
+    const { team_id } = body;
+    const taskPayload = normalizeTaskPayload(body);
+    const assignedTo = normalizeUserId(body.assigned_to);
 
     if (!team_id) {
-      return res.status(422).json({ error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
+      throw refuse(422, { error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
     }
 
     let resolvedOrgId = req.orgId;
@@ -26,7 +28,7 @@ router.post('/', authenticate, async (req, res) => {
          WHERE t.id = ? AND t.is_deleted = FALSE AND o.company_admin_id = ?`,
         [team_id, req.companyAdminId]
       );
-      if (!teamOrg) return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
+      if (!teamOrg) throw refuse(403, { error: 'Team access denied', code: 'FORBIDDEN' });
       resolvedOrgId = teamOrg.org_id;
       hasCreatorTeamAccess = true;
     } else {
@@ -34,9 +36,9 @@ router.post('/', authenticate, async (req, res) => {
         'SELECT org_id FROM teams WHERE id = ? AND is_deleted = FALSE',
         [team_id]
       );
-      if (!teamOrg) return res.status(404).json({ error: 'Team not found', code: 'NOT_FOUND' });
+      if (!teamOrg) throw refuse(404, { error: 'Team not found', code: 'NOT_FOUND' });
       if (req.orgId && Number(teamOrg.org_id) !== Number(req.orgId)) {
-        return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
+        throw refuse(403, { error: 'Team access denied', code: 'FORBIDDEN' });
       }
       resolvedOrgId = teamOrg.org_id;
 
@@ -52,18 +54,18 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     if (!resolvedOrgId) {
-      return res.status(422).json({ error: 'Organization context missing', code: 'VALIDATION_ERROR' });
+      throw refuse(422, { error: 'Organization context missing', code: 'VALIDATION_ERROR' });
     }
     if (!hasCreatorTeamAccess) {
-      return res.status(403).json({ error: 'You can assign tasks only in your own team', code: 'FORBIDDEN' });
+      throw refuse(403, { error: 'You can assign tasks only in your own team', code: 'FORBIDDEN' });
     }
 
     // The client must come from the organization's list when it is "pick only" (Settings → Clients).
     try {
       taskPayload.clientName = await resolveTaskClient(resolvedOrgId, taskPayload.clientName, req.userRole, req.userId);
-      taskPayload.agentFirmId = await resolveAgent(resolvedOrgId, req.body.agent_firm_id, taskPayload.clientName);
+      taskPayload.agentFirmId = await resolveAgent(resolvedOrgId, body.agent_firm_id, taskPayload.clientName);
     } catch (error) {
-      return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
+      throw refuse(error.status || 422, { error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
     }
 
     // Organizations with a designed form: check its fields, store custom values, and log hours.
@@ -72,23 +74,23 @@ router.post('/', authenticate, async (req, res) => {
     let loggedHours = null;
     if (layout) {
       try {
-        customFields = cleanCustomValues(layout, req.body.custom_fields);
-        missingCoreFields(layout, { ...req.body, client_name: taskPayload.clientName, assigned_to: assignedTo, agent_firm_id: taskPayload.agentFirmId });
+        customFields = cleanCustomValues(layout, body.custom_fields);
+        missingCoreFields(layout, { ...body, client_name: taskPayload.clientName, assigned_to: assignedTo, agent_firm_id: taskPayload.agentFirmId });
       } catch (error) {
-        return res.status(error.status || 422).json({ error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
+        throw refuse(error.status || 422, { error: error.message, fields: error.fields, code: 'VALIDATION_ERROR' });
       }
       if (!taskPayload.title && layout.settings.title_pattern) {
         taskPayload.title = buildTitle(layout.settings.title_pattern, { ...customFields, client_name: taskPayload.clientName, priority: taskPayload.priority, due_date: taskPayload.dueDate });
       }
-      if (layout.settings.time_tracking && req.body.hours !== undefined && req.body.hours !== null && req.body.hours !== '') {
-        loggedHours = Math.round(Number(req.body.hours) * 100) / 100;
-        if (!(loggedHours > 0 && loggedHours <= 24)) return res.status(422).json({ error: 'Hours worked must be more than 0 and at most 24', fields: { hours: 'Enter 0.25 to 24 hours' }, code: 'VALIDATION_ERROR' });
+      if (layout.settings.time_tracking && body.hours !== undefined && body.hours !== null && body.hours !== '') {
+        loggedHours = Math.round(Number(body.hours) * 100) / 100;
+        if (!(loggedHours > 0 && loggedHours <= 24)) throw refuse(422, { error: 'Hours worked must be more than 0 and at most 24', fields: { hours: 'Enter 0.25 to 24 hours' }, code: 'VALIDATION_ERROR' });
       }
       const hoursField = layout.fields.find((f) => f.key === 'hours' && !f.hidden);
-      if (hoursField?.required && loggedHours === null) return res.status(422).json({ error: `${hoursField.label} is required`, fields: { hours: `${hoursField.label} is required` }, code: 'VALIDATION_ERROR' });
+      if (hoursField?.required && loggedHours === null) throw refuse(422, { error: `${hoursField.label} is required`, fields: { hours: `${hoursField.label} is required` }, code: 'VALIDATION_ERROR' });
     }
     if (!taskPayload.title) {
-      return res.status(422).json({ error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
+      throw refuse(422, { error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
     }
 
     if (assignedTo) {
@@ -101,7 +103,7 @@ router.post('/', authenticate, async (req, res) => {
         [team_id, assignedTo, resolvedOrgId]
       );
       if (assigneeMembership.length === 0) {
-        return res.status(403).json({ error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });
+        throw refuse(403, { error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });
       }
     }
 
@@ -155,17 +157,53 @@ router.post('/', authenticate, async (req, res) => {
     await logActivity(req.userId, team_id, result.insertId, type === 'bug' ? 'Bug Reported' : 'Task Assigned', taskPayload.title,
       type === 'bug' ? `Bug reported by ${req.userId}` : 'Task assigned', 'User (Local)');
 
-    if (assignedTo) {
+    if (assignedTo && !quiet) {
       await db.execute(
         'INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)',
         [assignedTo, 'task_assigned', `New ${type} assigned: ${taskPayload.title}`, result.insertId]
       );
     }
     ws.broadcast(team_id, 'task_created', { id: result.insertId, title: taskPayload.title, status: taskStatus, team_id, issue_type: type });
-    res.status(201).json({ id: result.insertId, title: taskPayload.title, status: taskStatus, issue_type: type });
+    return { id: result.insertId, title: taskPayload.title, status: taskStatus, issue_type: type, assigned_to: assignedTo };
+}
+
+router.post('/', authenticate, async (req, res) => {
+  try {
+    const { assigned_to: _assignee, ...task } = await createTask(req, req.body || {});
+    res.status(201).json(task);
   } catch (error) {
+    if (error.reply) return res.status(error.reply.status).json(error.reply.body);
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }
+});
+
+// Sheet upload (Bulk upload → Tasks): a few rows per call so the screen can show progress.
+// Each row is saved on its own; a bad row is reported and the others still go in.
+// One person getting many tasks gets one notification for the lot, not one per task.
+const BULK_ROWS = 25;
+router.post('/bulk', authenticate, async (req, res) => {
+  const rows = req.body?.rows;
+  if (!Array.isArray(rows) || !rows.length) return res.status(422).json({ error: 'There are no rows to upload', code: 'VALIDATION_ERROR' });
+  if (rows.length > BULK_ROWS) return res.status(422).json({ error: `Send at most ${BULK_ROWS} rows at a time`, code: 'VALIDATION_ERROR' });
+  const results = [];
+  const assigned = new Map();
+  for (const row of rows) {
+    try {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw refuse(422, { error: 'This row could not be read' });
+      // eslint-disable-next-line no-await-in-loop
+      const { assigned_to: assignee, ...task } = await createTask(req, row, { quiet: true });
+      results.push({ ok: true, ...task });
+      if (assignee) assigned.set(assignee, [...(assigned.get(assignee) || []), task]);
+    } catch (error) {
+      results.push({ ok: false, error: error.message || 'Could not save this row.', ...(error.reply?.body?.fields ? { fields: error.reply.body.fields } : {}) });
+    }
+  }
+  for (const [userId, tasks] of assigned) {
+    const message = tasks.length === 1 ? `New ${tasks[0].issue_type} assigned: ${tasks[0].title}` : `${tasks.length} new tasks assigned to you from a sheet upload`;
+    // eslint-disable-next-line no-await-in-loop
+    await db.execute('INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)', [userId, 'task_assigned', message, tasks[0].id]).catch(() => {});
+  }
+  res.json({ results });
 });
 
 // Pick a bug (developer picks it up)

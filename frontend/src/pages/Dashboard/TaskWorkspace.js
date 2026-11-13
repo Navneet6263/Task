@@ -85,7 +85,7 @@ const TaskWorkspace = (props) => {
           <Select aria-label="Task sort order" value={props.sort || 'newest'} onChange={e => props.setSort(e.target.value)} className="!w-auto py-1.5 text-xs">
             <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="due">Due date</option><option value="priority">Priority</option><option value="title">Title A–Z</option>
           </Select>
-          <Segmented label="Task view" value={view} onChange={setView} options={[['list', 'list'], ['board', 'board'], ['timeline', 'timeline']]} />
+          {!props.hideViewSwitch && <Segmented label="Task view" value={view} onChange={setView} options={[['list', 'list'], ['board', 'board'], ['timeline', 'timeline']]} />}
         </div>
       </header>
 

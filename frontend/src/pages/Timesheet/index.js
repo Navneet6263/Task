@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { timesheet } from '../../services/api';
-import { Button, CountBadge, ErrorText, Loading, PageHeader, Tabs } from '../../ui';
+import { Button, buttonClass, CountBadge, ErrorText, Loading, PageHeader, Tabs } from '../../ui';
 import { errorOf } from './format';
 import EntriesTab from './entries/EntriesTab';
 import EntryFormModal from './entries/EntryFormModal';
@@ -58,7 +58,10 @@ export default function Timesheet() {
       <PageHeader
         title="Timesheet"
         subtitle="Client work and the time each person spent on it."
-        actions={tab === 'entries' && <Button variant="primary" onClick={() => setForm({})}>+ Add Timesheet</Button>}
+        actions={tab === 'entries' && <>
+          <Link to="/bulk-upload?type=entries" className={buttonClass()} title="Add many timesheet entries from a sheet">Upload sheet</Link>
+          <Button variant="primary" onClick={() => setForm({})}>+ Add Timesheet</Button>
+        </>}
       />
       <Tabs
         tabs={tabs} value={tab} onChange={setTab} label="Timesheet sections"
@@ -72,7 +75,7 @@ export default function Timesheet() {
       {tab === 'reports' && <ReportsTab config={config} />}
       {tab === 'setup' && <SetupTab config={config} onChanged={loadConfig} />}
 
-      {form && <EntryFormModal key={form.entry?.id || form.task?.id || 'new'} config={config} entry={form.entry} initialTask={form.task} onClose={() => setForm(null)} onSaved={onSaved} onClientAdded={loadConfig} />}
+      {form && <EntryFormModal key={form.entry?.id || form.task?.id || 'new'} config={config} entry={form.entry} initialTask={form.task} onClose={() => setForm(null)} onSaved={onSaved} onClientAdded={loadConfig} onFormChanged={loadConfig} />}
       {detailId && !form && (
         <EntryDetailModal id={detailId} config={config} onClose={() => setDetailId(null)} onChanged={refreshAll} onEdit={(entry) => setForm({ entry })} />
       )}

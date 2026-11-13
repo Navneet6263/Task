@@ -11,7 +11,9 @@ const PREVIEW_CTX = { idPrefix: 'tsdesigner', members: [{ id: 1, name: 'Asha Rao
 const strip = (layout) => (layout ? (({ version, is_default, ...rest }) => rest)(layout) : null);
 
 // Form designer → Timesheet form. The starting point is the form as it works today.
-export default function TimesheetFormDesigner() {
+// `embedded`: the same designer inside the "Add Timesheet" window (Edit form), so admins and managers
+// change the form where they use it. onSaved(layout) hands back the saved form; onCancel goes back to it.
+export default function TimesheetFormDesigner({ embedded = false, onSaved, onCancel }) {
   const [state, setState] = useState(null);
   const [draft, setDraft] = useState(null);
   const [active, setActive] = useState(null);
@@ -36,7 +38,8 @@ export default function TimesheetFormDesigner() {
     try {
       const { data } = await timesheet.saveForm(draft, state.version);
       setState({ ...state, ...data }); setDraft(clone(strip(data.layout)));
-      notify('Timesheet form saved. Everyone sees it the next time they add a timesheet.', 'success');
+      notify(embedded ? 'Form saved. Everyone now gets this form.' : 'Timesheet form saved. Everyone sees it the next time they add a timesheet.', 'success');
+      onSaved?.(data.layout);
     } catch (err) {
       if (err.response?.status === 409) setConflict(err.response.data.error);
       notify(err.response?.data?.error || 'Could not save the form.');
@@ -44,7 +47,7 @@ export default function TimesheetFormDesigner() {
   };
   const backToOriginal = async () => {
     setSaving(true);
-    try { const { data } = await timesheet.resetForm(); setState({ ...state, ...data }); setDraft(clone(strip(data.layout))); setConfirm(null); notify('Back to the original timesheet form.', 'success'); }
+    try { const { data } = await timesheet.resetForm(); setState({ ...state, ...data }); setDraft(clone(strip(data.layout))); setConfirm(null); notify('Back to the original timesheet form.', 'success'); onSaved?.(data.layout); }
     catch (err) { notify(err.response?.data?.error || 'Could not switch back.'); }
     finally { setSaving(false); }
   };
@@ -67,14 +70,21 @@ export default function TimesheetFormDesigner() {
     <div className="flex flex-col gap-4">
       {!canEdit && <Banner tone="warn">Only admins and managers can change the timesheet form.</Banner>}
       {conflict && <Banner tone="danger" action={<Button size="sm" onClick={load}>Reload latest</Button>}>{conflict}</Banner>}
-      <div className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${state.saved ? 'border-accent/30 bg-accent-soft' : 'border-line bg-subtle'}`}>
-        <span className={`h-2.5 w-2.5 rounded-full ${state.saved ? 'bg-accent' : 'bg-muted'}`} />
-        <span className="flex-1">{state.saved ? <><strong>Customised form in use.</strong> Changes apply the next time someone adds a timesheet.</> : <><strong>Original form in use.</strong> Edit anything below and save to customise it.</>}</span>
-        <Button size="sm" onClick={() => setPreview(true)}>Preview</Button>
-        {state.saved && canEdit && <Button size="sm" variant="ghost" onClick={() => setConfirm('reset')}>Back to original</Button>}
-      </div>
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm">
+          <span className="flex-1">Drag <strong>⠿</strong> to move a field, click it to rename or make it optional, <strong>Hide</strong> what you don’t need, and <strong>+ Add question</strong> for a new column. Changes apply to <strong>everyone’s</strong> form; old entries keep their answers.</span>
+          {state.saved && canEdit && <Button size="sm" variant="ghost" onClick={() => setConfirm('reset')}>Back to original</Button>}
+        </div>
+      ) : (
+        <div className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm ${state.saved ? 'border-accent/30 bg-accent-soft' : 'border-line bg-subtle'}`}>
+          <span className={`h-2.5 w-2.5 rounded-full ${state.saved ? 'bg-accent' : 'bg-muted'}`} />
+          <span className="flex-1">{state.saved ? <><strong>Customised form in use.</strong> Changes apply the next time someone adds a timesheet.</> : <><strong>Original form in use.</strong> Edit anything below and save to customise it.</>}</span>
+          <Button size="sm" onClick={() => setPreview(true)}>Preview</Button>
+          {state.saved && canEdit && <Button size="sm" variant="ghost" onClick={() => setConfirm('reset')}>Back to original</Button>}
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className={`grid grid-cols-1 gap-4 ${embedded ? '' : 'xl:grid-cols-[minmax(0,1fr)_300px]'}`}>
         <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-3">
           <div className="overflow-hidden rounded-xl border border-line bg-surface">
             <div className="h-2 bg-accent" />
@@ -97,7 +107,7 @@ export default function TimesheetFormDesigner() {
             onAdd={(type) => { const r = addField(draft, type, active); setDraft(r.layout); setActive(r.key); }}
             onShow={(key) => { setDraft(patchField(draft, key, { hidden: false })); setActive(key); }} />
         </fieldset>
-        <aside className="h-fit rounded-xl border border-line bg-surface p-4 text-sm xl:sticky xl:top-[calc(var(--shell-header-height,57px)+20px)]">
+        {!embedded && <aside className="h-fit rounded-xl border border-line bg-surface p-4 text-sm xl:sticky xl:top-[calc(var(--shell-header-height,57px)+20px)]">
           <p className="font-semibold">How it works</p>
           <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-4 text-muted">
             <li>Click a field to rename it, make it required or optional, or change its dropdown options.</li>
@@ -106,10 +116,17 @@ export default function TimesheetFormDesigner() {
             <li>Extra questions show up in the timesheet report as new columns.</li>
             <li>Clients come from <strong className="text-ink">Settings → Clients</strong>.</li>
           </ul>
-        </aside>
+        </aside>}
       </div>
 
-      {canEdit && (dirty || !state.saved) && (
+      {embedded && canEdit && (
+        <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur">
+          <span className="flex-1 text-sm">{problems.length ? <span className="text-danger">{problems[0]}</span> : dirty ? 'Unsaved changes. Saving changes the form for everyone.' : 'No changes yet.'}</span>
+          <Button variant="ghost" onClick={() => onCancel?.()}>{dirty ? 'Cancel changes' : 'Back to the form'}</Button>
+          <Button variant="primary" disabled={saving || !dirty || problems.length > 0} onClick={save}>{saving ? 'Saving…' : 'Save for everyone'}</Button>
+        </div>
+      )}
+      {!embedded && canEdit && (dirty || !state.saved) && (
         <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur motion-safe:animate-fade-up">
           <span className={`h-2 w-2 rounded-full ${dirty ? 'bg-warn' : 'bg-muted'}`} />
           <span className="flex-1 text-sm">{problems.length ? <span className="text-danger">{problems[0]}</span> : dirty ? 'You have unsaved changes.' : 'This is the original form. Change something to customise it.'}</span>

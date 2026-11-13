@@ -1,8 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { searchOptions } from '../../../ui/SearchSelect';
+
+// Long lists (clients) get a search box at the top.
+const SEARCH_FROM = 9;
 
 const MultiSelectFilter = ({ label, values, onChange, options, disabled = false }) => {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const rootRef = useRef(null);
+  useEffect(() => { if (!open) setQuery(''); }, [open]);
+  const searchable = options.length >= SEARCH_FROM;
+  const shown = searchable ? searchOptions(options, query) : options;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -37,8 +45,15 @@ const MultiSelectFilter = ({ label, values, onChange, options, disabled = false 
       </button>
       {open && (
         <div className="absolute left-0 top-[42px] z-50 w-[220px] overflow-hidden rounded-md border border-line bg-surface shadow-pop" role="listbox" aria-multiselectable="true">
+          {searchable && (
+            <div className="border-b border-line p-1.5">
+              <input type="search" autoFocus aria-label={`Search ${label.replace(/^All\s+/i, '').toLowerCase()}`} placeholder={`Search ${options.length}…`} value={query} onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded border border-line bg-canvas px-2 py-1.5 text-xs outline-none focus:border-accent" />
+            </div>
+          )}
           <div className="max-h-[260px] overflow-y-auto p-1">
-            {options.map((option) => (
+            {!shown.length && <p className="px-2.5 py-2 text-xs text-muted">Nothing matches.</p>}
+            {shown.map((option) => (
               <label key={option.value} className="flex cursor-pointer items-center gap-2.5 rounded px-2.5 py-2 text-xs hover:bg-subtle">
                 <input type="checkbox" checked={values.includes(option.value)} onChange={() => toggleValue(option.value)} className="h-3.5 w-3.5 accent-accent" />
                 <span className="truncate">{option.label}</span>

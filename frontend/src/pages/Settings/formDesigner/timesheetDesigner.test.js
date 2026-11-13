@@ -21,6 +21,11 @@ const button = (text) => { const all = [...document.querySelectorAll('button')];
 const type = (el, v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); };
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; c = document.createElement('div'); document.body.append(c); r = createRoot(c); });
 afterEach(() => { act(() => r.unmount()); c.remove(); });
+const choose = async (sel, text, option = text) => {
+  const el = document.querySelector(sel);
+  act(() => { el.focus(); el.dispatchEvent(new FocusEvent('focus')); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, text); el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent.includes(option)).click());
+};
 
 test('managers rename a field, make one optional, add a question and save', async () => {
   h.form = async () => ({ data: { layout: original, version: 0, saved: false, can_edit: true } });
@@ -57,7 +62,7 @@ test('the timesheet form follows the saved layout: labels, optional fields, hidd
   expect(document.body.textContent).toContain('Customer');
   expect(document.body.textContent).toContain('Ticket number');
   expect(document.querySelector('#ts-job_type')).toBeNull();
-  await act(async () => { document.querySelector('#ts-client_id').value = '4'; document.querySelector('#ts-client_id').dispatchEvent(new Event('change', { bubbles: true })); });
+  await choose('#ts-client_id', 'Riv', 'Riverside');
   act(() => type(document.querySelector('#ts-hours'), '2'));
   await act(async () => button('Submit').click());
   expect(h.create).not.toHaveBeenCalled();
@@ -65,4 +70,30 @@ test('the timesheet form follows the saved layout: labels, optional fields, hidd
   act(() => type(document.querySelector('#ts-ticket'), 'T-77'));
   await act(async () => button('Submit').click());
   expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ client_id: '4', hours: '2', period_ended: '', custom_fields: { ticket: 'T-77' } }));
+});
+
+test('admins and managers change the form from the timesheet window itself, and what they typed stays', async () => {
+  h.form = async () => ({ data: { layout: original, version: 0, saved: false, can_edit: true } });
+  h.saveForm = jest.fn(async (layout) => ({ data: { layout: { ...layout, version: 1 }, version: 1, saved: true } }));
+  const onFormChanged = jest.fn();
+  const config = { today: '2026-10-22', user_id: 10, permissions: { log_for_others: true, manage_clients: true }, users: [{ id: 10, name: 'Me' }], clients: [{ id: 4, name: 'Riverside' }], form: original };
+  await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} onFormChanged={onFormChanged} />));
+  act(() => type(document.querySelector('#ts-hours'), '2'));
+  expect(document.querySelector('#ts-period_ended')).toBeTruthy();
+  await act(async () => button('Edit form').click());
+  expect(document.body.textContent).toContain('Changes apply to everyone in the company.');
+  await act(async () => document.querySelector('[aria-label="Edit Period Ended"]').click());
+  await act(async () => document.querySelector('[aria-label="Hide from the form"]').click());
+  await act(async () => button('Save for everyone').click());
+  expect(h.saveForm.mock.calls[0][0].fields.find((f) => f.key === 'period_ended').hidden).toBe(true);
+  expect(onFormChanged).toHaveBeenCalled();
+  // Back on the form at once, without the hidden field, and the hours typed earlier are still there.
+  expect(document.querySelector('#ts-period_ended')).toBeNull();
+  expect(document.querySelector('#ts-hours').value).toBe('2');
+});
+
+test('members do not get the Edit form button', async () => {
+  const config = { today: '2026-10-22', user_id: 12, permissions: { log_for_others: false, manage_clients: false }, users: [{ id: 12, name: 'Asha' }], clients: [], form: original };
+  await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} />));
+  expect(button('Edit form')).toBeUndefined();
 });

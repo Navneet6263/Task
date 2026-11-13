@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { teams } from '../../services/api';
 import { readPreference, writePreference } from '../../services/preferences';
 import { notify } from '../../services/feedback';
-import { Button, EmptyState, ErrorText, Loading, PageHeader, StatTile } from '../../ui';
+import { Button, EmptyState, ErrorText, Loading, PageHeader, StatTile, buttonClass } from '../../ui';
 import TeamList from './TeamList';
 import MembersTable from './MembersTable';
 import AddMembers from './AddMembers';
@@ -25,6 +26,13 @@ export default function TeamManagement() {
   const [error, setError] = useState('');
   const [form, setForm] = useState(null); // 'create' or a team to edit
   const [showMap, setShowMap] = useState(false);
+  // "+ Create space" elsewhere opens the new-team form here.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get('create') !== '1') return;
+    if (canManage) setForm('create');
+    const next = new URLSearchParams(params); next.delete('create'); setParams(next, { replace: true });
+  }, [params, setParams, canManage]);
 
   const loadTeams = useCallback(async (preferId) => {
     try {
@@ -88,6 +96,7 @@ export default function TeamManagement() {
                       <span className="text-xs text-muted">Join code</span><span className="font-mono font-semibold text-accent">{team.team_code}</span><span className="text-[10px] font-semibold uppercase text-accent">Copy</span>
                     </button>
                   )}
+                  <Link to={`/spaces/${team.id}`} className={buttonClass('secondary')}>Open space</Link>
                   {canManage && <Button onClick={() => setForm(team)}>Edit team</Button>}
                 </div>
               </section>

@@ -44,6 +44,8 @@ export default function TaskExtrasPanel({ task, members = [], onOpenTask, onChan
   const reloadCards = useReloadSummaries();
   const [data, setData] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [bulk, setBulk] = useState(false);
+  const [bulkText, setBulkText] = useState('');
   const [sub, setSub] = useState({ title: '', assigned_to: '', due_date: '' });
   const [linking, setLinking] = useState(false);
   const [relation, setRelation] = useState(1);
@@ -70,6 +72,23 @@ export default function TaskExtrasPanel({ task, members = [], onOpenTask, onChan
     if (await run(() => taskExtras.addSubtask(task.id, { ...sub, title: sub.title.trim(), assigned_to: sub.assigned_to || null, due_date: sub.due_date || null }), 'Subtask added.')) {
       setSub({ title: '', assigned_to: sub.assigned_to, due_date: '' });
     }
+  };
+  // "Add several": one subtask per line, all with the same owner and due date.
+  const addMany = async (event) => {
+    event.preventDefault();
+    const titles = bulkText.split(/\r?\n/).map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean).slice(0, 20);
+    if (!titles.length) return;
+    setBusy(true);
+    let made = 0;
+    try {
+      for (const title of titles) {
+        // eslint-disable-next-line no-await-in-loop
+        await taskExtras.addSubtask(task.id, { title: title.slice(0, 255), assigned_to: sub.assigned_to || null, due_date: sub.due_date || null });
+        made += 1;
+      }
+      notify(`${made} subtasks added.`, 'success'); setBulkText(''); setBulk(false);
+    } catch (err) { notify(errorOf(err, `${made} added, then it stopped.`)); }
+    finally { setBusy(false); await load(); reloadCards(); onChanged?.(); }
   };
   const toggleSub = (s) => run(() => tasks.update(s.id, { status: s.status === 'DONE' ? 'TODO' : 'DONE', version: s.version }));
   const addLink = (other) => {
@@ -101,12 +120,16 @@ export default function TaskExtrasPanel({ task, members = [], onOpenTask, onChan
               <div key={s.id} className="flex items-center gap-2">
                 <input type="checkbox" aria-label={`${s.title} done`} className="h-4 w-4 shrink-0 accent-[rgb(var(--c-accent))]" disabled={busy} checked={s.status === 'DONE'} onChange={() => toggleSub(s)} />
                 <div className="min-w-0 flex-1"><TaskLine task={s} keyOf={keyOf} onOpen={onOpenTask}
-                  right={<span className="shrink-0 text-xs text-muted">{s.assigned_to_name || 'Unassigned'}</span>} /></div>
+                  right={<span className="flex shrink-0 items-center gap-2 text-xs text-muted">
+                    {s.priority === 'HIGH' && <span className="font-semibold text-danger" title="High priority">↑</span>}
+                    {s.due_date && <span className={String(s.due_date).slice(0, 10) < new Date().toISOString().slice(0, 10) && s.status !== 'DONE' ? 'font-semibold text-danger' : ''}>{new Date(s.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>}
+                    <span>{s.assigned_to_name || 'Unassigned'}</span>
+                  </span>} /></div>
               </div>
             ))}
           </div>
           {!data.subtasks.length && !adding && <p className="text-sm text-muted">Break this task into smaller steps that can each have their own owner.</p>}
-          {adding && (
+          {adding && !bulk && (
             <form onSubmit={addSubtask} className="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-dashed border-line p-2.5 sm:grid-cols-[1fr_150px_140px_auto]">
               <Input autoFocus aria-label="Subtask title" placeholder="What needs to be done?" maxLength={255} value={sub.title} onChange={(e) => setSub({ ...sub, title: e.target.value })} />
               <Select aria-label="Subtask assignee" value={sub.assigned_to} onChange={(e) => setSub({ ...sub, assigned_to: e.target.value })}>
@@ -114,6 +137,23 @@ export default function TaskExtrasPanel({ task, members = [], onOpenTask, onChan
               </Select>
               <Input aria-label="Subtask due date" type="date" value={sub.due_date} onChange={(e) => setSub({ ...sub, due_date: e.target.value })} />
               <span className="flex gap-1"><Button size="sm" type="submit" variant="primary" disabled={busy || !sub.title.trim()}>Add</Button><Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Done</Button></span>
+              <button type="button" onClick={() => setBulk(true)} className="justify-self-start text-xs font-semibold text-accent hover:underline sm:col-span-4">Add several at once</button>
+            </form>
+          )}
+          {adding && bulk && (
+            <form onSubmit={addMany} className="mt-2 flex flex-col gap-2 rounded-lg border border-dashed border-line p-2.5">
+              <textarea autoFocus aria-label="Subtasks, one per line" rows={5} value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+                placeholder={'One subtask per line, e.g.\nCollect payslips\nCheck totals\nSend to client'}
+                className="w-full rounded-md border border-line bg-surface px-2.5 py-2 text-sm outline-none focus:border-accent" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Select aria-label="Owner for all" className="!w-auto" value={sub.assigned_to} onChange={(e) => setSub({ ...sub, assigned_to: e.target.value })}>
+                  <option value="">Unassigned</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </Select>
+                <Input aria-label="Due date for all" type="date" className="!w-auto" value={sub.due_date} onChange={(e) => setSub({ ...sub, due_date: e.target.value })} />
+                <span className="flex-1 text-xs text-muted">{bulkText.split(/\n/).filter((l) => l.trim()).length} subtasks (up to 20)</span>
+                <Button size="sm" variant="ghost" onClick={() => setBulk(false)}>One at a time</Button>
+                <Button size="sm" type="submit" variant="primary" disabled={busy || !bulkText.trim()}>{busy ? 'Adding…' : 'Add all'}</Button>
+              </div>
             </form>
           )}
           {!data.subtasks.length && !adding && (

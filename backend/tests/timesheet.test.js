@@ -335,3 +335,32 @@ test('a client under an agent brings that agent; another agent for it is refused
   assert.equal((await send('/entries', 'POST', validEntry)).status, 201);
   assert.equal(insert[17], 3, 'agent filled in from the client');
 });
+
+test('a sheet upload saves each row on its own: good rows go in, a bad row is reported', async (t) => {
+  const inserts = [];
+  mockDb(t, async (sql, params) => {
+    if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('SET XACT_ABORT ON')) { inserts.push(params); return [{ insertId: 70 + inserts.length, rows: [] }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const response = await send('/entries/bulk', 'POST', { rows: [validEntry, { ...validEntry, hours: 30 }, { ...validEntry, agent_id: 99, org_id: 999 }, 'junk'] });
+  assert.equal(response.status, 200);
+  const { results } = await response.json();
+  assert.deepEqual(results.map((r) => r.ok), [true, false, true, false]);
+  assert.equal(results[0].id, 71);
+  assert.ok(results[1].fields.hours);
+  assert.equal(inserts.length, 2);
+  // Same rules as the form: the employee's own name and the organization from the token.
+  inserts.forEach((params) => { assert.equal(params[0], 1); assert.equal(params[5], 10); });
+});
+
+test('a sheet upload takes at most 25 rows per call', async (t) => {
+  mockDb(t, async (sql) => { throw Error(`Unexpected query: ${sql.slice(0, 60)}`); });
+  const send = await client(t);
+  assert.equal((await send('/entries/bulk', 'POST', { rows: Array.from({ length: 26 }, () => validEntry) })).status, 422);
+  assert.equal((await send('/entries/bulk', 'POST', { rows: [] })).status, 422);
+});

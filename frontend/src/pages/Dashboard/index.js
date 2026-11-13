@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import CreateTaskModal from './CreateTaskModal';
 import DashboardHero from './DashboardHero';
 import ManagerAssignModal from './ManagerAssignModal';
@@ -18,9 +19,10 @@ import useAgenda from './useAgenda';
 import { useDashboardData } from './useDashboardData';
 import { useDashboardLogic } from './useDashboardLogic';
 
-const Dashboard = () => {
+// `space` shows only the task workspace of one team, inside its space page: { teamId, view, createSignal }.
+const Dashboard = ({ space = null }) => {
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
-  const data = useDashboardData();
+  const data = useDashboardData({ teamId: space?.teamId });
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showMgrModal, setShowMgrModal] = useState(false);
   const [orgUsers, setOrgUsers] = useState([]);
@@ -44,20 +46,36 @@ const Dashboard = () => {
     selectedTeam, members, orgUsers, setOrgUsers, setShowTaskModal,
     setShowMgrModal, selectedTask, setSelectedTask, refreshWorkspace
   );
+  // Inside a space the tabs choose the view, and its "Create" button opens the same task form.
+  const spaceView = space?.view;
+  const createSignal = space?.createSignal;
+  const { setView: chooseView } = data;
+  useEffect(() => { if (spaceView) chooseView(spaceView); }, [spaceView, chooseView]);
+  useEffect(() => { if (createSignal) logic.openTaskComposer(); }, [createSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The top bar "Create" lands here with ?create=1 and opens the form once the team is ready.
+  const [params, setParams] = useSearchParams();
+  const wantsCreate = !space && params.get('create') === '1';
+  useEffect(() => {
+    if (!wantsCreate || !selectedTeam) return;
+    const next = new URLSearchParams(params); next.delete('create'); setParams(next, { replace: true });
+    logic.openTaskComposer();
+  }, [wantsCreate, selectedTeam]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
   return (
     <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
-      <DashboardHero
-        user={user} today={today} agenda={agenda} overdue={stats.overdue}
-        teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam}
-        onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal}
-        onFocus={setFocusMode} showInsights={showInsights} onToggleInsights={toggleInsights}
-      />
-      <MetricCards stats={stats} teamList={teamList} />
-      <StatusOverview stats={stats} />
+      {!space && <>
+        <DashboardHero
+          user={user} today={today} agenda={agenda} overdue={stats.overdue}
+          teamList={teamList} selectedTeam={selectedTeam} selectTeam={selectTeam}
+          onCreateTask={logic.openTaskComposer} onManagerAssign={logic.openManagerModal}
+          onFocus={setFocusMode} showInsights={showInsights} onToggleInsights={toggleInsights}
+        />
+        <MetricCards stats={stats} teamList={teamList} />
+        <StatusOverview stats={stats} />
+      </>}
 
       {loadError && <Banner tone="danger" action={<Button size="sm" onClick={refreshWorkspace}>Retry</Button>}><span role="alert">{loadError}</span></Banner>}
 
@@ -66,11 +84,11 @@ const Dashboard = () => {
       )}
 
       {selectedTeam && (
-        <section className={`dashboard-workspace-grid grid ${showInsights ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
+        <section className={`dashboard-workspace-grid grid ${showInsights && !space ? 'lg:grid-cols-[minmax(0,3fr)_minmax(240px,1fr)]' : 'grid-cols-1'} gap-3.5 items-start`}>
           <div className="flex flex-col gap-3.5 min-w-0">
             {loading && <span role="status" className="text-xs font-semibold text-accent">Refreshing tasks...</span>}
             <TaskExtrasProvider tasks={taskList}>
-            <TaskWorkspace
+            <TaskWorkspace hideViewSwitch={Boolean(space)}
               sort={data.sort} setSort={data.setSort} onUpdated={refreshWorkspace} view={view} setView={setView} selectedTeam={selectedTeam}
               filtered={taskList} paginated={taskList} members={members}
               filterPriority={filterPriority} setFilterPriority={setFilterPriority}
@@ -94,7 +112,7 @@ const Dashboard = () => {
             </TaskExtrasProvider>
           </div>
 
-          {showInsights && <aside className="dashboard-insights sticky top-[calc(var(--shell-header-height,57px)+16px)] flex min-w-0 flex-col gap-3.5">
+          {showInsights && !space && <aside className="dashboard-insights sticky top-[calc(var(--shell-header-height,57px)+16px)] flex min-w-0 flex-col gap-3.5">
             <UpNext agenda={agenda} />
             <PriorityBreakdown priorityStats={priorityStats} stats={stats} />
             <TeamSnapshot memberSummary={memberSummary} members={members} maxLoad={maxLoad} />

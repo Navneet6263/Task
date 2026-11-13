@@ -4,9 +4,10 @@ import { MenuIcon } from '../LayoutParts';
 import { Button, CountBadge, Select } from '../../ui';
 import useTheme from '../../theme/useTheme';
 import NotificationsMenu from './NotificationsMenu';
-import { BuildingIcon, ChatIcon, LogoutIcon, MoonIcon, NoteIcon, ScreenIcon, SunIcon } from './icons';
+import UserAvatar, { useMyAvatar } from '../account/UserAvatar';
+import { BuildingIcon, ChatIcon, LogoutIcon, MoonIcon, NoteIcon, PlusIcon, ScreenIcon, SearchIcon, SunIcon } from './icons';
 
-const Topbar = forwardRef(function Topbar({ shell, panel, onPanel }, ref) {
+const Topbar = forwardRef(function Topbar({ shell, panel, onPanel, onSearch, onCreate }, ref) {
   const { resolved, toggle } = useTheme();
   const {
     user, resolvedRole, initials, setSidebarOpen, chatUnreadCount, accessibleOrgs, activeOrgId,
@@ -14,6 +15,7 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel }, ref) {
     openNotification, handleLogout, sidebarCollapsed,
   } = shell;
   const orgName = accessibleOrgs.find((org) => String(org.id) === String(activeOrgId))?.name;
+  const avatar = useMyAvatar();
 
   return (
     // z-[85]: above everything on the page (filter bars go up to z-80) so its menus never slide under page content,
@@ -40,7 +42,19 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel }, ref) {
         )}
       </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      {/* Search anywhere and create from anywhere, like Jira. */}
+      <div className="mx-auto hidden min-w-0 max-w-md flex-1 items-center gap-2 px-2 md:flex">
+        <button type="button" onClick={onSearch} aria-label="Search (Ctrl K)"
+          className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg border border-line bg-canvas px-3 text-sm text-muted transition hover:border-accent/50 hover:text-ink">
+          <SearchIcon size={15} /><span className="truncate">Search tasks, spaces, pages…</span>
+          <kbd className="ml-auto shrink-0 whitespace-nowrap rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] leading-none">Ctrl K</kbd>
+        </button>
+        <Button variant="primary" size="sm" className="h-9" onClick={onCreate} title="Create a task (C)"><PlusIcon size={14} />Create</Button>
+      </div>
+
+      <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+        <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden" onClick={onSearch} aria-label="Search"><SearchIcon size={16} /></Button>
+        <Button variant="primary" size="icon" className="h-9 w-9 md:hidden" onClick={onCreate} aria-label="Create a task"><PlusIcon size={16} /></Button>
         <Button variant={panel === 'chat' ? 'primary' : 'secondary'} size="sm" className="h-9" onClick={() => onPanel('chat')} title="Quick chat with your team" aria-pressed={panel === 'chat'}>
           <ChatIcon /><span className="hidden md:inline">Chat</span><CountBadge count={chatUnreadCount} />
         </Button>
@@ -57,7 +71,7 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel }, ref) {
         <NotificationsMenu open={showNotif} onToggle={() => setShowNotif((prev) => !prev)} unreadCount={unreadCount}
           onlyUnread={onlyUnread} setOnlyUnread={setOnlyUnread} items={visibleNotifications} onMarkAllRead={handleMarkAllRead} onOpenItem={openNotification} />
         <div className="ml-1 flex items-center gap-2 border-l border-line pl-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-xs font-bold text-accent">{initials}</span>
+          {avatar ? <UserAvatar name={user.name} src={avatar} /> : <span className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-xs font-bold text-accent">{initials}</span>}
           <div className="hidden leading-tight xl:block">
             <p className="max-w-[140px] truncate text-sm font-semibold">{user.name || 'User'}</p>
             <p className="text-xs capitalize text-muted">{String(resolvedRole || 'member').replace('_', ' ')}</p>

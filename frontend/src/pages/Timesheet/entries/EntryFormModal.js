@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
-import { Button, FormRow, Input, Modal, Select, Textarea } from '../../../ui';
+import { Button, FormRow, Input, Modal, SearchSelect, Select, Textarea } from '../../../ui';
 import LayoutField from '../../Dashboard/TaskComposer/LayoutField';
 import { errorOf, fieldsOf } from '../format';
 import TaskPicker from './TaskPicker';
 import { doneByPeople, hasTeam, teamPeople } from '../team';
 import AgentPicker from '../../../components/clients/AgentPicker';
+import TimesheetFormDesigner from '../../Settings/formDesigner/TimesheetFormDesigner';
 
 const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
 
@@ -26,9 +27,14 @@ const emptyValue = (field, value) => (field.type === 'checkbox' ? !(value === tr
 
 // The "Add Timesheet" form, built from the organization's customised form
 // (Settings → Form designer → Timesheet form): labels, order, required fields and extra questions.
-export default function EntryFormModal({ config, entry, initialTask, onClose, onSaved, onClientAdded }) {
+export default function EntryFormModal({ config, entry, initialTask, onClose, onSaved, onClientAdded, onFormChanged }) {
   const isEdit = Boolean(entry);
-  const layout = config.form;
+  // Admins and managers can change the form right here ("Edit form"); what was typed stays.
+  const canDesign = Boolean(config.permissions?.manage_clients);
+  const [designing, setDesigning] = useState(false);
+  const [savedLayout, setSavedLayout] = useState(null);
+  useEffect(() => { setSavedLayout(null); }, [config.form]);
+  const layout = savedLayout || config.form;
   const visible = layout.fields.filter((f) => !f.hidden);
   const [form, setForm] = useState(() => (isEdit ? fromEntry(entry) : blank(config)));
   const [errors, setErrors] = useState({});
@@ -47,6 +53,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     return list;
   }, [config.clients, added, entry, isEdit]);
 
+  const agentNames = useMemo(() => Object.fromEntries((config.agents || []).map((a) => [String(a.id), a.name])), [config.agents]);
   // Agent first narrows the clients; a client that sits under an agent fills the agent in.
   const agentClients = form.agent_firm_id ? clients.filter((c) => c.agent_id === String(form.agent_firm_id) || c.id === form.client_id) : clients;
   const chooseAgent = (value) => setForm((prev) => {
@@ -145,10 +152,9 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       case 'agent_firm_id': return <AgentPicker id="ts-agent_firm_id" agents={config.agents || []} value={form.agent_firm_id} onChange={chooseAgent} />;
       case 'client_id': return (
         <>
-          <Select id="ts-client_id" value={form.client_id} onChange={(e) => chooseClient(e.target.value)}>
-            <option value="">-Select-</option>
-            {agentClients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </Select>
+          <SearchSelect id="ts-client_id" value={form.client_id} onChange={chooseClient} emptyText="No client with that name."
+            placeholder={`Search ${agentClients.length} client${agentClients.length === 1 ? '' : 's'}…`}
+            options={agentClients.map((c) => ({ value: c.id, label: c.name, hint: form.agent_firm_id ? '' : agentNames[c.agent_id] || '' }))} />
           {canAddClient && (newClient === null
             ? <button type="button" className="mt-1.5 text-xs font-semibold text-accent hover:underline" onClick={() => setNewClient('')}>+ New client</button>
             : (
@@ -200,9 +206,26 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
         <Button onClick={onClose}>Cancel</Button>
       </>;
 
+  if (designing) {
+    return (
+      <Modal title={`Edit the ${layout.name || 'Timesheet'} form`} subtitle="Changes apply to everyone in the company." onClose={() => setDesigning(false)} size="lg">
+        <TimesheetFormDesigner embedded onCancel={() => setDesigning(false)}
+          onSaved={(saved) => { if (saved) setSavedLayout(saved); setDesigning(false); onFormChanged?.(); }} />
+      </Modal>
+    );
+  }
+
   return (
     <Modal title={isEdit ? `Edit ${layout.name || 'Timesheet'}` : `Add ${layout.name || 'Timesheet'}`} onClose={onClose} footer={footer} size="lg">
-      <p className="mb-4 border-b border-line pb-3 text-sm font-semibold">Job Configuration Details</p>
+      <div className="mb-4 flex items-center gap-3 border-b border-line pb-3">
+        <p className="flex-1 text-sm font-semibold">Job Configuration Details</p>
+        {canDesign && (
+          <button type="button" onClick={() => setDesigning(true)} title="Move, hide or add fields for everyone"
+            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-accent hover:border-accent hover:bg-accent-soft">
+            <span aria-hidden="true">✎</span>Edit form
+          </button>
+        )}
+      </div>
       {visible.map((field) => (
         <FormRow key={field.key} label={field.type === 'checkbox' ? '' : field.label} htmlFor={`ts-${field.key}`}
           required={field.required && !(field.key === 'hours' && isEdit)} error={errors[field.key]} hint={hint(field)}>

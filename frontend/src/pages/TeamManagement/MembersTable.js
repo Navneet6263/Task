@@ -83,7 +83,7 @@ export default function MembersTable({ team, members, canManage, admin, onChange
               <tr key={member.id} className="group hover:bg-subtle">
                 <Td className="align-middle">
                   <span className="flex items-center gap-3">
-                    <Avatar name={member.name} id={member.id} />
+                    <Avatar name={member.name} id={member.id} src={member.avatar} />
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 font-semibold">{member.name}{member.is_reporting_manager && <Chip tone="ok">Team leader</Chip>}{shared(member) && <Chip tone="info">Via {member.shared_from_name || 'shared team'}</Chip>}</span>
                       <span className="block truncate text-xs text-muted">{member.email}</span>

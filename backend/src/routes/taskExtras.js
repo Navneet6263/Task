@@ -14,8 +14,22 @@ const canManageLabels = (req) => ['admin', 'manager', 'company_admin'].includes(
 
 // The organization's task prefix (for keys like ACC-142) and its labels.
 router.get('/meta', route(async (req, res) => {
-  if (!req.orgId) return res.json({ prefix: 'TASK', labels: [], colors: extras.COLORS });
-  res.json({ prefix: await extras.orgPrefix(req.orgId), labels: await extras.labelsOf(req.orgId), colors: extras.COLORS });
+  if (!req.orgId) return res.json({ prefix: 'TASK', labels: [], colors: extras.COLORS, work_type: null });
+  const [[org]] = await db.execute('SELECT work_type, created_at FROM organizations WHERE id = ?', [req.orgId]);
+  // Only new companies are asked what they work on; existing ones never see the question.
+  const isNew = org?.created_at && Date.now() - new Date(org.created_at).getTime() < 14 * 24 * 60 * 60 * 1000;
+  res.json({ prefix: await extras.orgPrefix(req.orgId), labels: await extras.labelsOf(req.orgId), colors: extras.COLORS, work_type: org?.work_type || null, ask_work_type: Boolean(isNew && !org?.work_type) });
+}));
+
+// "What kind of work does your team do?": saved once by an admin, with starter labels for that work.
+router.put('/meta/work-type', route(async (req, res) => {
+  if (!['admin', 'company_admin'].includes(req.userRole)) return res.status(403).json({ error: 'Only admins can set this' });
+  const type = String(req.body.work_type || '');
+  if (!extras.WORK_TYPES[type]) return res.status(422).json({ error: 'Pick one of the listed kinds of work' });
+  await db.execute('UPDATE organizations SET work_type = ? WHERE id = ?', [type, req.orgId]);
+  const labels = req.body.with_labels === false ? [] : extras.WORK_TYPES[type];
+  for (const [name, color] of labels) await extras.createLabel(req.orgId, req.userId, { name, color });
+  res.json({ work_type: type, labels: await extras.labelsOf(req.orgId) });
 }));
 
 // Admins pick the letters in task keys, e.g. ACC for ACC-142.

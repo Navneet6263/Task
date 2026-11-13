@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
-import { Button, ClickRow, EmptyRow, ErrorText, Field, Input, Segmented, Select, StatTile, Table, TableWrap, Td, Th } from '../../../ui';
+import { Button, ClickRow, EmptyRow, ErrorText, Field, Input, SearchSelect, Segmented, Select, StatTile, Table, TableWrap, Td, Th } from '../../../ui';
 import { errorOf, fmtDate, fmtHours } from '../format';
 import { defaultScope, PERIODS, periodRange, scopeOptions, teamPeople } from '../team';
 import StatusChip from './StatusChip';
@@ -120,10 +120,8 @@ export default function EntriesTab({ config, refreshKey, onOpen, preset }) {
           </Field>
         )}
         <Field label="Client" htmlFor="ts-filter-client">
-          <Select id="ts-filter-client" className="min-w-[170px]" value={filters.client_id} onChange={(event) => setFilter('client_id', event.target.value)}>
-            <option value="">All clients</option>
-            {config.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
-          </Select>
+          <SearchSelect id="ts-filter-client" className="min-w-[200px]" placeholder="All clients" value={filters.client_id} onChange={(value) => setFilter('client_id', value)}
+            options={config.clients.map((client) => ({ value: String(client.id), label: client.name }))} emptyText="No client with that name." />
         </Field>
         <Field label="Status" htmlFor="ts-filter-status">
           <Select id="ts-filter-status" className="min-w-[120px]" value={filters.status} onChange={(event) => setFilter('status', event.target.value)}>

@@ -17,3 +17,7 @@ export const LogoutIcon = () => <Svg size={15}><path d="M9 21H5a2 2 0 0 1-2-2V5a
 export const SparkIcon = () => <Svg size={15} strokeWidth="1.8"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z" /></Svg>;
 export const ExternalIcon = ({ size = 14 }) => <Svg size={size}><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></Svg>;
 export const BuildingIcon = () => <Svg size={15}><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3" /></Svg>;
+export const PlusIcon = ({ size = 16 }) => <Svg size={size} strokeWidth="2.4"><path d="M12 5v14M5 12h14" /></Svg>;
+export const SearchIcon = ({ size = 16 }) => <Svg size={size}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>;
+export const StarIcon = ({ size = 14, filled = false }) => <Svg size={size} fill={filled ? 'currentColor' : 'none'}><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9Z" /></Svg>;
+export const SpacesIcon = () => <Svg size={16}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><path d="M17.5 14v7M14 17.5h7" /></Svg>;

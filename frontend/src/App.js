@@ -24,6 +24,9 @@ const UpdatesPage = lazy(() => import('./pages/Updates'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const Timesheet = lazy(() => import('./pages/Timesheet'));
 const AccountSetup = lazy(() => import('./pages/AccountSetup'));
+const Spaces = lazy(() => import('./pages/Spaces'));
+const BulkUpload = lazy(() => import('./pages/BulkUpload'));
+const TeamSpace = lazy(() => import('./pages/Spaces/TeamSpace'));
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token') || localStorage.getItem('company_token');
@@ -68,6 +71,9 @@ function App() {
           <Route path="communications" element={<Communications />} />
           <Route path="timesheet" element={<Timesheet />} />
           <Route path="calendar" element={<CalendarPage />} />
+          <Route path="spaces" element={<Spaces />} />
+          <Route path="bulk-upload" element={<BulkUpload />} />
+          <Route path="spaces/:teamId" element={<TeamSpace />} />
         </Route>
       </Routes></Suspense></AppErrorBoundary>
     </Router>

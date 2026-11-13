@@ -212,11 +212,11 @@ router.get('/entries/:id', route(async (req, res) => {
   });
 }));
 
-/* Create */
-router.post('/entries', route(async (req, res) => {
-  const mode = req.body.mode === 'draft' ? 'draft' : 'submit';
+/* Create. One entry, with every rule; "+ Add Timesheet" and the sheet upload both come through here. */
+async function createEntry(req, raw) {
+  const mode = raw.mode === 'draft' ? 'draft' : 'submit';
   const today = todayLocal();
-  const body = { ...req.body };
+  const body = { ...raw };
   if (!permissionsFor(req.tsRole).log_for_others) body.agent_id = req.userId;
   const layout = await getFormLayout(req.orgId);
   const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode) : undefined);
@@ -244,7 +244,33 @@ router.post('/entries', route(async (req, res) => {
       entry.hours, req.orgId, logUser, logDate, entry.hours, 'Initial entry', req.userId]
   );
   await audit(req, result.insertId, mode === 'draft' ? 'CREATE_DRAFT' : 'CREATE', entry.hours ? `${entry.hours}h initial` : null);
-  res.status(201).json({ id: result.insertId, status: mode === 'draft' ? 'DRAFT' : 'SUBMITTED' });
+  return { id: result.insertId, status: mode === 'draft' ? 'DRAFT' : 'SUBMITTED' };
+}
+
+router.post('/entries', route(async (req, res) => {
+  res.status(201).json(await createEntry(req, req.body || {}));
+}));
+
+// Sheet upload: a few rows per call so the screen can show progress. Each row is saved on its own,
+// with the same rules as the form; a bad row is reported and the others still go in.
+const BULK_ROWS = 25;
+router.post('/entries/bulk', route(async (req, res) => {
+  const rows = req.body?.rows;
+  if (!Array.isArray(rows) || !rows.length) throw fail(422, 'There are no rows to upload');
+  if (rows.length > BULK_ROWS) throw fail(422, `Send at most ${BULK_ROWS} rows at a time`);
+  const mode = req.body.mode === 'draft' ? 'draft' : 'submit';
+  const results = [];
+  for (const row of rows) {
+    try {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) throw fail(422, 'This row could not be read');
+      // eslint-disable-next-line no-await-in-loop
+      results.push({ ok: true, ...(await createEntry(req, { ...row, mode })) });
+    } catch (error) {
+      if (!error.status) console.error('[timesheet] bulk row failed', error.message);
+      results.push({ ok: false, error: error.status ? error.message : 'Could not save this row. Try it again.', ...(error.fields ? { fields: error.fields } : {}) });
+    }
+  }
+  res.json({ results });
 }));
 
 /* Edit details (hours live in the time log) */

@@ -36,11 +36,21 @@ test('managers add clients and switch the pick-only rule from Settings', async (
   expect(h.setPickOnly).toHaveBeenCalledWith(true);
 });
 
-test('with pick-only on, employees get a dropdown and managers can add inline', async () => {
+test('with pick-only on, employees search the list and managers can add inline', async () => {
   h.list = jest.fn(async () => sample(true, false));
-  await act(async () => r.render(<ClientPicker id="x" value="" onChange={() => {}} />));
-  expect(c.querySelector('#x').tagName).toBe('SELECT');
-  expect([...c.querySelectorAll('#x option')].map((o) => o.textContent)).toEqual(['-Select client-', 'Riverside Motors']);
+  const onChange = jest.fn();
+  await act(async () => r.render(<ClientPicker id="x" value="" onChange={onChange} />));
+  const box = c.querySelector('#x');
+  expect(box.getAttribute('role')).toBe('combobox');
+  act(() => { box.focus(); box.dispatchEvent(new FocusEvent('focus')); type(box, 'motors'); });
+  const options = () => [...c.querySelectorAll('[role="option"]')].map((o) => o.textContent);
+  expect(options()).toEqual(['Riverside Motors']);
+  expect(onChange).not.toHaveBeenCalled();
+  act(() => type(box, 'zzz'));
+  expect(c.textContent).toContain('No client with that name.');
+  act(() => type(box, 'river'));
+  await act(async () => c.querySelector('[role="option"]').click());
+  expect(onChange).toHaveBeenCalledWith('Riverside Motors');
   expect(c.textContent).toContain('Client names are added by your manager or admin.');
   act(() => r.unmount()); r = createRoot(c); announceClientsChange();
   h.list = jest.fn(async () => sample(true, true));

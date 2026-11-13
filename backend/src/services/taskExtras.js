@@ -3,6 +3,24 @@ const db = require('../config/database');
 // Labels, subtasks and links for tasks, always checked against what the person may see.
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const LINK_TYPES = ['blocks', 'relates', 'duplicates'];
+// Starter labels for each kind of work picked at onboarding.
+const WORK_TYPES = {
+  accounting: [['VAT', 'blue'], ['Payroll', 'green'], ['Bookkeeping', 'teal'], ['Year end', 'violet'], ['Client query', 'amber']],
+  software: [['Frontend', 'blue'], ['Backend', 'violet'], ['Bug', 'red'], ['Testing', 'amber'], ['Release', 'green']],
+  product: [['Research', 'teal'], ['Roadmap', 'violet'], ['Feedback', 'amber'], ['Spec', 'blue']],
+  marketing: [['Campaign', 'pink'], ['Content', 'blue'], ['Social', 'violet'], ['Ads', 'orange'], ['Event', 'green']],
+  design: [['UI', 'violet'], ['Branding', 'pink'], ['Review', 'amber'], ['Assets', 'teal']],
+  project: [['Milestone', 'violet'], ['Risk', 'red'], ['Client', 'blue'], ['Follow-up', 'amber']],
+  operations: [['Process', 'teal'], ['Vendor', 'blue'], ['Compliance', 'violet'], ['Urgent', 'red']],
+  it_support: [['Hardware', 'slate'], ['Access', 'blue'], ['Network', 'teal'], ['Incident', 'red']],
+  hr: [['Hiring', 'green'], ['Onboarding', 'blue'], ['Payroll', 'teal'], ['Policy', 'violet'], ['Leave', 'amber']],
+  customer_service: [['Complaint', 'red'], ['Query', 'blue'], ['Refund', 'amber'], ['Follow-up', 'green']],
+  legal: [['Contract', 'blue'], ['Compliance', 'violet'], ['Review', 'amber'], ['Filing', 'teal']],
+  finance: [['Invoice', 'blue'], ['Payment', 'green'], ['Audit', 'violet'], ['Tax', 'red'], ['Report', 'teal']],
+  sales: [['Lead', 'blue'], ['Proposal', 'violet'], ['Follow-up', 'amber'], ['Won', 'green'], ['Lost', 'slate']],
+  data: [['Analysis', 'blue'], ['Dashboard', 'violet'], ['Data fix', 'amber'], ['Report', 'teal']],
+  other: [],
+};
 const COLORS = ['green', 'blue', 'violet', 'pink', 'red', 'orange', 'amber', 'teal', 'slate'];
 const ids = (list, max = 200) => [...new Set((Array.isArray(list) ? list : String(list || '').split(','))
   .map(Number).filter((id) => Number.isInteger(id) && id > 0))].slice(0, max);
@@ -211,6 +229,6 @@ async function search(req, query, teamId) {
 }
 
 module.exports = {
-  LINK_TYPES, COLORS, prefixOf, idFromKey, visibleTasks, visibleTask, orgPrefix, labelsOf, createLabel, setLabels, summaries, detail,
+  LINK_TYPES, COLORS, WORK_TYPES, prefixOf, idFromKey, visibleTasks, visibleTask, orgPrefix, labelsOf, createLabel, setLabels, summaries, detail,
   addSubtask, setParent, addLink, removeLink, search,
 };

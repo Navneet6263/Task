@@ -21,12 +21,14 @@ const task = { id: 42, title: 'October payroll', client_name: 'riverside motors'
 let c, r;
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; c = document.createElement('div'); document.body.append(c); r = createRoot(c); });
 afterEach(() => { act(() => r.unmount()); c.remove(); });
+const clientOf = () => document.querySelector('#ts-client_id').dataset.value;
 
 test('opening from a task picks it and fills client and description, and Done by stays on the logged-in person', async () => {
   h.create = jest.fn(async () => ({ data: { id: 9 } }));
   await act(async () => r.render(<EntryFormModal config={config} initialTask={task} onClose={() => {}} onSaved={() => {}} />));
   expect(document.body.textContent).toContain('October payroll');
-  expect(document.querySelector('#ts-client_id').value).toBe('4');
+  expect(clientOf()).toBe('4');
+  expect(document.querySelector('#ts-client_id').value).toBe('Riverside Motors');
   expect(document.querySelector('#ts-agent_id').value).toBe('10');
   expect(document.querySelector('#ts-description').value).toBe('October payroll');
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save Draft').click());
@@ -40,7 +42,7 @@ test('people can search their tasks and change the pick', async () => {
   await act(async () => { await new Promise((res) => setTimeout(res, 300)); });
   expect(h.tasks).toHaveBeenCalled();
   await act(async () => document.querySelector('[role="option"]').click());
-  expect(document.querySelector('#ts-client_id').value).toBe('4');
+  expect(clientOf()).toBe('4');
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Change').click());
   expect(document.querySelector('#ts-task_id')).toBeTruthy();
 });
@@ -94,9 +96,19 @@ test('picking an agent shows only its clients, and picking a client fills in its
   };
   await act(async () => r.render(<EntryFormModal config={withAgents} onClose={() => {}} onSaved={() => {}} />));
   const pick = async (id, value) => act(async () => { const el = document.querySelector(id); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  const box = () => document.querySelector('#ts-client_id');
+  const open = () => act(() => { box().focus(); box().dispatchEvent(new FocusEvent('focus')); });
+  const listed = () => [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent);
   await pick('#ts-agent_firm_id', '3');
-  expect([...document.querySelectorAll('#ts-client_id option')].map((o) => o.textContent)).toEqual(['-Select-', 'ABC One Ltd']);
+  open();
+  expect(listed()).toEqual(['ABC One Ltd']);
+  act(() => box().blur());
   await pick('#ts-agent_firm_id', '');
-  await pick('#ts-client_id', '5');
+  open();
+  // With no agent chosen, every client shows its agent beside it.
+  expect(listed()).toEqual(['ABC One LtdABR Accountants', 'NorthwindAlpha Accountants', 'Walk-in']);
+  act(() => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(box(), 'north'); box().dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => document.querySelector('[role="option"]').click());
+  expect(clientOf()).toBe('5');
   expect(document.querySelector('#ts-agent_firm_id').value).toBe('4');
 });
