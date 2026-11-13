@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { LineIcon } from '../../components/shell/icons';
 import api from '../../services/api';
 import { Banner, Loading } from '../../ui';
 
@@ -15,12 +16,20 @@ const when = (value) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 };
 
+const TILE_ICONS = {
+  done: ['M22 11.1V12a10 10 0 1 1-5.9-9.1 M22 4 12 14.01l-3-3', 'bg-accent-soft text-accent'],
+  updated: ['M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z', 'bg-info-soft text-info'],
+  created: ['M12 5v14 M5 12h14', 'bg-subtle text-ink'],
+  due: ['M3 5h18v16H3z M16 3v4 M8 3v4 M3 10h18', 'bg-warn-soft text-warn'],
+};
+
 function Tile({ value, label, sub, icon, onClick }) {
+  const [d, tone] = TILE_ICONS[icon];
   return (
     <button type="button" onClick={onClick} disabled={!onClick}
-      className="flex items-center gap-3.5 rounded-xl border border-line bg-surface p-4 text-left transition enabled:hover:border-accent/50 enabled:hover:shadow-sm">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-subtle text-lg" aria-hidden="true">{icon}</span>
-      <span><span className="block text-[15px] font-semibold"><span className="font-mono">{value}</span> {label}</span><span className="block text-xs text-muted">{sub}</span></span>
+      className="flex items-center gap-3.5 rounded-lg border border-line bg-surface p-4 text-left transition enabled:hover:border-accent/50 enabled:hover:bg-subtle">
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${tone}`}><LineIcon d={d} /></span>
+      <span><span className="block text-[15px] font-semibold"><span className="tabular-nums">{value}</span> {label}</span><span className="block text-xs text-muted">{sub}</span></span>
     </button>
   );
 }
@@ -68,10 +77,10 @@ export default function SpaceSummary({ teamId, onGo }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Tile icon="✅" value={c.done_7d} label="completed" sub="in the last 7 days" onClick={() => onGo('list')} />
-        <Tile icon="✏️" value={c.updated_7d} label="updated" sub="in the last 7 days" onClick={() => onGo('list')} />
-        <Tile icon="➕" value={c.created_7d} label="created" sub="in the last 7 days" onClick={() => onGo('list')} />
-        <Tile icon="📅" value={c.due_7d} label="due soon" sub={c.overdue ? `in the next 7 days · ${c.overdue} overdue` : 'in the next 7 days'} onClick={() => onGo('calendar')} />
+        <Tile icon="done" value={c.done_7d} label="completed" sub="in the last 7 days" onClick={() => onGo('list')} />
+        <Tile icon="updated" value={c.updated_7d} label="updated" sub="in the last 7 days" onClick={() => onGo('list')} />
+        <Tile icon="created" value={c.created_7d} label="created" sub="in the last 7 days" onClick={() => onGo('list')} />
+        <Tile icon="due" value={c.due_7d} label="due soon" sub={c.overdue ? `in the next 7 days · ${c.overdue} overdue` : 'in the next 7 days'} onClick={() => onGo('calendar')} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

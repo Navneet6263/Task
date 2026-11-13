@@ -38,7 +38,12 @@ test('resting on a face shows who they are; from there a meeting goes in the cal
   expect(card.textContent).toContain('Late1');
   expect(card.textContent).toContain('Done 30 d7');
   await act(async () => inBody('Schedule a meeting with Ashish').click());
+  // The small card is gone and stays gone while the meeting window is used.
+  expect(document.body.querySelector('[aria-label="About Ashish Kumar"]')).toBeNull();
   const dialog = document.body.querySelector('[role="dialog"]');
+  act(() => { dialog.querySelector('input').dispatchEvent(new FocusEvent('focusin', { bubbles: true })); dialog.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
+  act(() => { jest.advanceTimersByTime(1000); });
+  expect(document.body.querySelector('[aria-label="About Ashish Kumar"]')).toBeNull();
   expect(dialog.textContent).toContain('Schedule a meeting with Ashish');
   const field = (label) => [...dialog.querySelectorAll('label')].find((l) => l.textContent.startsWith(label)).querySelector('input, select, textarea');
   expect(field('Title').value).toBe('Meeting with Ashish');

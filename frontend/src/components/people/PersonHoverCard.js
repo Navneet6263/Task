@@ -18,7 +18,9 @@ export default function PersonHoverCard({ person, actions = [], canMeet = true, 
   const [meeting, setMeeting] = useState(false);
 
   useEffect(() => () => clearTimeout(timer.current), []);
-  const show = () => {
+  // Only the face itself opens the card: events from the card or the meeting window (drawn elsewhere on the page) do not.
+  const show = (e) => {
+    if (meeting || (e?.target && !anchor.current?.contains(e.target))) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const r = anchor.current?.getBoundingClientRect();
@@ -36,6 +38,7 @@ export default function PersonHoverCard({ person, actions = [], canMeet = true, 
   const done = person.done_30d === undefined ? null : Number(person.done_30d || 0);
 
   return (
+    <>
     <span ref={anchor} className="inline-block" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}
       onKeyDown={(e) => { if (e.key === 'Escape') setPlace(null); }}>
       {children}
@@ -70,7 +73,8 @@ export default function PersonHoverCard({ person, actions = [], canMeet = true, 
         </div>,
         document.body,
       )}
-      {meeting && <MeetingModal person={person} onClose={() => setMeeting(false)} />}
     </span>
+    {meeting && <MeetingModal person={person} onClose={() => setMeeting(false)} />}
+    </>
   );
 }

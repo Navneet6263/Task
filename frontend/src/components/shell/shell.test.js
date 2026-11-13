@@ -62,3 +62,16 @@ test('a new company picks its kind of work once, or skips', async () => {
   expect(h.setWorkType).toHaveBeenCalledWith('accounting');
   expect(onDone).toHaveBeenCalled();
 });
+
+test('no emoji on the space summary or the kind-of-work picker: line icons only', async () => {
+  h.apiGet = jest.fn(async () => ({ data: { counts: { done_7d: 3, updated_7d: 2, created_7d: 1, due_7d: 4, overdue: 0, total: 6, todo: 2, in_progress: 1, pending: 0, done: 3, high: 1, medium: 4, low: 1 }, types: [], workload: [], activity: [] } }));
+  await render(<SpaceSummary teamId={7} onGo={() => {}} />);
+  await flush();
+  expect(document.body.textContent).toContain('3 completed');
+  expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  expect(document.body.querySelectorAll('svg').length).toBeGreaterThanOrEqual(4);
+  act(() => r.unmount()); r = createRoot(c);
+  await render(<WorkTypePicker onDone={() => {}} />);
+  expect(document.body.textContent).toContain('Accounting');
+  expect(document.body.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+});

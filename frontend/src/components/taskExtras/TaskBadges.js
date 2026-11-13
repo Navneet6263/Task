@@ -1,5 +1,6 @@
 import React from 'react';
 import LabelChip from './LabelChip';
+import { LockIcon } from '../shell/icons';
 import { useTaskMeta, useTaskSummary } from './taskExtrasStore';
 
 // The Jira-style line on a card: labels, subtask progress, parent and open blockers.
@@ -13,7 +14,7 @@ export default function TaskBadges({ task, showKey = false, max = 3 }) {
   return (
     <span className="flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()} role="presentation">
       {showKey && <span className="rounded bg-subtle px-1.5 py-px font-mono text-[10px] font-semibold text-muted">{keyOf(task.id)}</span>}
-      {s?.blocked_by > 0 && <span title={`Blocked by ${s.blocked_by} open task${s.blocked_by === 1 ? '' : 's'}`} className="rounded bg-danger-soft px-1.5 py-px text-[10px] font-bold text-danger">🔒 Blocked</span>}
+      {s?.blocked_by > 0 && <span title={`Blocked by ${s.blocked_by} open task${s.blocked_by === 1 ? '' : 's'}`} className="inline-flex items-center gap-1 rounded bg-danger-soft px-1.5 py-px text-[10px] font-bold text-danger"><LockIcon />Blocked</span>}
       {s?.parent && <span title={`Subtask of ${s.parent.title}`} className="max-w-[160px] truncate rounded bg-info-soft px-1.5 py-px text-[10px] font-semibold text-info">↳ {s.parent.title || keyOf(s.parent.id)}</span>}
       {sub && (
         <span title={`${sub.done} of ${sub.total} subtasks done`} className="inline-flex items-center gap-1 rounded bg-subtle px-1.5 py-px text-[10px] font-semibold text-muted">
