@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { timesheet } from '../../services/api';
+import { notify } from '../../services/feedback';
 import { Button, buttonClass, CountBadge, ErrorText, Loading, PageHeader, Tabs } from '../../ui';
 import { errorOf } from './format';
 import EntriesTab from './entries/EntriesTab';
@@ -52,6 +53,11 @@ export default function Timesheet() {
     setForm(null);
     if (mode === 'edit') setDetailId(id);
   };
+  // "Edit" on a draft in the list: load the whole entry (the list leaves some fields out), then open the form.
+  const editEntry = async (id) => {
+    try { setForm({ entry: (await timesheet.entry(id)).data }); }
+    catch (err) { notify(errorOf(err, 'Could not open this entry.')); }
+  };
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -70,7 +76,7 @@ export default function Timesheet() {
         )}
       />
 
-      {tab === 'entries' && <EntriesTab key={entriesPreset?.at || 'entries'} config={config} refreshKey={refreshKey} onOpen={setDetailId} preset={entriesPreset} />}
+      {tab === 'entries' && <EntriesTab key={entriesPreset?.at || 'entries'} config={config} refreshKey={refreshKey} onOpen={setDetailId} onEdit={editEntry} preset={entriesPreset} />}
       {tab === 'week' && <TeamWeekTab config={config} refreshKey={refreshKey} onDrill={(preset) => { setEntriesPreset({ ...preset, at: Date.now() }); setTab('entries'); }} />}
       {tab === 'reports' && <ReportsTab config={config} />}
       {tab === 'setup' && <SetupTab config={config} onChanged={loadConfig} />}

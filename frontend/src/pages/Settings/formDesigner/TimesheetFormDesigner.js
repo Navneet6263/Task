@@ -69,7 +69,7 @@ export default function TimesheetFormDesigner({ embedded = false, onSaved, onCan
 
   return (
     <div className="flex flex-col gap-4">
-      {!canEdit && <Banner tone="warn">Only admins and managers can change the timesheet form.</Banner>}
+      {!canEdit && <Banner tone="warn">Only admins can change the timesheet form.</Banner>}
       {conflict && <Banner tone="danger" action={<Button size="sm" onClick={load}>Reload latest</Button>}>{conflict}</Banner>}
       {embedded ? (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm">

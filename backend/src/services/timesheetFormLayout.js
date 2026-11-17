@@ -91,7 +91,8 @@ function normalizeTimesheetLayout(input) {
     }
     if (type === 'date' && raw.default === 'today') field.default = 'today';
     if (type === 'person' && raw.default === 'me') field.default = 'me';
-    if (!locked && key !== 'job_type' && Array.isArray(raw.skip_for) && raw.skip_for.length) field.skip_for = raw.skip_for.map((v) => String(v ?? '').trim()).filter(Boolean);
+    // Client may be "not needed" too (e.g. Leave): such entries go under the hidden "No client" row.
+    if ((!locked || key === 'client_id') && key !== 'job_type' && Array.isArray(raw.skip_for) && raw.skip_for.length) field.skip_for = raw.skip_for.map((v) => String(v ?? '').trim()).filter(Boolean);
     return field;
   });
   // "Not needed for": only Job Type options that exist (matched without case, stored as the option is written).
@@ -110,7 +111,8 @@ function normalizeTimesheetLayout(input) {
     seen.add('agent_firm_id');
   }
   CORE_KEYS.filter((key) => !seen.has(key)).forEach((key) => fields.push(coreField(key, { hidden: !CORE[key].locked, required: Boolean(CORE[key].locked) })));
-  return { name: text(input.name, 80, 'Form name') || 'Timesheet', fields };
+  // Fields a Job Type does not need are greyed out by default; a company can ask for them hidden instead.
+  return { name: text(input.name, 80, 'Form name') || 'Timesheet', fields, ...(input.skip_style === 'hide' ? { skip_style: 'hide' } : {}) };
 }
 
 const fieldOf = (layout, key) => layout.fields.find((f) => f.key === key);

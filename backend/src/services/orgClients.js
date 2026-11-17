@@ -43,7 +43,7 @@ async function syncClientLists(orgId, userId, { toTimesheet = false } = {}) {
   await run(
     `INSERT INTO org_clients (org_id, name, is_active, created_by, source)
      SELECT ?, tc.name, tc.is_active, ?, 'timesheet' FROM timesheet_clients tc
-     WHERE tc.org_id = ? AND NOT EXISTS (SELECT 1 FROM org_clients c WHERE c.org_id = ? AND c.name = tc.name)`,
+     WHERE tc.org_id = ? AND COALESCE(tc.source, '') <> 'none' AND NOT EXISTS (SELECT 1 FROM org_clients c WHERE c.org_id = ? AND c.name = tc.name)`,
     [orgId, userId || null, orgId, orgId], 'copy timesheet clients');
   if (toTimesheet) {
     await run(
@@ -52,6 +52,16 @@ async function syncClientLists(orgId, userId, { toTimesheet = false } = {}) {
        WHERE c.org_id = ? AND NOT EXISTS (SELECT 1 FROM timesheet_clients tc WHERE tc.org_id = ? AND tc.name = c.name)`,
       [orgId, userId || null, orgId, orgId], 'mirror clients into the timesheet');
   }
+}
+
+// Entries whose Job Type needs no client (e.g. Leave) still need a client row: a hidden "No client"
+// one (inactive, source 'none', never copied into Settings → Clients). Created on first use.
+const NO_CLIENT = 'No client';
+async function noClientId(orgId) {
+  try { await db.execute("INSERT INTO timesheet_clients (org_id, name, is_active, source) VALUES (?, ?, 0, 'none')", [orgId, NO_CLIENT]); }
+  catch (error) { if (!isDuplicateKey(error)) throw error; }
+  const [[row]] = await db.execute('SELECT id FROM timesheet_clients WHERE org_id = ? AND name = ?', [orgId, NO_CLIENT]);
+  return Number(row.id);
 }
 
 // The timesheet row for a client of the main list (created when missing).
@@ -114,4 +124,4 @@ async function resolveAgent(orgId, rawAgentId, clientName) {
   return agentId;
 }
 
-module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, syncClientLists, timesheetClientId, pickOnly, resolveTaskClient, resolveAgent };
+module.exports = { MANAGERS, isManagerRole, fail, isDuplicateKey, cleanName, syncFromTasks, syncClientLists, timesheetClientId, noClientId, NO_CLIENT, pickOnly, resolveTaskClient, resolveAgent };

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import HoursInput from './HoursInput';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
 import { Button, Card, CardHeader, EmptyRow, FieldError, Input, Select, Table, Td, Th } from '../../../ui';
@@ -53,7 +54,7 @@ export default function TimeLogSection({ entry, config, busy, onRemove, onAdded 
               {config.users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
             </Select>
             <Input aria-label="Date" type="date" max={config.today} value={log.work_date} onChange={(event) => setLog({ ...log, work_date: event.target.value })} />
-            <Input aria-label="Hours" type="number" min="0.25" max="24" step="0.25" placeholder="Hours" value={log.hours} onChange={(event) => setLog({ ...log, hours: event.target.value })} />
+            <HoursInput label="Hours" value={log.hours} onChange={(hours) => setLog((prev) => ({ ...prev, hours }))} />
             <Input aria-label="Note" maxLength={500} placeholder="What was done (optional)" value={log.note} onChange={(event) => setLog({ ...log, note: event.target.value })} />
             <Button type="submit" variant="primary" disabled={saving || busy}>+ Add Time</Button>
             <div className="col-span-2 md:col-span-5"><FieldError text={errors.hours || errors.work_date || errors.user_id || errors.note} /></div>

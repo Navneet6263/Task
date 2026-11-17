@@ -48,7 +48,7 @@ test('optional and hidden fields are no longer required; a dropdown can become f
   assert.throws(() => normalizeTimesheetLayout({ ...base, fields: base.fields.map((f) => (f.key === 'job_type' ? { ...f, options: [] } : f)) }), /Add at least one option/);
 });
 
-test('only managers and admins save the timesheet form, with version protection', async (t) => {
+test('only admins save the timesheet form (not managers), with version protection', async (t) => {
   let role = 'person';
   const writes = [];
   t.mock.method(db, 'execute', async (sql, params) => {
@@ -63,6 +63,10 @@ test('only managers and admins save the timesheet form, with version protection'
   assert.equal((await send('/form', 'PUT', { layout, version: 0 })).status, 403);
   assert.equal(writes.length, 0);
   role = 'manager';
+  assert.equal((await send('/form', 'PUT', { layout, version: 0 })).status, 403);
+  assert.equal((await send('/form', 'DELETE')).status, 403);
+  assert.equal(writes.length, 0);
+  role = 'admin';
   assert.equal((await send('/form', 'PUT', { layout, version: 3 })).status, 409);
   assert.equal((await send('/form', 'PUT', { layout, version: 0 })).status, 200);
   assert.match(writes[0].sql, /INSERT INTO timesheet_form_layouts .* OUTPUT INSERTED\.org_id/);
@@ -77,20 +81,27 @@ const ruled = () => {
     if (f.key === 'registration_status') return { ...f, skip_for: ['bookkeeping & vat return', 'Training', 'Not a job type'] };
     if (['count_type', 'count_number'].includes(f.key)) return { ...f, skip_for: ['Payroll/ PAYE', 'Training'] };
     if (f.key === 'client_id') return { ...f, skip_for: ['Training'] };
+    if (['date_worked', 'hours'].includes(f.key)) return { ...f, skip_for: ['Training'] };
     return f;
   }) });
 };
 
-test('a field can be marked "not needed" for some Job Types; only real options are kept, never for locked fields', () => {
+test('a field can be marked "not needed" for some Job Types; only real options are kept, never date or hours', () => {
   const layout = ruled();
   const field = (key) => layout.fields.find((f) => f.key === key);
   assert.deepEqual(field('registration_status').skip_for, ['Bookkeeping & VAT Return', 'Training']);
   assert.deepEqual(field('count_number').skip_for, ['Payroll/ PAYE', 'Training']);
-  assert.equal(field('client_id').skip_for, undefined, 'client, date and hours are always needed');
+  assert.deepEqual(field('client_id').skip_for, ['Training'], 'client can be not needed, e.g. for Leave');
+  assert.equal(field('date_worked').skip_for, undefined, 'date and hours are always needed');
+  assert.equal(field('hours').skip_for, undefined);
   const { skippedKeys } = require('../src/services/timesheetFormLayout');
-  assert.deepEqual([...skippedKeys(layout, 'training')].sort(), ['count_number', 'count_type', 'registration_status']);
+  assert.deepEqual([...skippedKeys(layout, 'training')].sort(), ['client_id', 'count_number', 'count_type', 'registration_status']);
   assert.deepEqual([...skippedKeys(layout, 'Payroll/ PAYE')].sort(), ['count_number', 'count_type']);
   assert.equal(skippedKeys(layout, 'Something else').size, 0);
+  // Greyed out unless the form says to hide them (Accountrust); nothing else is kept.
+  assert.equal(layout.skip_style, undefined);
+  assert.equal(normalizeTimesheetLayout({ ...layout, skip_style: 'hide' }).skip_style, 'hide');
+  assert.equal(normalizeTimesheetLayout({ ...layout, skip_style: 'weird' }).skip_style, undefined);
   // Renaming a Job Type option away drops it from the rule instead of breaking the form.
   const renamed = normalizeTimesheetLayout({ ...layout, fields: layout.fields.map((f) => (f.key === 'job_type' ? { ...f, options: ['Bookkeeping', 'Payroll/ PAYE', 'Training'] } : f)) });
   assert.deepEqual(renamed.fields.find((f) => f.key === 'registration_status').skip_for, ['Training']);
@@ -98,13 +109,15 @@ test('a field can be marked "not needed" for some Job Types; only real options a
 
 test('an entry for a Job Type that does not need some fields saves without them, and they are stored empty', async (t) => {
   const layout = ruled();
-  const inserts = [];
+  const inserts = [], noClient = [];
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.startsWith('SELECT u.id, u.role FROM users u')) return [[{ id: 10, role: 'person' }]];
     if (sql.startsWith('SELECT is_enabled FROM org_modules')) return [[{ is_enabled: true }]];
     if (sql.startsWith('SELECT definition, version FROM timesheet_form_layouts')) return [[{ definition: JSON.stringify(layout), version: 3 }]];
     if (sql.startsWith('SELECT tc.id FROM timesheet_clients')) return [[{ id: 5 }]];
     if (sql.startsWith('SELECT name FROM timesheet_clients')) return [[{ name: 'Acme' }]];
+    if (sql.startsWith('INSERT INTO timesheet_clients')) { noClient.push(sql); return [{ insertId: 77 }]; }
+    if (sql.startsWith('SELECT id FROM timesheet_clients WHERE org_id = ? AND name = ?')) return [[{ id: 77 }]];
     if (sql.startsWith('SELECT c.agent_id')) return [[]];
     if (sql.startsWith('SELECT u.id FROM users u')) return [[{ id: 10 }]];
     if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
@@ -119,6 +132,9 @@ test('an entry for a Job Type that does not need some fields saves without them,
   assert.equal(training.status, 201);
   // Insert values 8, 10 and 11 are registration status, count type and count number.
   assert.deepEqual([inserts[0][8], inserts[0][10], inserts[0][11]], [null, null, null]);
+  // Training needs no client either: the entry goes under the hidden, inactive "No client" row.
+  assert.equal(inserts[0][1], 77);
+  assert.match(noClient[0], /is_active, source\) VALUES \(\?, \?, 0, 'none'\)/);
   // Payroll still needs the registration status, but not the counts.
   const payroll = await send('/entries', 'POST', { ...base, job_type: 'Payroll/ PAYE' });
   assert.equal(payroll.status, 422);

@@ -72,11 +72,11 @@ test('the timesheet form follows the saved layout: labels, optional fields, hidd
   expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ client_id: '4', hours: '2', period_ended: '', custom_fields: { ticket: 'T-77' } }));
 });
 
-test('admins and managers change the form from the timesheet window itself, and what they typed stays', async () => {
+test('admins change the form from the timesheet window itself, and what they typed stays', async () => {
   h.form = async () => ({ data: { layout: original, version: 0, saved: false, can_edit: true } });
   h.saveForm = jest.fn(async (layout) => ({ data: { layout: { ...layout, version: 1 }, version: 1, saved: true } }));
   const onFormChanged = jest.fn();
-  const config = { today: '2026-10-22', user_id: 10, permissions: { log_for_others: true, manage_clients: true }, users: [{ id: 10, name: 'Me' }], clients: [{ id: 4, name: 'Riverside' }], form: original };
+  const config = { today: '2026-10-22', user_id: 10, permissions: { log_for_others: true, manage_clients: true, edit_form: true }, users: [{ id: 10, name: 'Me' }], clients: [{ id: 4, name: 'Riverside' }], form: original };
   await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} onFormChanged={onFormChanged} />));
   act(() => type(document.querySelector('#ts-hours'), '2'));
   expect(document.querySelector('#ts-period_ended')).toBeTruthy();
@@ -92,9 +92,12 @@ test('admins and managers change the form from the timesheet window itself, and 
   expect(document.querySelector('#ts-hours').value).toBe('2');
 });
 
-test('members do not get the Edit form button', async () => {
+test('members and managers do not get the Edit form button (admins only)', async () => {
   const config = { today: '2026-10-22', user_id: 12, permissions: { log_for_others: false, manage_clients: false }, users: [{ id: 12, name: 'Asha' }], clients: [], form: original };
   await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} />));
+  expect(button('Edit form')).toBeUndefined();
+  const manager = { ...config, permissions: { log_for_others: false, manage_clients: true, edit_form: false } };
+  await act(async () => r.render(<EntryFormModal config={manager} onClose={() => {}} onSaved={() => {}} />));
   expect(button('Edit form')).toBeUndefined();
 });
 
@@ -116,11 +119,17 @@ test('the form designer has a Job Type table: tick a box and that field is not n
   const box = (label) => c.querySelector(`[aria-label="${label}"]`);
   expect(box('Registration Status not needed for Training').checked).toBe(true);
   expect(box('Registration Status not needed for Bookkeeping & VAT Return').checked).toBe(false);
-  // Locked fields (client, date, hours) and Job Type itself are not in the table.
-  expect(box('Client not needed for Training')).toBeNull();
+  // Client can be not needed (e.g. Leave); date, hours and Job Type itself are not in the table.
+  expect(box('Client not needed for Training')).toBeTruthy();
+  expect(box('Date worked not needed for Training')).toBeNull();
+  expect(box('Hours worked not needed for Training')).toBeNull();
   await act(async () => box('Count number not needed for Bookkeeping & VAT Return').click());
   await act(async () => box('Registration Status not needed for Training').click());
+  // Greyed out by default; a company can choose to hide them instead.
+  expect(button('Greyed out').getAttribute('aria-pressed')).toBe('true');
+  await act(async () => button('Hidden').click());
   await act(async () => button('Save timesheet form').click());
+  expect(h.saveForm.mock.calls[0][0].skip_style).toBe('hide');
   const saved = h.saveForm.mock.calls[0][0].fields;
   expect(saved.find((f) => f.key === 'count_number').skip_for).toEqual(['Training', 'Bookkeeping & VAT Return']);
   expect(saved.find((f) => f.key === 'registration_status').skip_for).toBeUndefined();
@@ -146,4 +155,23 @@ test('choosing a Job Type greys out the fields it does not need; they are not re
   // Another Job Type needs them again.
   pick('#ts-job_type', 'Bookkeeping & VAT Return');
   expect(document.querySelector('#ts-registration_status').matches(':disabled')).toBe(false);
+});
+
+test('a form set to hide (Accountrust): Leave hides the client and others it does not need; sent without a client', async () => {
+  h.create = jest.fn(async () => ({ data: { id: 6 } }));
+  const leaveForm = { ...ruledForm, skip_style: 'hide', fields: ruledForm.fields.map((f) => {
+    if (f.key === 'job_type') return { ...f, options: [...f.options, 'Leave'] };
+    if (['client_id', 'registration_status', 'count_number'].includes(f.key)) return { ...f, skip_for: [...(f.skip_for || []), 'Leave'] };
+    return f;
+  }) };
+  const config = { today: '2026-11-14', user_id: 10, permissions: { log_for_others: true }, users: [{ id: 10, name: 'Me' }], clients: [{ id: 4, name: 'Riverside' }], form: leaveForm };
+  await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} />));
+  await choose('#ts-client_id', 'Riv', 'Riverside');
+  act(() => { const el = document.querySelector('#ts-job_type'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, 'Leave'); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  expect(document.querySelector('#ts-client_id')).toBeNull();
+  expect(document.body.textContent).toContain('Not needed for Leave, so not shown: Client, Registration Status, Count number.');
+  act(() => type(document.querySelector('[aria-label="Hours worked: minutes"]'), '30'));
+  act(() => type(document.querySelector('#ts-hours'), '7'));
+  await act(async () => button('Submit').click());
+  expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ job_type: 'Leave', client_id: '', hours: '7.5' }));
 });

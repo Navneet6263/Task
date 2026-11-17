@@ -16,7 +16,7 @@ function help(field, kind, ctx) {
     case 'priority': return 'High, Medium or Low. Empty means Medium.';
     case 'issue_type': return 'Task, Bug, Story, Feature or Improvement. Empty means Task.';
     case 'date': return field.key === 'date_worked' ? 'The day the work was done, like 31/12/2026. It cannot be a future date.' : 'A date like 31/12/2026.';
-    case 'hours': return 'The time spent, as a number: 2.5 means two and a half hours. At most 24.';
+    case 'hours': return 'The time spent: 2.5 or 2:30 means two and a half hours; 20 min or 0:20 means twenty minutes. At most 24.';
     case 'dropdown': return options.length ? `One of: ${listOf(options)}.` : 'One of the options in your form.';
     case 'checkbox': return 'Yes or No.';
     case 'number': return 'A number.';

@@ -35,6 +35,8 @@ const permissionsFor = (role) => ({
   manage_clients: role === 'admin' || role === 'manager',
   view_reports: role === 'admin' || role === 'manager',
   log_for_others: role === 'admin',
+  // Changing the timesheet form is for admins only (client request); managers still add clients.
+  edit_form: role === 'admin',
   setup: role === 'admin',
   approve_unlocks: role === 'admin',
   bypass_lock: role === 'admin',

@@ -9,6 +9,7 @@ import { doneByPeople, hasTeam, teamPeople } from '../team';
 import AgentPicker from '../../../components/clients/AgentPicker';
 import TimesheetFormDesigner from '../../Settings/formDesigner/TimesheetFormDesigner';
 import { skippedFor } from '../../Settings/formDesigner/JobTypeRules';
+import HoursInput from './HoursInput';
 
 const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
 
@@ -30,8 +31,8 @@ const emptyValue = (field, value) => (field.type === 'checkbox' ? !(value === tr
 // (Settings → Form designer → Timesheet form): labels, order, required fields and extra questions.
 export default function EntryFormModal({ config, entry, initialTask, onClose, onSaved, onClientAdded, onFormChanged }) {
   const isEdit = Boolean(entry);
-  // Admins and managers can change the form right here ("Edit form"); what was typed stays.
-  const canDesign = Boolean(config.permissions?.manage_clients);
+  // Only admins can change the form right here ("Edit form"); what was typed stays.
+  const canDesign = Boolean(config.permissions?.edit_form);
   const [designing, setDesigning] = useState(false);
   const [savedLayout, setSavedLayout] = useState(null);
   useEffect(() => { setSavedLayout(null); }, [config.form]);
@@ -45,8 +46,10 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const [addingClient, setAddingClient] = useState(false);
   const [task, setTask] = useState(() => (entry?.task_id ? { id: entry.task_id, title: entry.task_title, status: entry.task_status } : null));
   const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
-  // Fields the chosen Job Type does not need (Edit form > "Fields not needed for a job type"): greyed out and emptied.
+  // Fields the chosen Job Type does not need (Edit form > "Fields not needed for a job type"): emptied, and
+  // greyed out, or hidden when the form's skip_style is 'hide' (Accountrust).
   const skipped = useMemo(() => skippedFor(layout, form.job_type), [layout, form.job_type]);
+  const hideSkipped = layout.skip_style === 'hide';
   const skippedList = [...skipped].sort().join(',');
   useEffect(() => {
     if (!skippedList) return;
@@ -110,7 +113,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
 
   const check = (mode) => {
     const next = {};
-    const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id') : visible.filter((f) => f.required && !skipped.has(f.key) && (f.key !== 'hours' || !isEdit));
+    const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id' && !skipped.has(f.key)) : visible.filter((f) => f.required && !skipped.has(f.key) && (f.key !== 'hours' || !isEdit));
     need.forEach((f) => {
       const value = f.kind === 'custom' ? form.custom_fields?.[f.key] : form[f.key];
       if (emptyValue(f, value)) next[f.key] = 'This field is required.';
@@ -121,13 +124,17 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     return !Object.keys(next).length;
   };
 
+  const isDraft = isEdit && entry.status === 'DRAFT';
   const save = async (mode) => {
-    if (!check(mode)) return;
+    // A draft being saved again only needs a client, like a new draft.
+    if (!check(mode === 'edit-submit' ? 'submit' : isDraft && mode === 'edit' ? 'draft' : mode)) return;
     setSaving(true);
     try {
       if (isEdit) {
         await timesheet.update(entry.id, { ...form, version: entry.version });
-        notify('Changes saved.', 'success');
+        // A draft can be finished and submitted in one go.
+        if (mode === 'edit-submit') await timesheet.submit(entry.id);
+        notify(mode === 'edit-submit' ? 'Saved and submitted.' : 'Changes saved.', 'success');
         onSaved(entry.id, 'edit');
         return;
       }
@@ -187,16 +194,21 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       case 'count_number': return <Input id="ts-count_number" type="number" min="0" step="1" value={form.count_number} onChange={set('count_number')} />;
       case 'hours': return isEdit
         ? <p className="text-sm text-muted sm:pt-2">Hours are kept in the time log on the entry, so each person adds their own.</p>
-        : <Input id="ts-hours" type="number" min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" value={form.hours} onChange={set('hours')} />;
+        : <HoursInput id="ts-hours" label="Hours worked" value={form.hours} onChange={(hours) => setForm((prev) => ({ ...prev, hours }))} />;
       default: return field.type === 'dropdown'
         ? select(key, optionsFor(field))
         : <Input id={`ts-${key}`} maxLength={120} value={form[key]} onChange={set(key)} />;
     }
   };
   const hint = (field) => {
+    if (field.key === 'job_type' && skipped.size && hideSkipped) {
+      const names = visible.filter((f) => skipped.has(f.key)).map((f) => f.label);
+      return `Not needed for ${form.job_type}, so not shown: ${names.join(', ')}.`;
+    }
     if (field.help) return field.help;
     if (field.key === 'task_id' && !task) return 'Pick the task your manager created. Client, agent and description fill in for you.';
     if (field.key === 'agent_firm_id') return 'Pick the agent first to see only its clients.';
+    if (field.key === 'hours' && !isEdit) return 'Fill hours, minutes or both: 20 minutes is 0 h 20 min.';
     if (field.key === 'client_id') return form.agent_firm_id ? `Showing ${agentClients.length} client${agentClients.length === 1 ? '' : 's'} of this agent.` : canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
     if (field.key === 'agent_id' && !canPickAgent) return 'Your entries are logged under your own name.';
     if (field.key === 'agent_id' && hasTeam(config)) {
@@ -211,7 +223,11 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   };
 
   const footer = isEdit
-    ? <><Button variant="primary" disabled={saving} onClick={() => save('edit')}>Save changes</Button><Button onClick={onClose}>Cancel</Button></>
+    ? <>
+        {isDraft && <Button variant="primary" disabled={saving} onClick={() => save('edit-submit')}>Save and submit</Button>}
+        <Button variant={isDraft ? 'secondary' : 'primary'} disabled={saving} onClick={() => save('edit')}>{isDraft ? 'Save draft' : 'Save changes'}</Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </>
     : <>
         <Button variant="primary" disabled={saving} onClick={() => save('submit')}>Submit</Button>
         <Button variant="primary" disabled={saving} onClick={() => save('new')}>Submit and New</Button>
@@ -239,7 +255,8 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
           </button>
         )}
       </div>
-      {visible.map((field) => {
+      {/* Fields the chosen Job Type does not need: greyed out, or left out altogether when the form says so. */}
+      {visible.filter((field) => !(hideSkipped && skipped.has(field.key))).map((field) => {
         const off = skipped.has(field.key);
         return (
           <FormRow key={field.key} label={field.type === 'checkbox' ? '' : field.label} htmlFor={`ts-${field.key}`}

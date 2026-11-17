@@ -80,14 +80,17 @@ export function parseDate(value) {
   return null;
 }
 
-// 2.5, "2.5 h", "2:30" → 2.5
+// 2.5, "2.5 h", "2:30", "2h 30m", "20 min" → hours, rounded to 2 places like the form (20 min → 0.33).
+const round2 = (n) => Math.round(n * 100) / 100;
 export function parseHours(value) {
   const text = clean(value).toLowerCase();
   if (!text) return null;
   const clock = text.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
-  if (clock) return +clock[1] + +clock[2] / 60;
+  if (clock) return round2(+clock[1] + +clock[2] / 60);
   const plain = text.match(/^(\d+(\.\d+)?)\s*(h|hr|hrs|hour|hours)?$/);
-  return plain ? +plain[1] : NaN;
+  if (plain) return +plain[1];
+  const mixed = text.match(/^(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours))?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes))?$/);
+  return mixed && (mixed[1] || mixed[2]) ? round2((+mixed[1] || 0) + (+mixed[2] || 0) / 60) : NaN;
 }
 
 const YES = ['yes', 'y', 'true', '1', 'done', 'x', '✓'];

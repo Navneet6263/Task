@@ -12,7 +12,7 @@ const STORAGE_KEY = 'timesheet_entries_scope';
 const savedScope = () => { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } };
 const blank = { client_id: '', agent_firm_id: '', agent_id: '', status: '', period: '', from: '', to: '' };
 
-export default function EntriesTab({ config, refreshKey, onOpen, preset }) {
+export default function EntriesTab({ config, refreshKey, onOpen, onEdit, preset }) {
   const isLead = Boolean(config.permissions?.view_reports);
   const options = useMemo(() => scopeOptions(config), [config]);
   const [scope, setScopeState] = useState(() => {
@@ -166,7 +166,15 @@ export default function EntriesTab({ config, refreshKey, onOpen, preset }) {
                 <Td className="whitespace-nowrap"><span className="font-mono tabular-nums">{fmtDate(entry.period_ended)}</span><div className="text-xs text-muted">{entry.period_type}</div></Td>
                 <Td>{entry.agent_name || '—'}{entry.people_count > 1 && <div className="text-xs text-muted">+{entry.people_count - 1} more logged time</div>}</Td>
                 <Td align="right" mono className="font-semibold">{fmtHours(entry.total_hours)}</Td>
-                <Td><StatusChip entry={entry} /></Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <StatusChip entry={entry} />
+                    {/* A draft can be changed by its owner at any time, straight from the list. */}
+                    {entry.status === 'DRAFT' && entry.can_edit && onEdit && (
+                      <Button size="sm" aria-label={`Edit draft for ${entry.client_name}`} onClick={(event) => { event.stopPropagation(); onEdit(entry.id); }}>Edit</Button>
+                    )}
+                  </div>
+                </Td>
               </ClickRow>
             ))}
             {result && !result.data.length && <EmptyRow colSpan={7}>No entries match these filters. Use <b>+ Add Timesheet</b> to create one.</EmptyRow>}

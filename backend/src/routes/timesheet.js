@@ -27,6 +27,7 @@ router.use(requireTimesheet);
 
 const canManageClients = (role) => permissionsFor(role).manage_clients;
 const canSetup = (role) => permissionsFor(role).setup;
+const canEditForm = (role) => permissionsFor(role).edit_form;
 
 router.get('/config', route(async (req, res) => {
   await Promise.all([ensureDefaultOptions(req.orgId, req.userId), syncClientLists(req.orgId, req.userId, { toTimesheet: true })]);
@@ -134,13 +135,13 @@ router.post('/clients', requirePermission(canManageClients, 'Only managers and a
   res.status(created ? 201 : 200).json({ id: row.id, name: row.name, is_active: true });
 }));
 
-/* The customised Timesheet form (Settings → Form designer → Timesheet form). Managers and admins. */
+/* The customised Timesheet form (Settings → Form designer → Timesheet form). Everyone reads it; admins change it. */
 router.get('/form', route(async (req, res) => {
   const layout = await effectiveLayout(req.orgId);
-  res.json({ layout, version: layout.version || 0, saved: !layout.is_default, can_edit: canManageClients(req.tsRole) });
+  res.json({ layout, version: layout.version || 0, saved: !layout.is_default, can_edit: canEditForm(req.tsRole) });
 }));
 
-router.put('/form', requirePermission(canManageClients, 'Only managers and admins can change the timesheet form'), route(async (req, res) => {
+router.put('/form', requirePermission(canEditForm, 'Only admins can change the timesheet form'), route(async (req, res) => {
   const layout = normalizeTimesheetLayout(req.body?.layout);
   const definition = JSON.stringify(layout);
   const expected = Number(req.body?.version || 0);
@@ -159,7 +160,7 @@ router.put('/form', requirePermission(canManageClients, 'Only managers and admin
   res.json({ layout: { ...layout, version: expected + 1 }, version: expected + 1, saved: true });
 }));
 
-router.delete('/form', requirePermission(canManageClients, 'Only managers and admins can change the timesheet form'), route(async (req, res) => {
+router.delete('/form', requirePermission(canEditForm, 'Only admins can change the timesheet form'), route(async (req, res) => {
   await db.execute('DELETE FROM timesheet_form_layouts WHERE org_id = ?', [req.orgId]);
   const layout = await effectiveLayout(req.orgId);
   res.json({ layout, version: 0, saved: false });

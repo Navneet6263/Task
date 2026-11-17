@@ -8,7 +8,7 @@ const {
   loadEntry, audit, canUseTask, getFormLayout, parseCustom,
 } = require('./timesheetSupport');
 const { requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys, clearSkipped, skippedKeys } = require('../services/timesheetFormLayout');
-const { resolveAgent } = require('../services/orgClients');
+const { resolveAgent, noClientId } = require('../services/orgClients');
 const { teamOf } = require('../services/timesheetTeam');
 
 const PAGE_SIZE = 50;
@@ -53,7 +53,9 @@ async function viewableEntry(req, entryId) {
 // already saved stays valid even if an admin later switched that option or client off.
 async function checkReferences(req, entry, current, layout) {
   const errors = {};
-  if (entry.client_id && entry.client_id !== current?.client_id) {
+  // A Job Type that needs no client (e.g. Leave) already got the hidden "No client" row.
+  const noClient = Boolean(layout && skippedKeys(layout, entry.job_type).has('client_id'));
+  if (!noClient && entry.client_id && (entry.client_id !== current?.client_id || current?.client_source === 'none')) {
     // The client must be active in Settings → Clients (the one client list).
     const [[client]] = await db.execute(
       `SELECT tc.id FROM timesheet_clients tc JOIN org_clients oc ON oc.org_id = tc.org_id AND oc.name = tc.name
@@ -61,7 +63,7 @@ async function checkReferences(req, entry, current, layout) {
     if (!client) errors.client_id = 'Pick a client from the list.';
   }
   // A client under an agent brings that agent; a different agent for it is refused.
-  if (entry.client_id && (entry.client_id !== current?.client_id || entry.agent_firm_id !== current?.agent_firm_id)) {
+  if (!noClient && entry.client_id && (entry.client_id !== current?.client_id || entry.agent_firm_id !== current?.agent_firm_id)) {
     const [[named]] = await db.execute('SELECT name FROM timesheet_clients WHERE id = ? AND org_id = ?', [entry.client_id, req.orgId]);
     try { entry.agent_firm_id = await resolveAgent(req.orgId, entry.agent_firm_id, named?.name); }
     catch (error) { errors[error.fields?.client_id ? 'client_id' : 'agent_firm_id'] = error.message; }
@@ -220,6 +222,7 @@ async function createEntry(req, raw) {
   if (!permissionsFor(req.tsRole).log_for_others) body.agent_id = req.userId;
   const layout = await getFormLayout(req.orgId);
   const skipped = layout ? clearSkipped(layout, body) : new Set();
+  if (skipped.has('client_id')) body.client_id = await noClientId(req.orgId);
   const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode, skipped) : undefined);
   const custom = layout ? cleanTimesheetCustom(layout, body.custom_fields, mode, skipped) : null;
   await checkReferences(req, entry, null, layout);
@@ -295,6 +298,7 @@ router.put('/entries/:id', route(async (req, res) => {
   }
   // What the (new) Job Type does not need is emptied, even if an older entry had something in it.
   const skipped = layout ? clearSkipped(layout, body) : new Set();
+  if (skipped.has('client_id')) body.client_id = await noClientId(req.orgId);
   const entry = validateEntry(body, editMode, today, layout ? requiredKeys(layout, editMode, skipped) : undefined);
   let customJson = current.custom_fields || null;
   if (layout && (body.custom_fields !== undefined || skipped.size)) {

@@ -78,7 +78,7 @@ async function isOrgMember(orgId, userId) {
 
 const { defaultLayout, normalizeTimesheetLayout } = require('../services/timesheetFormLayout');
 
-const ENTRY_COLUMNS = `e.id, e.org_id, e.client_id, c.name AS client_name, e.job_type, e.work_type,
+const ENTRY_COLUMNS = `e.id, e.org_id, e.client_id, c.name AS client_name, c.source AS client_source, e.job_type, e.work_type,
   CONVERT(VARCHAR(10), e.date_worked, 23) AS date_worked, e.agent_id, a.name AS agent_name,
   e.period_type, CONVERT(VARCHAR(10), e.period_ended, 23) AS period_ended, e.registration_status,
   e.description, e.count_type, e.count_number, e.status,

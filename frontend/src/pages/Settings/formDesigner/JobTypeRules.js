@@ -1,6 +1,7 @@
 import React from 'react';
+import { Segmented } from '../../../ui';
 
-// Which fields are not needed for which Job Type. A ticked box greys that field out in the timesheet
+// Which fields are not needed for which Job Type. A ticked box greys out (or, with skip_style 'hide', hides) that field in the timesheet
 // form for that Job Type: it is not required and is saved empty. Stored on each field as skip_for.
 export const skipFor = (field) => field.skip_for || [];
 export const skippedFor = (layout, jobType) => {
@@ -8,8 +9,9 @@ export const skippedFor = (layout, jobType) => {
   if (!job) return new Set();
   return new Set((layout?.fields || []).filter((f) => !f.hidden && skipFor(f).some((v) => v.toLowerCase() === job)).map((f) => f.key));
 };
-// Fields a rule can apply to: shown, not locked (client, date and hours always stay), and not Job Type itself.
-export const ruleFields = (layout) => (layout?.fields || []).filter((f) => !f.hidden && !f.locked && f.key !== 'job_type' && f.key !== 'task_id');
+// Fields a rule can apply to: shown, not Job Type itself, and not date or hours (always needed).
+// Client may be "not needed" (e.g. Leave): such entries are kept under "No client".
+export const ruleFields = (layout) => (layout?.fields || []).filter((f) => !f.hidden && (!f.locked || f.key === 'client_id') && f.key !== 'job_type' && f.key !== 'task_id');
 
 export default function JobTypeRules({ draft, onChange, disabled = false }) {
   const jobField = draft.fields.find((f) => f.key === 'job_type');
@@ -32,7 +34,15 @@ export default function JobTypeRules({ draft, onChange, disabled = false }) {
     <section aria-label="Fields not needed for a job type" className="rounded-lg border border-line bg-surface">
       <div className="border-b border-line px-4 py-3">
         <h3 className="text-[15px] font-semibold">Fields not needed for a job type</h3>
-        <p className="mt-0.5 text-sm text-muted">Tick a box when a field does not apply to that {jobField.label}. In the form it is greyed out, does not need filling and is saved empty. {count ? `${count} ${count === 1 ? 'rule' : 'rules'} set.` : 'No rules yet.'}</p>
+        <p className="mt-0.5 text-sm text-muted">Tick a box when a field does not apply to that {jobField.label}. It does not need filling and is saved empty. {count ? `${count} ${count === 1 ? 'rule' : 'rules'} set.` : 'No rules yet.'}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">In the form, such a field is</span>
+          {disabled
+            ? <b>{draft.skip_style === 'hide' ? 'hidden' : 'greyed out'}</b>
+            : <Segmented label="How fields not needed show in the form" value={draft.skip_style === 'hide' ? 'hide' : 'grey'}
+                options={[['grey', 'Greyed out'], ['hide', 'Hidden']]}
+                onChange={(style) => { const { skip_style: _s, ...rest } = draft; onChange(style === 'hide' ? { ...rest, skip_style: 'hide' } : rest); }} />}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-collapse text-sm">
