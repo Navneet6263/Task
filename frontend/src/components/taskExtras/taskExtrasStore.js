@@ -35,6 +35,9 @@ export function useTaskMeta() {
 
 // Badges for the cards on screen: one request for all visible tasks.
 const SummaryContext = createContext({ get: () => null, reload: () => {} });
+// Something changed on a task from outside the cards (the task window): every card list reloads its badges.
+const EXTRAS_CHANGED = 'greentask:task-extras-changed';
+export const announceTaskExtrasChange = () => window.dispatchEvent(new Event(EXTRAS_CHANGED));
 
 export function TaskExtrasProvider({ tasks, children }) {
   const [map, setMap] = useState({});
@@ -46,6 +49,11 @@ export function TaskExtrasProvider({ tasks, children }) {
     Promise.resolve().then(() => taskExtras.summary(idsKey.split(','))).then(({ data }) => { if (active) setMap(data || {}); }).catch(() => {});
     return () => { active = false; };
   }, [idsKey, tick]);
+  useEffect(() => {
+    const again = () => setTick((n) => n + 1);
+    window.addEventListener(EXTRAS_CHANGED, again);
+    return () => window.removeEventListener(EXTRAS_CHANGED, again);
+  }, []);
   const value = useMemo(() => ({ get: (id) => map[id] || null, reload: () => setTick((n) => n + 1) }), [map]);
   return <SummaryContext.Provider value={value}>{children}</SummaryContext.Provider>;
 }

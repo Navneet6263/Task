@@ -47,7 +47,7 @@ async function visibleTasks(req, taskIds) {
   if (!list.length) return [];
   const { scope, params } = visibleScope(req);
   const [rows] = await db.execute(
-    `SELECT t.id, t.title, t.status, t.team_id, t.org_id, t.parent_task_id FROM tasks t
+    `SELECT t.id, t.title, t.status, t.team_id, t.org_id, t.parent_task_id, t.flagged FROM tasks t
      WHERE t.is_deleted = FALSE AND t.id IN (${marks(list)}) AND ${scope}`,
     [...list, ...params]
   );
@@ -99,7 +99,7 @@ async function setLabels(task, labelIds) {
 async function summaries(req, taskIds) {
   const tasks = await visibleTasks(req, taskIds);
   const list = tasks.map((t) => t.id);
-  const out = Object.fromEntries(tasks.map((t) => [t.id, { labels: [], subtasks: null, parent: null, blocked_by: 0 }]));
+  const out = Object.fromEntries(tasks.map((t) => [t.id, { labels: [], subtasks: null, parent: null, blocked_by: 0, flagged: t.flagged === true || t.flagged === 1 }]));
   if (!list.length) return out;
   const [labels] = await db.execute(
     `SELECT ll.task_id, l.id, l.name, l.color FROM task_label_links ll JOIN task_labels l ON l.id = ll.label_id
@@ -145,12 +145,38 @@ async function detail(req, taskId) {
   const seeable = new Set((await visibleTasks(req, links.map((l) => l.other_id))).map((t) => t.id));
   return {
     id: task.id, prefix: await orgPrefix(task.org_id), labels, parent: parent && { id: parent.id, title: parent.title, status: parent.status },
+    flagged: task.flagged === true || task.flagged === 1,
     subtasks: subtasks.map((s) => ({ ...s })),
     links: links.filter((l) => seeable.has(l.other_id)).map((l) => ({
       id: l.id, type: l.link_type, outward: Number(l.from_task_id) === Number(task.id),
       task: { id: l.other_id, title: l.other_title, status: l.other_status },
     })),
   };
+}
+
+// Flag or unflag a task; the change shows in its history.
+async function setFlag(req, taskId, flagged) {
+  const task = await visibleTask(req, taskId);
+  const on = flagged === true;
+  await db.execute('UPDATE tasks SET flagged = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = FALSE', [on, task.id]);
+  await db.execute('INSERT INTO audit_logs (user_id, team_id, task_id, activity, task_details, description, automated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [req.userId, task.team_id, task.id, on ? 'Flag Added' : 'Flag Removed', task.title, null, 'User (Local)']).catch(() => {});
+  return { flagged: on };
+}
+
+// Who changed what on a task, newest first (from the audit log).
+async function history(req, taskId) {
+  const task = await visibleTask(req, taskId);
+  const [rows] = await db.execute(
+    `SELECT TOP 100 a.id, a.activity, a.description, a.created_at, a.user_id, u.name AS user_name, u.avatar
+     FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE a.task_id = ? ORDER BY a.created_at DESC, a.id DESC`, [task.id]
+  );
+  return rows.map((r) => {
+    let changes = null;
+    try { const parsed = JSON.parse(r.description); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) changes = parsed; } catch { /* plain text */ }
+    return { id: r.id, activity: r.activity, user_id: r.user_id, user_name: r.user_name || 'Someone', avatar: r.avatar || null, created_at: r.created_at,
+      changes, note: changes ? null : r.description || null };
+  });
 }
 
 // A subtask is a real task in the parent's team, one level deep only.
@@ -228,7 +254,7 @@ async function search(req, query, teamId) {
   return rows.map(({ id, title, status, parent_task_id: parent }) => ({ id, title, status, is_subtask: Boolean(parent) }));
 }
 
-module.exports = {
+module.exports = { setFlag, history,
   LINK_TYPES, COLORS, WORK_TYPES, prefixOf, idFromKey, visibleTasks, visibleTask, orgPrefix, labelsOf, createLabel, setLabels, summaries, detail,
   addSubtask, setParent, addLink, removeLink, search,
 };

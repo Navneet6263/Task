@@ -68,6 +68,13 @@ router.get('/search', route(async (req, res) => { res.json(await extras.search(r
 
 router.get('/:taskId', route(async (req, res) => { res.json(await extras.detail(req, req.params.taskId)); }));
 
+router.get('/:taskId/history', route(async (req, res) => { res.json(await extras.history(req, req.params.taskId)); }));
+
+router.put('/:taskId/flag', route(async (req, res) => {
+  if (typeof req.body?.flagged !== 'boolean') return res.status(422).json({ error: 'flagged must be true or false' });
+  res.json(await extras.setFlag(req, req.params.taskId, req.body.flagged));
+}));
+
 router.put('/:taskId/labels', route(async (req, res) => {
   const task = await extras.visibleTask(req, req.params.taskId);
   await extras.setLabels(task, req.body.label_ids);

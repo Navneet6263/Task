@@ -1,4 +1,6 @@
 import React from 'react';
+import TaskMenu from '../../components/taskExtras/TaskMenu';
+import { useTaskSummary } from '../../components/taskExtras/taskExtrasStore';
 import { useNavigate } from 'react-router-dom';
 import { tasks } from '../../services/api';
 import { Button, Select } from '../../ui';
@@ -15,7 +17,8 @@ const SendIcon = () => (
 );
 
 // The actions cell of one task row. Clicks never open the task itself.
-export default function TaskRowActions({ task, userId, handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug }) {
+export default function TaskRowActions({ task, userId, handleStatusChange, handleSnooze, handleDelete, handleApproveDelete, handleRejectDelete, handlePickBug, handleResolveBug, onUpdated, onOpen }) {
+  const flagged = Boolean(useTaskSummary(task.id)?.flagged);
   const navigate = useNavigate();
   const canEmail = useCommunicationsEnabled();
 
@@ -54,6 +57,7 @@ export default function TaskRowActions({ task, userId, handleStatusChange, handl
           </>
         ) : <span className="px-1 text-xs font-semibold text-danger">Delete Pending</span>
       ) : <Button size="sm" variant="danger" onClick={() => handleDelete(task.id)}>Delete</Button>}
+      <TaskMenu task={task} flagged={flagged} onStatus={(status) => handleStatusChange(task, status)} onChanged={onUpdated} onOpen={onOpen} />
     </div>
   );
 }

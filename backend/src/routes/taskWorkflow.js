@@ -14,9 +14,10 @@ router.get('/:taskId', async (req, res) => {
   try {
     const [[checklist], [followers]] = await Promise.all([
       db.execute('SELECT * FROM task_checklist WHERE task_id = ? ORDER BY id', [req.task.id]),
-      db.execute('SELECT user_id FROM task_followers WHERE task_id = ? AND user_id = ?', [req.task.id, req.userId]),
+      db.execute('SELECT user_id FROM task_followers WHERE task_id = ?', [req.task.id]),
     ]);
-    res.json({ checklist, following: followers.length > 0, recurrence_worker_enabled: process.env.ENABLE_RECURRING_TASKS === 'true' });
+    const following = followers.some((f) => Number(f.user_id) === Number(req.userId));
+    res.json({ checklist, following, watchers: followers.length, recurrence_worker_enabled: process.env.ENABLE_RECURRING_TASKS === 'true' });
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 router.patch('/:taskId', async (req, res) => {

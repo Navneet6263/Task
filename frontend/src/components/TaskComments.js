@@ -58,7 +58,8 @@ function CommentItem({ comment: c, isOwn, onSave, onDelete }) {
   );
 }
 
-const TaskComments = ({ taskId, members = [] }) => {
+// quickReplies: short starters shown as chips under the box (click to start a comment with one).
+const TaskComments = ({ taskId, members = [], quickReplies = [] }) => {
   const currentUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const currentUserId = currentUser?.id;
   const [commentList, setCommentList] = useState([]);
@@ -132,6 +133,14 @@ const TaskComments = ({ taskId, members = [] }) => {
         <Textarea maxLength={5000} rows={2} aria-label="New comment" placeholder="Add a comment… (Enter to send, Shift+Enter for new line)"
           value={newText} onChange={(event) => setNewText(event.target.value)}
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } }} />
+        {quickReplies.length > 0 && !newText && (
+          <div className="flex flex-wrap gap-1.5" aria-label="Quick replies">
+            {quickReplies.map((text) => (
+              <button key={text} type="button" onClick={() => { setNewText(`${text} `); document.querySelector('[aria-label="New comment"]')?.focus(); }}
+                className="rounded-full border border-line px-3 py-1 text-xs text-ink hover:border-accent/50 hover:bg-subtle">{text}</button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-muted">Enter to send · Shift+Enter for new line</span>
           <Button size="sm" variant="primary" onClick={handleSend} disabled={!newText.trim() || sending}>{sending ? 'Sending…' : 'Send'}</Button>

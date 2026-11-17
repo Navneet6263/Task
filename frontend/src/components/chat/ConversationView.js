@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { chat } from '../../services/api';
 import { arrange, timeOf, upsert } from './quickChatUtils';
+import { ACCEPT, AttachmentChip, ClipIcon, FileIcon, fileProblem, sizeLabel } from './ChatAttachment';
 
 const initials = (name) => String(name || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
@@ -11,6 +12,9 @@ export default function ConversationView({ teamId, thread, selfId, incoming, onR
   const [hasOlder, setHasOlder] = useState(false);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
+  const [file, setFile] = useState(null); // a supporting document waiting to be sent
+  const [fileError, setFileError] = useState('');
+  const fileInput = useRef(null);
   const listRef = useRef(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef(null);
@@ -48,18 +52,35 @@ export default function ConversationView({ teamId, thread, selfId, incoming, onR
     requestAnimationFrame(() => { el.scrollTop = el.scrollHeight - before; });
   };
 
+  const pickFile = (event) => {
+    const chosen = event.target.files?.[0];
+    event.target.value = '';
+    if (!chosen) return;
+    const problem = fileProblem(chosen);
+    setFileError(problem);
+    setFile(problem ? null : chosen);
+    inputRef.current?.focus();
+  };
+
+  // A message is text, a file, or both. The file is uploaded first, then the message carries it.
   const send = async (body = text, retryOf = null) => {
     const message = body.trim();
-    if (!message) return;
+    const sendFile = retryOf ? retryOf.localFile || null : file;
+    if (!message && !sendFile) return;
     const tempId = retryOf?.client_temp_id || `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const optimistic = { client_temp_id: tempId, user_id: selfId, user_name: 'You', message, created_at: new Date().toISOString(), thread_id: thread.id, reply_to: replyTo?.id || null, reply_text: replyTo?.message, reply_user_name: replyTo?.user_name, status: 'sending' };
+    const optimistic = { client_temp_id: tempId, user_id: selfId, user_name: 'You', message, created_at: new Date().toISOString(), thread_id: thread.id, reply_to: replyTo?.id || null, reply_text: replyTo?.message, reply_user_name: replyTo?.user_name, status: 'sending',
+      ...(sendFile ? { localFile: sendFile, attachment: { file_name: sendFile.name, size: sendFile.size } } : {}) };
     stickToBottom.current = true;
     setMessages((list) => upsert(list, optimistic));
-    if (!retryOf) { setText(''); setReplyTo(null); }
+    if (!retryOf) { setText(''); setReplyTo(null); setFile(null); setFileError(''); }
     try {
-      const r = await chat.send(teamId, { message, thread_id: thread.id, reply_to: optimistic.reply_to, client_temp_id: tempId });
+      const attachmentId = sendFile ? (await chat.uploadFile(teamId, sendFile)).data.id : null;
+      const r = await chat.send(teamId, { message, thread_id: thread.id, reply_to: optimistic.reply_to, client_temp_id: tempId, ...(attachmentId ? { attachment_id: attachmentId } : {}) });
       setMessages((list) => upsert(list, { ...r.data, status: 'sent' }));
-    } catch { setMessages((list) => upsert(list, { ...optimistic, status: 'failed' })); }
+    } catch (err) {
+      setMessages((list) => upsert(list, { ...optimistic, status: 'failed' }));
+      if (err.response?.data?.error && sendFile) setFileError(err.response.data.error);
+    }
   };
 
   return (
@@ -78,11 +99,12 @@ export default function ConversationView({ teamId, thread, selfId, incoming, onR
                 {item.startsRun && !mine && <span className="mb-0.5 text-[11px] font-semibold text-muted">{m.user_name}</span>}
                 <div className={`rounded-2xl px-3 py-1.5 text-sm leading-snug ${mine ? 'rounded-br-md bg-accent text-accent-fg' : 'rounded-bl-md bg-subtle text-ink'} ${m.status === 'failed' ? 'opacity-60' : ''}`}>
                   {m.reply_text && <div className={`mb-1 border-l-2 pl-2 text-xs ${mine ? 'border-accent-fg/50 opacity-80' : 'border-accent text-muted'}`}><b>{m.reply_user_name}</b> {String(m.reply_text).slice(0, 80)}</div>}
-                  <span className="whitespace-pre-wrap break-words">{m.message}</span>
+                  {m.message && <span className="whitespace-pre-wrap break-words">{m.message}</span>}
+                  {m.attachment && <AttachmentChip teamId={teamId} attachment={m.attachment} mine={mine} />}
                 </div>
                 <span className="mt-0.5 flex items-center gap-2 text-[10px] text-muted">
                   {m.status === 'sending' ? 'Sending…' : m.status === 'failed'
-                    ? <button type="button" className="font-semibold text-danger underline" onClick={() => send(m.message, m)}>Not sent. Retry</button>
+                    ? <button type="button" className="font-semibold text-danger underline" onClick={() => send(m.message || '', m)}>Not sent. Retry</button>
                     : timeOf(m.created_at)}
                   {m.id && <button type="button" className="opacity-0 transition-opacity hover:text-ink group-hover:opacity-100 focus:opacity-100" onClick={() => { setReplyTo(m); inputRef.current?.focus(); }}>Reply</button>}
                 </span>
@@ -98,12 +120,23 @@ export default function ConversationView({ teamId, thread, selfId, incoming, onR
             <button type="button" aria-label="Cancel reply" className="text-muted hover:text-ink" onClick={() => setReplyTo(null)}>&times;</button>
           </div>
         )}
+        {file && (
+          <div className="mb-1.5 flex items-center gap-2 rounded-md border border-line bg-subtle px-2 py-1.5 text-xs">
+            <span className="text-accent"><FileIcon size={15} /></span>
+            <span className="min-w-0 flex-1 truncate"><b>{file.name}</b> <span className="text-muted">· {sizeLabel(file.size)}</span></span>
+            <button type="button" aria-label="Remove the file" className="text-muted hover:text-ink" onClick={() => setFile(null)}>&times;</button>
+          </div>
+        )}
+        {fileError && <p role="alert" className="mb-1.5 rounded-md bg-danger-soft px-2 py-1.5 text-xs text-danger">{fileError}</p>}
         <div className="flex items-end gap-2">
+          <button type="button" aria-label="Attach a document (up to 1 MB)" title="Attach a document (PDF, Word, Excel, picture… up to 1 MB)" onClick={() => fileInput.current?.click()}
+            className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl border border-line text-muted hover:border-accent/50 hover:text-ink"><ClipIcon /></button>
+          <input ref={fileInput} type="file" accept={ACCEPT} className="sr-only" aria-label="Choose a document" tabIndex={-1} onChange={pickFile} />
           <textarea ref={inputRef} rows={1} value={text} aria-label="Message" placeholder="Write a message… (Enter to send)"
             onChange={(e) => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`; }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); e.target.style.height = 'auto'; } if (e.key === 'Escape') setReplyTo(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); e.target.style.height = 'auto'; } if (e.key === 'Escape') { setReplyTo(null); setFile(null); setFileError(''); } }}
             className="max-h-[120px] min-h-[38px] flex-1 resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted" />
-          <button type="button" aria-label="Send" disabled={!text.trim()} onClick={() => send()} className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl bg-accent text-accent-fg disabled:opacity-40">
+          <button type="button" aria-label="Send" disabled={!text.trim() && !file} onClick={() => send()} className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl bg-accent text-accent-fg disabled:opacity-40">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
           </button>
         </div>

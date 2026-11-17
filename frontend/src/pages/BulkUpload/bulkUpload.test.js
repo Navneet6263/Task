@@ -274,3 +274,21 @@ test('people see only what they can upload: no Clients for members, no Timesheet
   expect(step()).toBe('2Get the sheet ready');
   expect(document.body.textContent).not.toContain('Timesheet entries');
 });
+
+test('sheet rows leave out what their Job Type does not need, and the guide says so', () => {
+  const ruled = { name: 'Timesheet', fields: [
+    core('client_id', 'client', 'Customer'), core('job_type', 'dropdown', 'Job Type', { options: ['Payroll', 'Training'] }),
+    core('date_worked', 'date', 'Date worked'), core('registration_status', 'dropdown', 'Registration Status', { options: ['Registered'], skip_for: ['Training'] }),
+    core('hours', 'hours', 'Hours worked'),
+  ] };
+  const fields = uploadFields(ruled);
+  const heads = ['Customer', 'Job Type', 'Date worked', 'Registration Status', 'Hours worked'];
+  const mapping = matchColumns(heads, fields);
+  const rows = buildRows([['KC Kicks Ltd', 'training', '05/11/2026', 'Not a real option', '2'], ['KC Kicks Ltd', 'Payroll', '05/11/2026', '', '2']], mapping, { layout: ruled, config: { ...config, form: ruled } });
+  // Training: the cell is ignored (even a wrong value), nothing is missing.
+  expect(rows[0].problems).toEqual([]);
+  expect(rows[0].body.registration_status).toBeUndefined();
+  // Payroll still needs it.
+  expect(rows[1].problems).toEqual(['Registration Status is missing']);
+  expect(columnGuide('entries', fields, ctx).find((g) => g.label === 'Registration Status').help).toContain('Leave empty for: Training.');
+});

@@ -7,7 +7,7 @@ const {
   db, isDuplicateKey, route, positive, requirePermission, getSettings, getOptions, isOrgMember, ENTRY_COLUMNS, ENTRY_FROM,
   loadEntry, audit, canUseTask, getFormLayout, parseCustom,
 } = require('./timesheetSupport');
-const { requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys } = require('../services/timesheetFormLayout');
+const { requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys, clearSkipped, skippedKeys } = require('../services/timesheetFormLayout');
 const { resolveAgent } = require('../services/orgClients');
 const { teamOf } = require('../services/timesheetTeam');
 
@@ -219,8 +219,9 @@ async function createEntry(req, raw) {
   const body = { ...raw };
   if (!permissionsFor(req.tsRole).log_for_others) body.agent_id = req.userId;
   const layout = await getFormLayout(req.orgId);
-  const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode) : undefined);
-  const custom = layout ? cleanTimesheetCustom(layout, body.custom_fields, mode) : null;
+  const skipped = layout ? clearSkipped(layout, body) : new Set();
+  const entry = validateEntry(body, mode, today, layout ? requiredKeys(layout, mode, skipped) : undefined);
+  const custom = layout ? cleanTimesheetCustom(layout, body.custom_fields, mode, skipped) : null;
   await checkReferences(req, entry, null, layout);
   const logUser = entry.agent_id || req.userId;
   const logDate = entry.date_worked || today;
@@ -292,10 +293,13 @@ router.put('/entries/:id', route(async (req, res) => {
     const shown = visibleCoreKeys(layout);
     ENTRY_FIELDS.filter((key) => !shown.has(key)).forEach((key) => { body[key] = current[key]; });
   }
-  const entry = validateEntry(body, editMode, today, layout ? requiredKeys(layout, editMode) : undefined);
+  // What the (new) Job Type does not need is emptied, even if an older entry had something in it.
+  const skipped = layout ? clearSkipped(layout, body) : new Set();
+  const entry = validateEntry(body, editMode, today, layout ? requiredKeys(layout, editMode, skipped) : undefined);
   let customJson = current.custom_fields || null;
-  if (layout && body.custom_fields !== undefined) {
-    const merged = { ...parseCustom(current.custom_fields), ...cleanTimesheetCustom(layout, body.custom_fields, editMode) };
+  if (layout && (body.custom_fields !== undefined || skipped.size)) {
+    const merged = { ...parseCustom(current.custom_fields), ...(body.custom_fields !== undefined ? cleanTimesheetCustom(layout, body.custom_fields, editMode, skipped) : {}) };
+    skipped.forEach((key) => { delete merged[key]; });
     customJson = Object.keys(merged).length ? JSON.stringify(merged) : null;
   }
   await checkReferences(req, entry, current, layout);
@@ -318,8 +322,9 @@ router.post('/entries/:id/submit', route(async (req, res) => {
   if (current.status !== 'DRAFT') throw fail(409, 'This entry is already submitted');
   if (!canEditEntry(req.tsRole, req.userId, current, { locked: false })) throw fail(403, 'You can only submit your own drafts');
   const layout = await getFormLayout(req.orgId);
-  const missing = missingForSubmit(current, layout ? requiredKeys(layout, 'submit') : undefined);
-  if (layout) cleanTimesheetCustom(layout, parseCustom(current.custom_fields), 'submit');
+  const skipped = layout ? skippedKeys(layout, current.job_type) : new Set();
+  const missing = missingForSubmit(current, layout ? requiredKeys(layout, 'submit', skipped) : undefined);
+  if (layout) cleanTimesheetCustom(layout, parseCustom(current.custom_fields), 'submit', skipped);
   if (missing.length) throw fail(422, 'Fill all required fields before submitting', Object.fromEntries(missing.map((key) => [key, 'This field is required.'])));
   const [[logs]] = await db.execute('SELECT COUNT(*) AS total FROM timesheet_time_logs WHERE entry_id = ? AND org_id = ? AND is_deleted = 0', [current.id, req.orgId]);
   if (!Number(logs.total)) throw fail(422, 'Add at least one time log before submitting');

@@ -8,6 +8,7 @@ import TaskPicker from './TaskPicker';
 import { doneByPeople, hasTeam, teamPeople } from '../team';
 import AgentPicker from '../../../components/clients/AgentPicker';
 import TimesheetFormDesigner from '../../Settings/formDesigner/TimesheetFormDesigner';
+import { skippedFor } from '../../Settings/formDesigner/JobTypeRules';
 
 const CORE = ['task_id', 'agent_firm_id', 'client_id', 'job_type', 'work_type', 'date_worked', 'agent_id', 'period_type', 'period_ended', 'registration_status', 'description', 'count_type', 'count_number', 'hours'];
 
@@ -44,6 +45,18 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const [addingClient, setAddingClient] = useState(false);
   const [task, setTask] = useState(() => (entry?.task_id ? { id: entry.task_id, title: entry.task_title, status: entry.task_status } : null));
   const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  // Fields the chosen Job Type does not need (Edit form > "Fields not needed for a job type"): greyed out and emptied.
+  const skipped = useMemo(() => skippedFor(layout, form.job_type), [layout, form.job_type]);
+  const skippedList = [...skipped].sort().join(',');
+  useEffect(() => {
+    if (!skippedList) return;
+    setForm((prev) => {
+      const next = { ...prev, custom_fields: { ...(prev.custom_fields || {}) } };
+      skippedList.split(',').forEach((key) => { if (key in next.custom_fields) delete next.custom_fields[key]; else next[key] = ''; });
+      return next;
+    });
+    setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !skippedList.split(',').includes(key))));
+  }, [skippedList]);
   const setCustom = (key, value) => setForm((prev) => ({ ...prev, custom_fields: { ...(prev.custom_fields || {}), [key]: value } }));
 
   const clients = useMemo(() => {
@@ -97,7 +110,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
 
   const check = (mode) => {
     const next = {};
-    const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id') : visible.filter((f) => f.required && (f.key !== 'hours' || !isEdit));
+    const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id') : visible.filter((f) => f.required && !skipped.has(f.key) && (f.key !== 'hours' || !isEdit));
     need.forEach((f) => {
       const value = f.kind === 'custom' ? form.custom_fields?.[f.key] : form[f.key];
       if (emptyValue(f, value)) next[f.key] = 'This field is required.';
@@ -226,12 +239,16 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
           </button>
         )}
       </div>
-      {visible.map((field) => (
-        <FormRow key={field.key} label={field.type === 'checkbox' ? '' : field.label} htmlFor={`ts-${field.key}`}
-          required={field.required && !(field.key === 'hours' && isEdit)} error={errors[field.key]} hint={hint(field)}>
-          {control(field)}
-        </FormRow>
-      ))}
+      {visible.map((field) => {
+        const off = skipped.has(field.key);
+        return (
+          <FormRow key={field.key} label={field.type === 'checkbox' ? '' : field.label} htmlFor={`ts-${field.key}`}
+            required={field.required && !off && !(field.key === 'hours' && isEdit)} error={off ? '' : errors[field.key]}
+            hint={off ? `Not needed for ${form.job_type}.` : hint(field)}>
+            {off ? <fieldset disabled aria-disabled="true" className="min-w-0 opacity-50">{control(field)}</fieldset> : control(field)}
+          </FormRow>
+        );
+      })}
     </Modal>
   );
 }

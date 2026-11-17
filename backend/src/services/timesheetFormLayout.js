@@ -91,7 +91,15 @@ function normalizeTimesheetLayout(input) {
     }
     if (type === 'date' && raw.default === 'today') field.default = 'today';
     if (type === 'person' && raw.default === 'me') field.default = 'me';
+    if (!locked && key !== 'job_type' && Array.isArray(raw.skip_for) && raw.skip_for.length) field.skip_for = raw.skip_for.map((v) => String(v ?? '').trim()).filter(Boolean);
     return field;
+  });
+  // "Not needed for": only Job Type options that exist (matched without case, stored as the option is written).
+  const jobOptions = fields.find((f) => f.key === 'job_type')?.options || [];
+  fields.forEach((field) => {
+    if (!field.skip_for) return;
+    const kept = [...new Set(field.skip_for.map((v) => jobOptions.find((o) => o.toLowerCase() === v.toLowerCase())).filter(Boolean))];
+    if (kept.length) field.skip_for = kept; else delete field.skip_for;
   });
   if (customCount > MAX_CUSTOM) throw fail(422, `Use at most ${MAX_CUSTOM} extra questions`);
   // Built-in fields missing from an older layout come back as hidden, so new columns never break saving.
@@ -107,10 +115,28 @@ function normalizeTimesheetLayout(input) {
 
 const fieldOf = (layout, key) => layout.fields.find((f) => f.key === key);
 
+// Fields that do not apply to this Job Type (set in the form: "Not needed for"). They are greyed out
+// in the form, never required, and saved empty.
+function skippedKeys(layout, jobType) {
+  const job = String(jobType ?? '').trim().toLowerCase();
+  if (!layout || !job) return new Set();
+  return new Set(layout.fields.filter((f) => !f.hidden && (f.skip_for || []).some((v) => v.toLowerCase() === job)).map((f) => f.key));
+}
+
+// Empties what does not apply to the chosen Job Type, in a request body. Returns the skipped keys.
+function clearSkipped(layout, body) {
+  const skipped = skippedKeys(layout, body.job_type);
+  skipped.forEach((key) => {
+    if (CORE[key]) body[key] = null;
+    else if (body.custom_fields && typeof body.custom_fields === 'object') delete body.custom_fields[key];
+  });
+  return skipped;
+}
+
 // Built-in keys the person must fill for this save. Drafts only need a client.
-function requiredKeys(layout, mode) {
+function requiredKeys(layout, mode, skipped = new Set()) {
   if (mode === 'draft') return new Set(['client_id']);
-  return new Set(layout.fields.filter((f) => f.kind === 'core' && f.required && !f.hidden && f.key !== 'hours').map((f) => f.key));
+  return new Set(layout.fields.filter((f) => f.kind === 'core' && f.required && !f.hidden && f.key !== 'hours' && !skipped.has(f.key)).map((f) => f.key));
 }
 
 // Dropdown answers must be one of the listed options (matched without case); returns errors by key.
@@ -127,12 +153,14 @@ function checkChoices(layout, entry, current) {
   return errors;
 }
 
-// Extra questions: drafts may leave required ones empty.
-function cleanTimesheetCustom(layout, values, mode) {
-  const relaxed = mode === 'draft' ? { ...layout, fields: layout.fields.map((f) => ({ ...f, required: false })) } : layout;
-  return cleanCustomValues(relaxed, values, { partial: mode === 'draft' });
+// Extra questions: drafts may leave required ones empty, and so may questions the Job Type does not need.
+function cleanTimesheetCustom(layout, values, mode, skipped = new Set()) {
+  const relaxed = { ...layout, fields: layout.fields.map((f) => (mode === 'draft' || skipped.has(f.key) ? { ...f, required: false } : f)) };
+  const kept = { ...(values && typeof values === 'object' ? values : {}) };
+  skipped.forEach((key) => { delete kept[key]; });
+  return cleanCustomValues(relaxed, kept, { partial: mode === 'draft' });
 }
 
 const visibleCoreKeys = (layout) => new Set(layout.fields.filter((f) => f.kind === 'core' && !f.hidden).map((f) => f.key));
 
-module.exports = { CORE, CORE_KEYS, CHOICE_KEYS, defaultLayout, normalizeTimesheetLayout, requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys, fieldOf };
+module.exports = { CORE, CORE_KEYS, CHOICE_KEYS, defaultLayout, normalizeTimesheetLayout, requiredKeys, checkChoices, cleanTimesheetCustom, visibleCoreKeys, fieldOf, skippedKeys, clearSkipped };

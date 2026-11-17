@@ -2,6 +2,7 @@
 // then checks every row the way the form would (client in the list, date, hours, dropdown values),
 // so problems are shown before anything is uploaded. Pure functions only.
 import { nameKey } from './clientSheet';
+import { skippedFor } from '../Settings/formDesigner/JobTypeRules';
 
 export const MAX_ROWS = 200;
 const key = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -127,8 +128,14 @@ export function buildRows(rows, mapping, { layout, config, mode = 'submit', firs
     const body = { custom_fields: {} };
     const problems = [];
     const missing = (field) => { if (full && field.required) problems.push(`${field.label} is missing`); };
+    // Fields this line's Job Type does not need are left out, whatever the cell says.
+    const jobField = fields.find((f) => f.key === 'job_type');
+    const jobRaw = cell('job_type');
+    const job = (jobField?.options || []).find((o) => o.toLowerCase() === jobRaw.toLowerCase()) || jobRaw;
+    const skipped = skippedFor(layout, job);
 
     fields.forEach((field) => {
+      if (skipped.has(field.key)) return;
       const raw = cell(field.key);
       if (field.key === 'client_id') {
         if (!raw) { problems.push(`${field.label} is missing`); return; }

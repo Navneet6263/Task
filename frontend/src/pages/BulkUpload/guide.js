@@ -34,7 +34,8 @@ export function columnGuide(kind, fields, ctx) {
     ];
   }
   return fields.map((field) => ({
-    label: field.label, help: field.help ? `${help(field, kind, ctx)} ${field.help}` : help(field, kind, ctx),
+    label: field.label,
+    help: [help(field, kind, ctx), field.help, field.skip_for?.length ? `Leave empty for: ${field.skip_for.join(', ')}.` : ''].filter(Boolean).join(' '),
     required: field.type === 'client' && kind === 'entries' ? true : Boolean(field.required) && !['team', 'priority', 'issue_type'].includes(field.type),
   }));
 }

@@ -97,3 +97,53 @@ test('members do not get the Edit form button', async () => {
   await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} />));
   expect(button('Edit form')).toBeUndefined();
 });
+
+// Accountrust: some fields do not apply to some Job Types.
+const ruledForm = { ...original, fields: [
+  core('client_id', 'client', { label: 'Client', locked: true }),
+  core('job_type', 'dropdown', { label: 'Job Type', options: ['Bookkeeping & VAT Return', 'Training'] }),
+  core('date_worked', 'date', { label: 'Date worked', locked: true }),
+  core('registration_status', 'dropdown', { label: 'Registration Status', options: ['Registered', 'Not Applicable'], skip_for: ['Training'] }),
+  core('count_number', 'number', { label: 'Count number', skip_for: ['Training'] }),
+  core('hours', 'hours', { label: 'Hours worked', locked: true }),
+] };
+
+test('the form designer has a Job Type table: tick a box and that field is not needed for that job type', async () => {
+  h.form = async () => ({ data: { layout: { ...ruledForm, version: 2 }, version: 2, saved: true, can_edit: true } });
+  h.saveForm = jest.fn(async (layout) => ({ data: { layout: { ...layout, version: 3 }, version: 3, saved: true } }));
+  await act(async () => r.render(<TimesheetFormDesigner />));
+  expect(c.textContent).toContain('Fields not needed for a job type');
+  const box = (label) => c.querySelector(`[aria-label="${label}"]`);
+  expect(box('Registration Status not needed for Training').checked).toBe(true);
+  expect(box('Registration Status not needed for Bookkeeping & VAT Return').checked).toBe(false);
+  // Locked fields (client, date, hours) and Job Type itself are not in the table.
+  expect(box('Client not needed for Training')).toBeNull();
+  await act(async () => box('Count number not needed for Bookkeeping & VAT Return').click());
+  await act(async () => box('Registration Status not needed for Training').click());
+  await act(async () => button('Save timesheet form').click());
+  const saved = h.saveForm.mock.calls[0][0].fields;
+  expect(saved.find((f) => f.key === 'count_number').skip_for).toEqual(['Training', 'Bookkeeping & VAT Return']);
+  expect(saved.find((f) => f.key === 'registration_status').skip_for).toBeUndefined();
+});
+
+test('choosing a Job Type greys out the fields it does not need; they are not required and go empty', async () => {
+  h.create = jest.fn(async () => ({ data: { id: 5 } }));
+  const config = { today: '2026-11-14', user_id: 10, permissions: { log_for_others: true }, users: [{ id: 10, name: 'Me' }], clients: [{ id: 4, name: 'Riverside' }], form: ruledForm };
+  await act(async () => r.render(<EntryFormModal config={config} onClose={() => {}} onSaved={() => {}} />));
+  const pick = (id, value) => act(() => { const el = document.querySelector(id); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, value); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await choose('#ts-client_id', 'Riv', 'Riverside');
+  pick('#ts-registration_status', 'Registered');
+  act(() => type(document.querySelector('#ts-count_number'), '12'));
+  act(() => type(document.querySelector('#ts-hours'), '2'));
+  pick('#ts-job_type', 'Training');
+  // Greyed out, emptied, and the reason is shown.
+  expect(document.querySelector('#ts-registration_status').matches(':disabled')).toBe(true);
+  expect(document.querySelector('#ts-registration_status').value).toBe('');
+  expect(document.querySelector('#ts-count_number').value).toBe('');
+  expect(document.body.textContent).toContain('Not needed for Training.');
+  await act(async () => button('Submit').click());
+  expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ job_type: 'Training', registration_status: '', count_number: '', hours: '2' }));
+  // Another Job Type needs them again.
+  pick('#ts-job_type', 'Bookkeeping & VAT Return');
+  expect(document.querySelector('#ts-registration_status').matches(':disabled')).toBe(false);
+});

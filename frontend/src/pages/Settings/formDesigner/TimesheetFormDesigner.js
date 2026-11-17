@@ -5,6 +5,7 @@ import { Banner, Button, Input, Loading, Modal } from '../../../ui';
 import FieldCard from './FieldCard';
 import AddFieldBar from './AddFieldBar';
 import TimesheetPreview from './TimesheetPreview';
+import JobTypeRules from './JobTypeRules';
 import { addField, clone, duplicateField, layoutProblems, moveStep, moveTo, patchField, removeField, sameLayout } from './designerUtils';
 
 const PREVIEW_CTX = { idPrefix: 'tsdesigner', members: [{ id: 1, name: 'Asha Rao' }], taskOptions: {}, clientPreview: { clients: [{ name: 'Riverside Motors' }], pick_only: true, can_manage: false } };
@@ -106,6 +107,7 @@ export default function TimesheetFormDesigner({ embedded = false, onSaved, onCan
           <AddFieldBar hidden={hidden}
             onAdd={(type) => { const r = addField(draft, type, active); setDraft(r.layout); setActive(r.key); }}
             onShow={(key) => { setDraft(patchField(draft, key, { hidden: false })); setActive(key); }} />
+          <JobTypeRules draft={draft} onChange={setDraft} disabled={!canEdit} />
         </fieldset>
         {!embedded && <aside className="h-fit rounded-xl border border-line bg-surface p-4 text-sm xl:sticky xl:top-[calc(var(--shell-header-height,57px)+20px)]">
           <p className="font-semibold">How it works</p>

@@ -80,7 +80,7 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, o
                 {visible.map((column) => (
                   <Td key={column.id} align={column.align} className={`align-middle ${column.nowrap ? 'whitespace-nowrap' : ''}`}>{column.cell(task)}</Td>
                 ))}
-                <Td className="align-middle"><TaskRowActions task={task} userId={user.id} {...actions} /></Td>
+                <Td className="align-middle"><TaskRowActions task={task} userId={user.id} {...actions} onUpdated={onUpdated} onOpen={() => open(task)} /></Td>
               </tr>
             );
           })}

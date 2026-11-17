@@ -86,6 +86,14 @@ export const taskExtras = {
   addLink: (taskId, data) => api.post(`/task-extras/${taskId}/links`, data),
   removeLink: (taskId, linkId) => api.delete(`/task-extras/${taskId}/links/${linkId}`),
   apply: (taskId, data) => api.post(`/task-extras/${taskId}/apply`, data),
+  flag: (taskId, flagged) => api.put(`/task-extras/${taskId}/flag`, { flagged }),
+  history: (taskId) => api.get(`/task-extras/${taskId}/history`),
+};
+
+// Checklist, review and "watch" (follow) on a task.
+export const taskWorkflow = {
+  get: (taskId) => api.get(`/task-workflow/${taskId}`),
+  follow: (taskId, following) => api.put(`/task-workflow/${taskId}/follow`, { following }),
 };
 
 // "Sheet to task": a person's linked Google Sheets whose new rows become their tasks.
@@ -296,6 +304,9 @@ export const chat = {
   threads: (teamId) => api.get(`/chat/${teamId}/threads`),
   messages: (teamId, threadId, before = 0) => api.get(`/chat/${teamId}`, { params: { thread_id: threadId, ...(before ? { before } : {}) } }),
   send: (teamId, data) => api.post(`/chat/${teamId}`, data),
+  // A supporting document goes up as raw bytes (at most 1 MB), then rides on the next message.
+  uploadFile: (teamId, file) => api.post(`/chat/${teamId}/files`, file, { headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) } }),
+  downloadFile: (teamId, fileId) => api.get(`/chat/${teamId}/files/${fileId}`, { responseType: 'blob' }),
   markRead: (teamId, threadId) => api.post(`/chat/${teamId}/read`, { thread_id: threadId }),
   direct: (teamId, userId) => api.post(`/chat/${teamId}/direct-thread`, { target_user_id: userId }),
   activeSession: (teamId) => api.get(`/chat/${teamId}/review-sessions/active`),

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AttachmentChip } from './chat/ChatAttachment';
 
 import sharedApi, { teams as teamsApi } from '../services/api';
 import { WS_BASE_URL } from '../services/runtimeConfig';
@@ -1139,7 +1140,8 @@ const TeamChat = ({
                               <p>{msg.reply_text}</p>
                             </div>
                           )}
-                          <p>{msg.message}</p>
+                          {msg.message && <p>{msg.message}</p>}
+                          {msg.attachment && <AttachmentChip teamId={msg.team_id} attachment={msg.attachment} />}
                           <div className="tchat-message-meta">
                             <time>{msg.failed ? 'Failed' : msg.pending ? 'Sending...' : timeLabel(msg.created_at)}</time>
                             <button type="button" className="tchat-link-button" onClick={() => setReplyTo(msg)}>Reply</button>

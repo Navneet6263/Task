@@ -3,6 +3,8 @@ import SnoozeMenu from './SnoozeMenu';
 import { Button, Chip, Select } from '../../ui';
 import { PRIORITY_TONE, STATUS_LABEL } from './tones';
 import TaskBadges from '../../components/taskExtras/TaskBadges';
+import TaskMenu from '../../components/taskExtras/TaskMenu';
+import { useTaskSummary } from '../../components/taskExtras/taskExtrasStore';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
 const SUMMARY_KEY = { TODO: 'todo', IN_PROGRESS: 'in_progress', PENDING: 'pending', DONE: 'done' };
@@ -14,14 +16,20 @@ const dateLabel = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-function BoardCard({ task, status, dragging, userId, onOpen, onDragStart, onDragEnd, onMove, handleSnooze, handleApproveDelete, handleRejectDelete }) {
+function BoardCard({ task, status, dragging, userId, onOpen, onDragStart, onDragEnd, onMove, handleSnooze, handleApproveDelete, handleRejectDelete, handleDelete, onUpdated }) {
+  const flagged = Boolean(useTaskSummary(task.id)?.flagged);
   return (
     <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onOpen}
-      className={`relative mb-2 flex cursor-grab flex-col gap-2 rounded-md border border-line bg-surface p-2.5 hover:border-muted ${dragging ? 'opacity-40' : ''}`}>
+      className={`group relative mb-2 flex cursor-grab flex-col gap-2 rounded-md border bg-surface p-2.5 hover:border-muted ${flagged ? 'border-danger/50 border-l-4 border-l-danger' : 'border-line'} ${dragging ? 'opacity-40' : ''}`}>
       {task.unread_comments > 0 && (
         <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-[20px] place-items-center rounded-full border-2 border-surface bg-danger px-1 text-[10px] font-bold text-white">{task.unread_comments}</span>
       )}
-      <TaskBadges task={task} />
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1"><TaskBadges task={task} /></div>
+        <span className="-mr-1 -mt-1 shrink-0 opacity-70 transition group-hover:opacity-100">
+          <TaskMenu task={task} flagged={flagged} onStatus={onMove} onChanged={onUpdated} onOpen={onOpen} onDelete={handleDelete ? () => handleDelete(task.id) : undefined} />
+        </span>
+      </div>
       <h5 className="text-sm font-semibold">{task.title}</h5>
       <p className="text-xs text-muted">{task.assigned_to_name || 'Unassigned'}</p>
       <div className="flex items-center justify-between gap-2">

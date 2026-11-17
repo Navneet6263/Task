@@ -103,7 +103,7 @@ const TaskWorkspace = (props) => {
           <TaskListView members={members} onUpdated={props.onUpdated} paginated={paginated} selectedTask={selectedTask} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleDelete={handleDelete} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handlePickBug={handlePickBug} handleResolveBug={handleResolveBug} onBulkDelete={onBulkDelete} />
         )}
         {view === 'board' && (
-          <TaskBoardView summary={props.summary} loadMore={props.loadBoardColumn} boardBusy={props.boardBusy} filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} />
+          <TaskBoardView summary={props.summary} loadMore={props.loadBoardColumn} boardBusy={props.boardBusy} filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} handleStatusChange={handleStatusChange} handleSnooze={handleSnooze} handleApproveDelete={handleApproveDelete} handleRejectDelete={handleRejectDelete} handleDelete={handleDelete} onUpdated={props.onUpdated} />
         )}
         {view === 'timeline' && (
           <TaskTimelineView filtered={filtered} setSelectedTask={setSelectedTask} setSheetTab={setSheetTab} />

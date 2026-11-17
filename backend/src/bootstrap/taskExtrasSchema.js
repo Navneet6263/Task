@@ -12,6 +12,8 @@ async function ensureTaskExtrasSchema() {
   await db.query(`IF COL_LENGTH('dbo.organizations', 'task_prefix') IS NULL ALTER TABLE dbo.organizations ADD task_prefix NVARCHAR(10) NULL;`);
   // What the company mostly works on, picked once by an admin; it seeds labels that fit that work.
   await db.query(`IF COL_LENGTH('dbo.organizations', 'work_type') IS NULL ALTER TABLE dbo.organizations ADD work_type NVARCHAR(40) NULL;`);
+  // A red flag on a task that needs attention (Jira's "Add flag").
+  await db.query(`IF COL_LENGTH('dbo.tasks', 'flagged') IS NULL ALTER TABLE dbo.tasks ADD flagged BIT NOT NULL CONSTRAINT DF_tasks_flagged DEFAULT 0;`);
   await db.query(`
     IF OBJECT_ID('dbo.task_labels', 'U') IS NULL
       CREATE TABLE dbo.task_labels (

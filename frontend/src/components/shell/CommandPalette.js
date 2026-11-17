@@ -5,6 +5,7 @@ import useDialog from '../useDialog';
 import { useTaskMeta } from '../taskExtras/taskExtrasStore';
 import { PlusIcon, SearchIcon } from './icons';
 import { SpaceAvatar, useSpaces } from './spaces';
+import { recentTasks, whenLabel } from '../../services/recent';
 
 const STATUS_DOT = { DONE: 'bg-accent', IN_PROGRESS: 'bg-info', PENDING: 'bg-warn', TODO: 'bg-muted' };
 
@@ -35,6 +36,9 @@ export default function CommandPalette({ navGroups, onClose, onCreate }) {
     const pages = navGroups.flatMap((g) => g.items).filter((i) => match(i.label) || match(i.note || ''));
     return [
       ...(!q || 'create a task new'.includes(q) ? [{ group: 'Actions', id: 'create', label: 'Create a task', hint: 'C', icon: <span className="grid h-6 w-6 place-items-center rounded-md bg-accent text-accent-fg"><PlusIcon size={13} /></span>, run: () => onCreate() }] : []),
+      // Nothing typed yet: what was opened lately, like Jira's Recent.
+      ...(!q ? recentTasks().slice(0, 6).map((t) => ({ group: 'Recent', id: `r${t.id}`, label: t.title || keyOf(t.id), hint: `${keyOf(t.id)} · ${whenLabel(t.at)}`, done: t.status === 'DONE',
+        icon: <span className={`ml-2 mr-2 h-2 w-2 rounded-full ${STATUS_DOT[t.status] || 'bg-muted'}`} />, run: () => navigate(`/dashboard?task=${t.id}`) })) : []),
       ...found.map((t) => ({ group: 'Tasks', id: `t${t.id}`, label: t.title, hint: keyOf(t.id), done: t.status === 'DONE',
         icon: <span className={`ml-2 mr-2 h-2 w-2 rounded-full ${STATUS_DOT[t.status] || 'bg-muted'}`} />, run: () => navigate(`/dashboard?task=${t.id}`) })),
       ...ordered.filter((t) => match(t.name)).slice(0, q ? 6 : 4).map((t) => ({ group: 'Spaces', id: `s${t.id}`, label: t.name, hint: `${t.member_count || 0} members`,

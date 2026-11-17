@@ -19,6 +19,10 @@ export const ExternalIcon = ({ size = 14 }) => <Svg size={size}><path d="M14 4h6
 export const BuildingIcon = () => <Svg size={15}><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3" /></Svg>;
 // A line icon from a path string, for small lists of icons (summary tiles, kinds of work).
 export const LineIcon = ({ d, size = 18 }) => <Svg size={size}>{String(d).split(' M').map((part, i) => <path key={i} d={i ? `M${part}` : part} />)}</Svg>;
+export const FlagIcon = ({ size = 11 }) => <Svg size={size} strokeWidth="2.4"><path d="M4 22V4" /><path d="M4 4h12l-2 4 2 4H4" /></Svg>;
+export const EyeIcon = ({ size = 16 }) => <Svg size={size}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></Svg>;
+export const ShareIcon = ({ size = 16 }) => <Svg size={size}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></Svg>;
+export const ExpandIcon = ({ size = 16, shrink = false }) => <Svg size={size}>{shrink ? <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" /> : <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />}</Svg>;
 export const LockIcon = ({ size = 11 }) => <Svg size={size} strokeWidth="2.4"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>;
 export const PlusIcon = ({ size = 16 }) => <Svg size={size} strokeWidth="2.4"><path d="M12 5v14M5 12h14" /></Svg>;
 export const SearchIcon = ({ size = 16 }) => <Svg size={size}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>;

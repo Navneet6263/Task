@@ -30,7 +30,8 @@ export default function useTaskDraft(task, setSelectedTask, onSaved) {
     busy.current = true; setSaving(true); setError('');
     try {
       const response = await tasks.update(task.id, { ...changes, version: task.version });
-      setSelectedTask(prev => prev?.id === task.id ? { ...draft, version: response.data.version } : prev);
+      const fresh = await Promise.resolve().then(() => tasks.getDetail(task.id)).then((r) => r?.data).catch(() => null);
+      setSelectedTask(prev => prev?.id === task.id ? (fresh?.id ? fresh : { ...draft, version: response.data.version }) : prev);
       setMessage('Saved');
       onSaved?.();
     } catch (err) {

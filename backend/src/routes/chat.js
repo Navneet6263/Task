@@ -1,4 +1,5 @@
 const express = require('express');
+const chatFiles = require('../services/chatFiles');
 const db = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 
@@ -822,7 +823,7 @@ router.get('/:teamId', authenticate, async (req, res) => {
 
     const before = Number(req.query.before || 0);
     if (!Number.isSafeInteger(before) || before < 0) return res.status(422).json({ error: 'Invalid history cursor' });
-    const messages = await getMessages(teamId, thread, before);
+    const messages = await chatFiles.withAttachments(await getMessages(teamId, thread, before));
     res.json({ thread, messages });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -838,10 +839,15 @@ router.post('/:teamId', authenticate, async (req, res) => {
 
     const message = String(req.body?.message || '').trim();
     const clientTempId = String(req.body?.client_temp_id || '').trim() || null;
-    if (!message) return res.status(422).json({ error: 'Message required' });
+    const attachmentId = Number(req.body?.attachment_id) || null;
+    if (!message && !attachmentId) return res.status(422).json({ error: 'Message required' });
+    if (message.length > 5000) return res.status(422).json({ error: 'Message must be under 5000 characters' });
 
     const thread = await resolveThread(teamId, Number(req.body?.thread_id || 0), req.userId);
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    if (attachmentId && !(await chatFiles.uploadedBy(attachmentId, teamId, req.userId))) {
+      return res.status(422).json({ error: 'That file is no longer available. Attach it again.' });
+    }
 
     const replyTo = req.body?.reply_to ? Number(req.body.reply_to) : null;
     const [result] = await db.execute(
@@ -849,6 +855,8 @@ router.post('/:teamId', authenticate, async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [teamId, req.userId, thread.id, message, replyTo]
     );
+
+    if (attachmentId) await chatFiles.claim(attachmentId, teamId, req.userId, result.insertId);
 
     await db.execute(
       'INSERT IGNORE INTO team_message_reads (message_id, user_id) VALUES (?, ?)',
@@ -885,7 +893,8 @@ router.post('/:teamId', authenticate, async (req, res) => {
       [result.insertId]
     );
 
-    const payload = clientTempId ? { ...newMessage, client_temp_id: clientTempId } : newMessage;
+    const [withFile] = await chatFiles.withAttachments([newMessage]);
+    const payload = clientTempId ? { ...withFile, client_temp_id: clientTempId } : withFile;
     const ws = req.app.get('ws');
     if (ws && normalizeThreadType(thread.thread_type) === 'direct') {
       const recipients = Array.from(new Set([thread.direct_user_one, thread.direct_user_two].filter(Boolean)));
@@ -897,6 +906,53 @@ router.post('/:teamId', authenticate, async (req, res) => {
     res.json(payload);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Upload a supporting document for the next message: raw bytes (no base64), at most 1 MB.
+// The name travels in the X-File-Name header (URI-encoded).
+const rawFile = (req, res, next) => express.raw({ type: () => true, limit: chatFiles.MAX_BYTES })(req, res, (error) => {
+  if (!error) return next();
+  return res.status(error.type === 'entity.too.large' ? 413 : 400).json({ error: error.type === 'entity.too.large' ? chatFiles.TOO_BIG : 'Could not read the file.' });
+});
+router.post('/:teamId/files', authenticate, async (req, res, next) => {
+  try {
+    if (!(await canAccessTeam(req, Number(req.params.teamId)))) return res.status(403).json({ error: 'Team access denied' });
+    // Refuse early by size, before reading the body.
+    if (Number(req.headers['content-length'] || 0) > chatFiles.MAX_BYTES) return res.status(413).json({ error: chatFiles.TOO_BIG });
+    return next();
+  } catch (error) { return res.status(400).json({ error: error.message }); }
+}, rawFile, async (req, res) => {
+  try {
+    let name = '';
+    try { name = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch { name = String(req.headers['x-file-name'] || ''); }
+    res.status(201).json(await chatFiles.saveUpload(Number(req.params.teamId), req.userId, name, req.body));
+  } catch (error) {
+    res.status(error.status || 400).json({ error: error.status ? error.message : 'Could not save the file.' });
+  }
+});
+
+// Download a file from a conversation the person can see.
+router.get('/:teamId/files/:fileId', authenticate, async (req, res) => {
+  try {
+    const teamId = Number(req.params.teamId);
+    if (!(await canAccessTeam(req, teamId))) return res.status(403).json({ error: 'Team access denied' });
+    const file = await chatFiles.loadForDownload(Number(req.params.fileId), teamId);
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    // Direct conversations: only the two people in it.
+    const thread = await resolveThread(teamId, Number(file.thread_id || 0), req.userId);
+    if (!thread) return res.status(404).json({ error: 'File not found' });
+    res.set({
+      'Content-Type': file.mime,
+      'Content-Length': String(file.size),
+      'Content-Disposition': `attachment; filename="${String(file.file_name).replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(file.file_name)}`,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'",
+      'Cache-Control': 'private, no-store',
+    });
+    res.send(Buffer.from(file.data));
+  } catch (error) {
+    res.status(400).json({ error: 'Could not download the file.' });
   }
 });
 
