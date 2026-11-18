@@ -144,6 +144,20 @@ async function ensureTimesheetSchema() {
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_timesheet_audit_entry' AND object_id = OBJECT_ID('dbo.timesheet_audit'))
       CREATE INDEX idx_timesheet_audit_entry ON dbo.timesheet_audit(org_id, entry_id, id DESC);
   `);
+  // Sign-out rule (Timesheet → Setup): minimum submitted hours on working days before Log out; NULL = off.
+  await db.query(`IF COL_LENGTH('dbo.timesheet_settings', 'min_daily_hours') IS NULL ALTER TABLE dbo.timesheet_settings ADD min_daily_hours DECIMAL(4,2) NULL;`);
+  await db.query(`IF COL_LENGTH('dbo.timesheet_settings', 'working_days') IS NULL ALTER TABLE dbo.timesheet_settings ADD working_days VARCHAR(20) NULL;`);
+  await db.query(`
+    IF OBJECT_ID('dbo.timesheet_holidays', 'U') IS NULL
+      CREATE TABLE dbo.timesheet_holidays (
+        id INT IDENTITY PRIMARY KEY,
+        org_id INT NOT NULL REFERENCES dbo.organizations(id),
+        holiday_date DATE NOT NULL,
+        name NVARCHAR(120) NULL,
+        created_by INT NULL,
+        created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        CONSTRAINT uq_timesheet_holiday UNIQUE (org_id, holiday_date));
+  `);
 }
 
 module.exports = { ensureTimesheetSchema };

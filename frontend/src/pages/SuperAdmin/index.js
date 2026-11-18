@@ -42,7 +42,7 @@ export default function SuperAdminConsole() {
       <ToastHost />
       <ConsoleNav section={current} onGo={go} me={sa.me} isMaster={sa.isMaster} pending={sa.data.pending_count} onSignOut={signOut} />
       <ConsoleTopbar section={current} refreshing={sa.refreshing} lastLoaded={sa.lastLoaded} onRefresh={() => sa.reload()} actions={actions} />
-      <main key={current} className="mx-auto w-full max-w-[1400px] px-4 py-6 motion-safe:animate-fade-up sm:px-6">
+      <main key={current} className="mx-auto w-full max-w-[1500px] px-4 py-6 motion-safe:animate-fade-up sm:px-6">
         {sa.loading ? <Loading>Loading the console…</Loading> : (
           <>
             {current === 'overview' && <Overview sa={sa} go={go} customizing={customizing} onCloseCustomize={() => setCustomizing(false)} />}

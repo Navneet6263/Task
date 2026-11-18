@@ -92,7 +92,7 @@ function normalizeTimesheetLayout(input) {
     if (type === 'date' && raw.default === 'today') field.default = 'today';
     if (type === 'person' && raw.default === 'me') field.default = 'me';
     // Client may be "not needed" too (e.g. Leave): such entries go under the hidden "No client" row.
-    if ((!locked || key === 'client_id') && key !== 'job_type' && Array.isArray(raw.skip_for) && raw.skip_for.length) field.skip_for = raw.skip_for.map((v) => String(v ?? '').trim()).filter(Boolean);
+    if ((!locked || key === 'client_id') && !NEVER_SKIPPED.includes(key) && Array.isArray(raw.skip_for) && raw.skip_for.length) field.skip_for = raw.skip_for.map((v) => String(v ?? '').trim()).filter(Boolean);
     return field;
   });
   // "Not needed for": only Job Type options that exist (matched without case, stored as the option is written).
@@ -117,12 +117,16 @@ function normalizeTimesheetLayout(input) {
 
 const fieldOf = (layout, key) => layout.fields.find((f) => f.key === key);
 
+// Job Type picks the rule, and every entry must say whose work it is: "Done by" once got ticked for every
+// job type and entries were saved without a name.
+const NEVER_SKIPPED = ['job_type', 'agent_id'];
+
 // Fields that do not apply to this Job Type (set in the form: "Not needed for"). They are greyed out
-// in the form, never required, and saved empty.
+// in the form, never required, and saved empty. NEVER_SKIPPED fields ignore such a rule even in an older saved form.
 function skippedKeys(layout, jobType) {
   const job = String(jobType ?? '').trim().toLowerCase();
   if (!layout || !job) return new Set();
-  return new Set(layout.fields.filter((f) => !f.hidden && (f.skip_for || []).some((v) => v.toLowerCase() === job)).map((f) => f.key));
+  return new Set(layout.fields.filter((f) => !f.hidden && !NEVER_SKIPPED.includes(f.key) && (f.skip_for || []).some((v) => v.toLowerCase() === job)).map((f) => f.key));
 }
 
 // Empties what does not apply to the chosen Job Type, in a request body. Returns the skipped keys.

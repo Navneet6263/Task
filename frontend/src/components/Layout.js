@@ -12,6 +12,7 @@ import EmailReminder from './account/EmailReminder';
 import PhotoNudge from './account/PhotoNudge';
 import CommandPalette from './shell/CommandPalette';
 import WorkTypePicker from './shell/WorkTypePicker';
+import SignOutBlock from './shell/SignOutBlock';
 import { useTaskMeta } from './taskExtras/taskExtrasStore';
 
 // Screens already rebuilt on the shared UI kit. Every other screen renders inside a
@@ -83,6 +84,7 @@ const Layout = () => {
       <NotesPanel open={panel === 'notes'} onClose={() => setPanel(null)} />
       {searching && <CommandPalette navGroups={navGroups} onClose={() => setSearching(false)} onCreate={openCreate} />}
       {askWorkType && <WorkTypePicker onDone={() => setAskedWork(true)} />}
+      {shell.signOutBlock && <SignOutBlock info={shell.signOutBlock} onClose={() => shell.setSignOutBlock(null)} />}
       <ScreenShare open={teamChatOpen} preset={sharePreset} wsRef={wsRef} socketVersion={socketVersion}
         onOpen={() => { setPanel('screen'); setTeamChatOpen(true); }} onClose={() => { setTeamChatOpen(false); setPanel(null); }} />
     </div>

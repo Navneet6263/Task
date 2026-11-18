@@ -32,7 +32,7 @@ export default function PmsHub() {
   const notes = data ? highlights(data) : { strengths: [], tips: [] };
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-4">
+    <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
       <PageHeader title="My performance" subtitle={`Hi ${user.name?.split(' ')[0] || 'there'}, here is how your work is going, calculated automatically from your tasks.`}
         actions={<Segmented label="Period" value={days} onChange={choose} options={PERIODS} />} />
       <Tabs tabs={[['performance', 'Performance'], ['work', 'Completed tasks'], ['activity', 'Activity log']]} value={tab} onChange={setTab} label="My performance" />

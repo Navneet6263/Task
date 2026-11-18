@@ -35,6 +35,13 @@ export default function Timesheet() {
     const next = new URLSearchParams(params); next.delete('task'); setParams(next, { replace: true });
     timesheet.tasks({ id: taskParam }).then((r) => { if (r.data?.[0]) { setTab('entries'); setForm({ task: r.data[0] }); } }).catch(() => {});
   }, [taskParam, config]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opened from "Add Timesheet" in the log-out window: start a new entry right away.
+  const addParam = params.get('add');
+  useEffect(() => {
+    if (addParam !== '1' || !config) return;
+    const next = new URLSearchParams(params); next.delete('add'); setParams(next, { replace: true });
+    setTab('entries'); setForm({});
+  }, [addParam, config]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = useCallback(() => setRefreshKey((value) => value + 1), []);
   const refreshAll = useCallback(() => { refresh(); loadConfig(); }, [refresh, loadConfig]);
@@ -60,7 +67,7 @@ export default function Timesheet() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-[1500px]">
       <PageHeader
         title="Timesheet"
         subtitle="Client work and the time each person spent on it."

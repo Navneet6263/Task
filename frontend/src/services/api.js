@@ -202,6 +202,12 @@ export const timesheet = {
   saveForm: (layout, version) => api.put('/timesheet/form', { layout, version }),
   resetForm: () => api.delete('/timesheet/form'),
   saveSettings: (data) => api.put('/timesheet/settings', data),
+  // Hours before logging out (company rule) and its holidays.
+  signOutCheck: () => api.get('/timesheet/sign-out-check', { timeout: 5000 }),
+  signOutRule: () => api.get('/timesheet/sign-out-rule'),
+  saveSignOutRule: (data) => api.put('/timesheet/sign-out-rule', data),
+  addHoliday: (data) => api.post('/timesheet/holidays', data),
+  removeHoliday: (id) => api.delete(`/timesheet/holidays/${id}`),
   report: (params) => api.get('/timesheet/reports', { params }),
   teamWeek: (params) => api.get('/timesheet/team-week', { params }),
 };

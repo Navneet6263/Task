@@ -68,6 +68,8 @@ export default function EntriesTab({ config, refreshKey, onOpen, onEdit, preset 
 
   const people = scope === 'team' ? teamPeople(config) : config.users || [];
   const pages = result ? Math.max(1, Math.ceil(result.total / result.page_size)) : 1;
+  // A page can run empty after entries are removed or filtered away: go back to the last page with rows.
+  useEffect(() => { if (result && page > pages) setPage(pages); }, [result, page, pages]);
   const filtered = Boolean(query || Object.values(filters).some(Boolean));
   const summary = result?.summary;
 

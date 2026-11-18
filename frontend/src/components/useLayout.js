@@ -106,7 +106,14 @@ export default function useLayout() {
     if (item.task_id) navigate(`/dashboard?task=${item.task_id}`);
     else if (String(item.type || '').startsWith('calendar')) navigate('/calendar');
   };
-  const handleLogout = () => {
+  // Company timesheet rule: an employee short of the day's submitted hours is stopped here and told
+  // what is missing. Any error or a slow answer lets them log out, so nobody is ever trapped.
+  const [signOutBlock, setSignOutBlock] = useState(null);
+  const handleLogout = async () => {
+    try {
+      const { data } = await timesheet.signOutCheck();
+      if (data && data.allowed === false) { setSignOutBlock(data); return; }
+    } catch { /* not on the timesheet, or no answer: log out */ }
     clearAuthentication();
     navigate('/login');
   };
@@ -269,5 +276,5 @@ export default function useLayout() {
   };
 
 
-  return { user, resolvedRole, wsRef, socketVersion, showNotif, setShowNotif, onlyUnread, setOnlyUnread, sidebarOpen, setSidebarOpen, sidebarCollapsed, chatLoaded, accessibleOrgs, activeOrgId, teamChatOpen, setTeamChatOpen, chatUnreadCount, setChatUnreadCount, unreadCount, fetchNotifications, handleMarkAllRead, openNotification, handleLogout, handleOrgSwitch, visibleNotifications, initials, formattedDate, navGroups, closeTransientUi, toggleSidebarCollapsed };
+  return { user, resolvedRole, wsRef, socketVersion, showNotif, setShowNotif, onlyUnread, setOnlyUnread, sidebarOpen, setSidebarOpen, sidebarCollapsed, chatLoaded, accessibleOrgs, activeOrgId, teamChatOpen, setTeamChatOpen, chatUnreadCount, setChatUnreadCount, unreadCount, fetchNotifications, handleMarkAllRead, openNotification, handleLogout, signOutBlock, setSignOutBlock, handleOrgSwitch, visibleNotifications, initials, formattedDate, navGroups, closeTransientUi, toggleSidebarCollapsed };
 }

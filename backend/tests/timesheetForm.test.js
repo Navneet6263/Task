@@ -145,3 +145,16 @@ test('an entry for a Job Type that does not need some fields saves without them,
   assert.equal(books.status, 422);
   assert.deepEqual(Object.keys((await books.json()).fields).sort(), ['count_number', 'count_type']);
 });
+
+test('"Done by" is never "not needed": the rule is dropped on save and ignored in an older saved form', () => {
+  const { skippedKeys, clearSkipped } = require('../src/services/timesheetFormLayout');
+  const base = defaultLayout({ ...OPTIONS, job_type: JOBS });
+  const saved = normalizeTimesheetLayout({ ...base, fields: base.fields.map((f) => (f.key === 'agent_id' ? { ...f, skip_for: JOBS } : f)) });
+  assert.equal(saved.fields.find((f) => f.key === 'agent_id').skip_for, undefined);
+  // Accountrust's form version 18 was saved like this before the rule existed.
+  const older = { ...base, fields: base.fields.map((f) => (f.key === 'agent_id' ? { ...f, skip_for: JOBS } : f)) };
+  assert.equal(skippedKeys(older, 'Training').has('agent_id'), false);
+  const body = { job_type: 'Training', agent_id: 21 };
+  clearSkipped(older, body);
+  assert.equal(body.agent_id, 21, 'the person who did the work stays on the entry');
+});

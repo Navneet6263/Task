@@ -218,6 +218,14 @@ router.put('/settings', requirePermission(canSetup, 'Only admins can change time
   res.json({ lock_days: lockDays, unlock_days: unlockDays });
 }));
 
+// Sign-out rule: the app asks before Log out; employees short of the day's hours are stopped there.
+const signOut = require('../services/signOutRule');
+router.get('/sign-out-check', route(async (req, res) => { res.json(await signOut.signOutCheck(req)); }));
+router.get('/sign-out-rule', requirePermission(canSetup, 'Only admins can see timesheet setup'), route(async (req, res) => { res.json(await signOut.getRule(req.orgId)); }));
+router.put('/sign-out-rule', requirePermission(canSetup, 'Only admins can change timesheet setup'), route(async (req, res) => { res.json(await signOut.saveRule(req, req.body)); }));
+router.post('/holidays', requirePermission(canSetup, 'Only admins can change timesheet setup'), route(async (req, res) => { res.status(201).json(await signOut.addHoliday(req, req.body)); }));
+router.delete('/holidays/:id', requirePermission(canSetup, 'Only admins can change timesheet setup'), route(async (req, res) => { res.json(await signOut.removeHoliday(req, positive(req.params.id, 'holiday'))); }));
+
 router.use('/', require('./timesheetEntries'));
 
 module.exports = router;

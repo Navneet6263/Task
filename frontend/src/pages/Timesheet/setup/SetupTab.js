@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import LockSettingsCard from './LockSettingsCard';
+import SignOutRuleCard from './SignOutRuleCard';
 
 const LINKS = [
   ['/settings#form-designer', 'Timesheet form', 'Rename fields, make them required or optional, hide them, reorder them, edit dropdown options and add your own questions. Open Form designer → Timesheet form.'],
@@ -13,6 +14,7 @@ export default function SetupTab({ config, onChanged }) {
   return (
     <div className="flex flex-col gap-4">
       <LockSettingsCard settings={config.settings} onSaved={onChanged} />
+      <SignOutRuleCard />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {LINKS.map(([to, title, text]) => (
           <Card key={to} className="p-4">

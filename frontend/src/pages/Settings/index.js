@@ -67,7 +67,7 @@ export default function Settings() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-[1500px]">
       <PageHeader title="Settings" subtitle="Your account, how the app looks, your teams, and help." />
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto md:sticky md:top-[calc(var(--shell-header-height,57px)+20px)] md:h-fit md:flex-col md:overflow-visible">

@@ -108,7 +108,7 @@ export default function TeamManagement() {
                 <StatTile label="Overdue" value={totals.overdue} />
                 <StatTile label="Done in 30 days" value={totals.done} />
               </section>
-              <div className={`grid grid-cols-1 gap-4 ${canManage ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
+              <div className={`grid grid-cols-1 gap-4 ${canManage ? '2xl:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
                 <div className="min-w-0">{membersLoading && !members.length ? <Loading>Loading members…</Loading> : <MembersTable team={team} members={members} canManage={canManage} admin={admin} onChanged={refresh} />}</div>
                 {canManage && <AddMembers team={team} onAdded={refresh} />}
               </div>

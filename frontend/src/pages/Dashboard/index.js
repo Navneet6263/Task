@@ -65,8 +65,9 @@ const Dashboard = ({ space = null }) => {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
+  // w-full: inside a space this sits in a flex column, where mx-auto alone shrank it to its content.
   return (
-    <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4">
       {!space && <>
         <DashboardHero
           user={user} today={today} agenda={agenda} overdue={stats.overdue}

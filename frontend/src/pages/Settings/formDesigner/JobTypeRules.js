@@ -7,11 +7,12 @@ export const skipFor = (field) => field.skip_for || [];
 export const skippedFor = (layout, jobType) => {
   const job = String(jobType ?? '').trim().toLowerCase();
   if (!job) return new Set();
-  return new Set((layout?.fields || []).filter((f) => !f.hidden && skipFor(f).some((v) => v.toLowerCase() === job)).map((f) => f.key));
+  return new Set((layout?.fields || []).filter((f) => !f.hidden && f.key !== 'agent_id' && skipFor(f).some((v) => v.toLowerCase() === job)).map((f) => f.key));
 };
 // Fields a rule can apply to: shown, not Job Type itself, and not date or hours (always needed).
 // Client may be "not needed" (e.g. Leave): such entries are kept under "No client".
-export const ruleFields = (layout) => (layout?.fields || []).filter((f) => !f.hidden && (!f.locked || f.key === 'client_id') && f.key !== 'job_type' && f.key !== 'task_id');
+// Done by never is: every entry must say whose work it is.
+export const ruleFields = (layout) => (layout?.fields || []).filter((f) => !f.hidden && (!f.locked || f.key === 'client_id') && !['job_type', 'task_id', 'agent_id'].includes(f.key));
 
 export default function JobTypeRules({ draft, onChange, disabled = false }) {
   const jobField = draft.fields.find((f) => f.key === 'job_type');
