@@ -12,6 +12,8 @@ import AgentPicker from '../../components/clients/AgentPicker';
 import TimesheetLink from './TimesheetLink';
 import TaskExtrasPanel from '../../components/taskExtras/TaskExtrasPanel';
 import TaskHistory from '../../components/taskExtras/TaskHistory';
+import BugStageBar from '../../components/bugs/BugStageBar';
+import useBugTracking from '../../components/bugs/useBugTracking';
 import { announceTaskExtrasChange, useTaskMeta } from '../../components/taskExtras/taskExtrasStore';
 import { FlagIcon, ExpandIcon, ShareIcon } from '../../components/shell/icons';
 import { taskExtras, tasks as tasksApi } from '../../services/api';
@@ -42,6 +44,7 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
   const members = metadata.members, availableTaskOptions = metadata.options;
   const editor = useTaskDraft(task, setSelectedTask, onSaved);
   const layout = useTaskFormLayout()?.layout || null;
+  const bugFlowOn = useBugTracking() === true;
   const t = editor.draft;
   const type = t.issue_type || 'task';
   const up = editor.update;
@@ -137,7 +140,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
 
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_340px] lg:overflow-hidden">
           {/* LEFT: the work itself */}
-          <main className="flex min-w-0 flex-col gap-5 px-6 py-5 lg:overflow-y-auto">
+          {/* Children never shrink: this column scrolls, and shrinking squashed the title box and image to thin lines. */}
+          <main className="flex min-w-0 flex-col gap-5 px-6 py-5 lg:overflow-y-auto [&>*]:shrink-0">
             <InlineTitle value={t.title} disabled={editor.saving} onSave={(value) => commit('title', value)} />
             <section>
               <h3 className="mb-1 text-[15px] font-semibold">Description</h3>
@@ -184,13 +188,19 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
           </main>
 
           {/* RIGHT: details */}
-          <aside className="flex flex-col gap-4 border-t border-line bg-subtle/40 px-5 py-5 lg:overflow-y-auto lg:border-l lg:border-t-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Select aria-label="Status" className="!w-auto font-semibold" value={t.status} disabled={editor.saving} onChange={(e) => commit('status', e.target.value)}>
-                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-              </Select>
+          <aside className="flex flex-col gap-4 border-t border-line bg-subtle/40 px-5 py-5 lg:overflow-y-auto lg:border-l lg:border-t-0 [&>*]:shrink-0">
+            {/* With bug tracking on, a bug moves by its stage buttons instead of the status list. */}
+            {bugFlowOn && type === 'bug' ? <>
+              <BugStageBar task={t} onChanged={() => { editor.reload(); onSaved?.(); }} />
               <TimesheetLink taskId={t.id} />
-            </div>
+            </> : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Select aria-label="Status" className="!w-auto font-semibold" value={t.status} disabled={editor.saving} onChange={(e) => commit('status', e.target.value)}>
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                </Select>
+                <TimesheetLink taskId={t.id} />
+              </div>
+            )}
 
             <section className="rounded-lg border border-line bg-surface px-4 py-3">
               <h3 className="mb-1 text-[15px] font-semibold">Details</h3>

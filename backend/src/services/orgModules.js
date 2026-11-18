@@ -8,7 +8,8 @@ const db = require('../config/database');
 // email_to_task: emails to the organization's inbox become tasks (inbox set in the platform console).
 // sheet_to_task: people link a Google Sheet in My Tasks and its new rows become their tasks.
 // developer_api: admins create API keys and webhooks so other software can work with tasks.
-const KNOWN_MODULES = ['timesheet', 'hrms_login', 'all_tasks', 'communications', 'email_to_task', 'sheet_to_task', 'developer_api'];
+// bug_tracking: bugs go New → Ready to pick → Fixing → Ready for QA → Done, with Developer / QA set per team.
+const KNOWN_MODULES = ['timesheet', 'hrms_login', 'all_tasks', 'communications', 'email_to_task', 'sheet_to_task', 'developer_api', 'bug_tracking'];
 
 const isTrue = (value) => value === true || value === 1;
 

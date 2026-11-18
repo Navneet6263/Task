@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EmptyState, Switch, Table, TableWrap, Td, Th } from '../../../ui';
 
-const MODULES = [['timesheet', 'Timesheet'], ['hrms_login', 'Employee code login'], ['all_tasks', 'Show all tasks'], ['communications', 'Communications'], ['email_to_task', 'Email to task'], ['sheet_to_task', 'Sheet to task'], ['developer_api', 'Developer API']];
+const MODULES = [['timesheet', 'Timesheet'], ['hrms_login', 'Employee code login'], ['all_tasks', 'Show all tasks'], ['communications', 'Communications'], ['email_to_task', 'Email to task'], ['sheet_to_task', 'Sheet to task'], ['developer_api', 'Developer API'], ['bug_tracking', 'Bug tracking']];
 const MODULE_HELP = {
   timesheet: 'Timesheet: time entries, locks and timesheet reports.',
   hrms_login: 'Employee code login: staff sign in with their HRMS employee code; the admin imports them from the HRMS sheet.',
@@ -10,6 +10,7 @@ const MODULE_HELP = {
   email_to_task: 'Email to task: emails to the workspace\'s inbox become tasks. Set the inbox in the "Email to task" tab. Off by default.',
   developer_api: 'Developer API: the company admin creates API keys and webhooks so their CRM, HRMS or any software can create and read tasks. Off by default.',
   sheet_to_task: 'Sheet to task: people link a Google Sheet in My Tasks; its new rows become their tasks every evening at 7 pm. Off by default.',
+  bug_tracking: 'Bug tracking: bugs go New, Ready to pick, Fixing, Ready for QA, Done. Teams mark who is Developer and QA; only QA closes a bug. Off by default.',
 };
 
 // Organizations of one company, with paid add-on modules that can be switched per organization.

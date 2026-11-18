@@ -70,6 +70,16 @@ export const teams = {
 };
 
 // Jira-style extras: task keys, labels, subtasks and links between tasks.
+// Bug tracking module: stages, Pick / Mark fixed / Pass / Fail, and Developer / QA per team.
+export const bugs = {
+  status: () => cachedGet(api, '/bugs/status', 300000),
+  get: (taskId) => api.get(`/bugs/${taskId}`),
+  board: (teamId) => api.get(`/bugs/teams/${teamId}/board`),
+  act: (taskId, action, note) => api.post(`/bugs/${taskId}/${action}`, note ? { note } : {}),
+  roles: (teamId) => api.get(`/bugs/teams/${teamId}/roles`),
+  setRole: (teamId, userId, workRole) => api.put(`/bugs/teams/${teamId}/roles/${userId}`, { work_role: workRole || null }),
+};
+
 export const taskExtras = {
   meta: () => api.get('/task-extras/meta'),
   setPrefix: (prefix) => api.put('/task-extras/meta/prefix', { prefix }),

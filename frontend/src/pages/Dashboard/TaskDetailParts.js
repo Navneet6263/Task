@@ -26,10 +26,11 @@ export function InlineTitle({ value, onSave, disabled = false }) {
     if (next && next !== value) onSave(next); else setText(value || '');
   };
   if (editing) {
+    // shrink-0: the task window's left column is a scrolling flex column, which squashed this box to a thin line.
     return (
       <textarea autoFocus aria-label="Title" rows={2} maxLength={255} value={text} onChange={(e) => setText(e.target.value)} onBlur={done}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') { e.stopPropagation(); setText(value || ''); setEditing(false); } }}
-        className="-mx-2 w-[calc(100%+1rem)] resize-none rounded-md border border-accent bg-surface px-2 py-1 text-[22px] font-bold leading-tight outline-none" />
+        className="-mx-2 w-[calc(100%+1rem)] shrink-0 resize-none rounded-md border border-accent bg-surface px-2 py-1 text-[22px] font-bold leading-tight outline-none" />
     );
   }
   return (

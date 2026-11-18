@@ -164,7 +164,7 @@ const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
     FROM tasks t WHERE ${where}`;
   const taskSql = `SELECT t.id, t.title, LEFT(t.description, 220) AS description, t.priority, t.status, t.assigned_to,
       t.assigned_by, t.team_id, t.start_date, t.assigned_date, t.due_date, t.client_name,
-      t.issue_type, t.manager_assigned, t.priority_locked, t.picked_by, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
+      t.issue_type, t.manager_assigned, t.priority_locked, t.picked_by, t.bug_stage, t.reopen_count, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
       t.blocked_reason, t.review_status, te.name AS team_name,
       u1.name AS assigned_to_name, u2.name AS assigned_by_name, u2.name AS created_by_name,
       u5.name AS delete_requested_by_name, ag.name AS agent_name,
@@ -212,7 +212,7 @@ const getTaskDetail = async (taskId, userId = 0) => {
     `SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar AS assigned_to_avatar,
       u2.name AS assigned_by_name, u2.name AS created_by_name,
-      u3.name AS reported_by_name, u4.name AS picked_by_name,
+      u3.name AS reported_by_name, u4.name AS picked_by_name, u6.name AS qa_user_name,
       u5.name AS delete_requested_by_name, ag.name AS agent_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != ?
@@ -224,6 +224,7 @@ const getTaskDetail = async (taskId, userId = 0) => {
      LEFT JOIN users u3 ON t.reported_by = u3.id
      LEFT JOIN users u4 ON t.picked_by = u4.id
      LEFT JOIN users u5 ON t.delete_requested_by = u5.id
+     LEFT JOIN users u6 ON t.qa_user_id = u6.id
      LEFT JOIN org_agents ag ON ag.id = t.agent_firm_id
      WHERE t.id = ? AND t.is_deleted = FALSE`,
     [userId, userId, normalizedId]

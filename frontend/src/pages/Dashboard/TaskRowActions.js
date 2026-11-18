@@ -3,7 +3,9 @@ import TaskMenu from '../../components/taskExtras/TaskMenu';
 import { useTaskSummary } from '../../components/taskExtras/taskExtrasStore';
 import { useNavigate } from 'react-router-dom';
 import { tasks } from '../../services/api';
-import { Button, Select } from '../../ui';
+import { Button, Chip, Select } from '../../ui';
+import useBugTracking from '../../components/bugs/useBugTracking';
+import { STAGE_NAMES, STAGE_TONES, stageOf } from '../../components/bugs/bugStages';
 import SnoozeMenu from './SnoozeMenu';
 import useCommunicationsEnabled from '../Communications/useCommunicationsEnabled';
 import { STATUS_LABEL } from './tones';
@@ -21,6 +23,7 @@ export default function TaskRowActions({ task, userId, handleStatusChange, handl
   const flagged = Boolean(useTaskSummary(task.id)?.flagged);
   const navigate = useNavigate();
   const canEmail = useCommunicationsEnabled();
+  const bugFlowOn = useBugTracking();
 
   const handleMailClick = async () => {
     let detail;
@@ -41,8 +44,11 @@ export default function TaskRowActions({ task, userId, handleStatusChange, handl
           <SendIcon />
         </Button>
       )}
-      {isOpenBug && !task.picked_by && <Button size="sm" onClick={() => handlePickBug(task.id)}>Pick</Button>}
-      {isOpenBug && task.picked_by && <Button size="sm" onClick={() => handleResolveBug(task.id)}>Resolve</Button>}
+      {/* Bug tracking on: the stage, and Pick for bugs waiting in the queue. Off: the old Pick / Resolve. */}
+      {task.issue_type === 'bug' && bugFlowOn && <Chip tone={STAGE_TONES[stageOf(task)]}>{STAGE_NAMES[stageOf(task)]}</Chip>}
+      {task.issue_type === 'bug' && bugFlowOn && stageOf(task) === 'ready' && <Button size="sm" onClick={() => handlePickBug(task.id)}>Pick</Button>}
+      {isOpenBug && bugFlowOn === false && !task.picked_by && <Button size="sm" onClick={() => handlePickBug(task.id)}>Pick</Button>}
+      {isOpenBug && bugFlowOn === false && task.picked_by && <Button size="sm" onClick={() => handleResolveBug(task.id)}>Resolve</Button>}
       {task.issue_type !== 'bug' && (
         <Select aria-label={`Status of ${task.title}`} className="!w-auto min-w-[118px] py-1 text-xs" value={task.status} onChange={(event) => handleStatusChange(task, event.target.value)}>
           {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{STATUS_LABEL[status]}</option>)}

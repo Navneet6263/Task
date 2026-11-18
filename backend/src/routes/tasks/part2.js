@@ -4,6 +4,7 @@ const { getOrgLayout } = require('../../services/taskFormStore');
 const { resolveTaskClient, resolveAgent } = require('../../services/orgClients');
 const { cleanCustomValues, missingCoreFields, buildTitle } = require('../../services/taskFormLayout');
 const timeLogs = require('./timeLogs');
+const bugFlow = require('../../services/bugFlow');
 
 // One task, with every rule of the Create task form. The form and the sheet upload both come through here.
 // A refusal is thrown as { reply: { status, body } }. `quiet` leaves the "assigned" notification to the caller.
@@ -157,6 +158,12 @@ async function createTask(req, body, { quiet = false } = {}) {
     await logActivity(req.userId, team_id, result.insertId, type === 'bug' ? 'Bug Reported' : 'Task Assigned', taskPayload.title,
       type === 'bug' ? `Bug reported by ${req.userId}` : 'Task assigned', 'User (Local)');
 
+    // Bug tracking: a new bug starts in New, Ready to pick or Fixing. A failure here never loses the task.
+    if (type === 'bug') {
+      await bugFlow.onBugCreated(req, { id: result.insertId, issue_type: type, org_id: resolvedOrgId, team_id, assigned_to: assignedTo })
+        .catch((error) => console.error('[bugs] stage not set', error.message));
+    }
+
     if (assignedTo && !quiet) {
       await db.execute(
         'INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)',
@@ -215,6 +222,8 @@ router.patch('/:id/pick', authenticate, async (req, res) => {
     );
     if (task.length === 0) return res.status(404).json({ error: 'Bug not found' });
     if (!await requireTeamAccess(req, res, task[0].team_id)) return;
+    // With bug tracking on, Pick follows the team's Developer / QA rules.
+    if (await bugFlow.isOn(task[0].org_id)) return bugFlow.act(req, req.params.id, 'pick').then((r) => res.json(r), (e) => res.status(e.status || 400).json({ error: e.message }));
     if (task[0].picked_by && Number(task[0].picked_by) !== Number(req.userId)) return res.status(409).json({ error: 'This bug is already picked by another teammate' });
     const [user] = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
     const [picked] = await db.execute(
@@ -244,6 +253,8 @@ router.patch('/:id/resolve', authenticate, async (req, res) => {
     );
     if (task.length === 0) return res.status(404).json({ error: 'Bug not found' });
     if (!await requireTeamAccess(req, res, task[0].team_id)) return;
+    // With bug tracking on, a developer cannot close a bug: it goes to QA to check.
+    if (await bugFlow.isOn(task[0].org_id)) return bugFlow.act(req, req.params.id, 'fixed', req.body?.note).then((r) => res.json(r), (e) => res.status(e.status || 400).json({ error: e.message }));
     if (!['admin', 'company_admin'].includes(req.userRole) && Number(task[0].assigned_to) !== Number(req.userId)) return res.status(403).json({ error: 'Only the assignee or administrator can resolve this bug' });
     const [user] = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
     const [resolved] = await db.execute(

@@ -72,6 +72,7 @@ app.use('/api/teams', require('./src/routes/teams'));
 app.use('/api/task-sheets', require('./src/routes/taskSheets'));
 app.use('/api/task-extras', require('./src/routes/taskExtras'));
 app.use('/api/developer', require('./src/routes/developer'));
+app.use('/api/bugs', require('./src/routes/bugs'));
 app.use('/api/v1', require('./src/routes/publicApi'));
 app.use('/api/tasks', require('./src/routes/tasks'));
 app.use('/api/task-form', require('./src/routes/taskForm'));

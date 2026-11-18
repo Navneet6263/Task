@@ -6,6 +6,7 @@ const { cleanCustomValues, isPastEditWindow } = require('../../services/taskForm
 // Status changes stay possible after the edit window; everything else needs an admin.
 const ALWAYS_EDITABLE = ['status', 'version', 'priority_locked'];
 const { notifyTaskFollowers } = require('../../services/taskNotifications');
+const bugFlow = require('../../services/bugFlow');
 
 router.put('/:id', authenticate, async (req, res) => {
   try {
@@ -40,7 +41,7 @@ router.put('/:id', authenticate, async (req, res) => {
     const nextTitle = req.body.title === undefined ? currentTask.title : normalizeText(req.body.title, 255);
     const nextDescription = req.body.description === undefined ? currentTask.description : normalizeText(req.body.description, 5000);
     const nextPriority = ['LOW', 'MEDIUM', 'HIGH'].includes(req.body.priority) ? req.body.priority : currentTask.priority;
-    const nextStatus = TASK_STATUSES.includes(status) ? status : currentTask.status;
+    let nextStatus = TASK_STATUSES.includes(status) ? status : currentTask.status;
     const nextPriorityLocked = priority_locked === undefined ? Boolean(currentTask.priority_locked) : Boolean(priority_locked);
     const nextTaskType = req.body.task_type === undefined ? currentTask.task_type : normalizeText(req.body.task_type, 120);
     const nextProduct = req.body.product === undefined ? currentTask.product : normalizeText(req.body.product, 120);
@@ -111,6 +112,12 @@ router.put('/:id', authenticate, async (req, res) => {
       });
     }
 
+    // Bug tracking: bugs move by their buttons; a lead's status change or a new assignee moves the stage too.
+    let bugPlan = null;
+    try { bugPlan = await bugFlow.planEdit(req, currentTask, { status: nextStatus, assigned_to: nextAssignedTo }); }
+    catch (error) { return res.status(error.status || 400).json({ error: error.message, code: 'BUG_FLOW' }); }
+    if (bugPlan) nextStatus = bugPlan.status;
+
     const [result] = await db.execute(
       `UPDATE tasks
        SET title=?, description=?, status=?, priority=?, priority_locked=?, assigned_to=?, task_type=?, product=?, category=?, start_date=?, assigned_date=?, due_date=?, reference_image=?, 
@@ -135,6 +142,7 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(409).json({ error: 'Update failed. Please refresh.', code: 'CONFLICT' });
     }
 
+    if (bugPlan) await db.execute('UPDATE tasks SET bug_stage = ? WHERE id = ?', [bugPlan.stage, req.params.id]);
     const activity = nextStatus === 'DONE' && currentTask.status !== 'DONE' ? 'Task Completed' : 'Task Updated';
     await logActivity(req.userId, currentTask.team_id, req.params.id, activity, nextTitle, JSON.stringify(Object.fromEntries(Object.keys(req.body).filter(key => key !== 'version' && key !== 'reference_image' && String(currentTask[key] ?? '') !== String(req.body[key] ?? '')).map(key => [key, { before: currentTask[key] ?? null, after: req.body[key] }]))), 'User (Local)');
     ws.broadcast(currentTask.team_id, 'task_updated', { id: req.params.id, status: nextStatus, title: nextTitle });

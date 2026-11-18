@@ -1,9 +1,11 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { teams } from '../../services/api';
+import { bugs, teams } from '../../services/api';
 import { writePreference } from '../../services/preferences';
 import { notify } from '../../services/feedback';
-import { Button, Chip, EmptyState, Loading } from '../../ui';
+import { Button, Chip, EmptyState, Loading, Select } from '../../ui';
+import useBugTracking from '../../components/bugs/useBugTracking';
+import { ROLE_NAMES } from '../../components/bugs/bugStages';
 import { useSpaces, visitSpace } from '../../components/shell/spaces';
 import { PlusIcon, StarIcon } from '../../components/shell/icons';
 import { adminIdentity } from '../AdminPanel/adminShared';
@@ -15,14 +17,35 @@ import TeamPhoto from '../../components/shell/TeamPhoto';
 import PersonHoverCard from '../../components/people/PersonHoverCard';
 
 const Dashboard = lazy(() => import('../Dashboard/index'));
+const BugBoard = lazy(() => import('./BugBoard'));
 
 const TABS = [['summary', 'Summary'], ['board', 'Board'], ['list', 'List'], ['timeline', 'Timeline'], ['calendar', 'Calendar'], ['people', 'People']];
 
+const byUser = (data) => ({ by: Object.fromEntries((data?.roles || []).map((r) => [r.user_id, r.work_role])), canEdit: Boolean(data?.can_edit) });
+
 function People({ team, members, meId }) {
+  // Bug tracking: who picks and fixes bugs (Developer) and who checks the fixes (QA) in this team.
+  const bugFlowOn = useBugTracking();
+  const [roles, setRoles] = useState(null);
+  useEffect(() => {
+    if (!bugFlowOn) return undefined;
+    let alive = true;
+    bugs.roles(team.id).then((r) => { if (alive) setRoles(byUser(r.data)); }).catch(() => {});
+    return () => { alive = false; };
+  }, [bugFlowOn, team.id]);
+  const setRole = async (person, role) => {
+    try {
+      setRoles(byUser((await bugs.setRole(team.id, person.id, role)).data));
+      notify(role ? `${person.name} is now ${ROLE_NAMES[role]} in ${team.name}.` : `${person.name} has no bug role now.`, 'success');
+    } catch (err) { notify(err.response?.data?.error || 'Could not save. Please try again.'); }
+  };
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted">{members.length} {members.length === 1 ? 'person' : 'people'} work in {team.name}.</p>
+        <p className="text-sm text-muted">
+          {members.length} {members.length === 1 ? 'person' : 'people'} work in {team.name}.
+          {roles && ' For bugs: Developers pick and fix them, QA checks each fix.'}
+        </p>
         <Link to="/team" onClick={() => writePreference('team-management-selected', team.id)} className="text-sm font-semibold text-accent hover:underline">Manage people in Team Management →</Link>
       </div>
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -36,6 +59,12 @@ function People({ team, members, meId }) {
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1.5 truncate font-semibold">{m.name}{m.is_reporting_manager && <Chip tone="ok">Leader</Chip>}</span>
               <span className="block truncate text-xs text-muted">{m.team_role || 'Member'}{m.shared_from_name ? ` · via ${m.shared_from_name}` : ''}</span>
+              {roles && (roles.canEdit ? (
+                <Select aria-label={`Bug role of ${m.name}`} className="mt-1.5 !w-auto py-1 text-xs" value={roles.by[m.id] || ''} onChange={(e) => setRole(m, e.target.value)}>
+                  <option value="">No bug role</option>
+                  {Object.entries(ROLE_NAMES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </Select>
+              ) : roles.by[m.id] ? <span className="mt-1 block"><Chip tone="info">{ROLE_NAMES[roles.by[m.id]]}</Chip></span> : null)}
             </span>
             <span className="text-right text-xs"><span className="block font-mono font-semibold">{Number(m.current_tasks || 0)}</span><span className="text-muted">open</span></span>
           </li>
@@ -53,7 +82,10 @@ export default function TeamSpace() {
   const { spaces, isStarred, toggleStar, reload: reloadSpaces } = useSpaces();
   const [members, setMembers] = useState([]);
   const [createSignal, setCreateSignal] = useState(0);
-  const tab = TABS.some(([k]) => k === params.get('tab')) ? params.get('tab') : 'summary';
+  // The Bugs tab exists only where the bug tracking module is on.
+  const bugFlowOn = useBugTracking();
+  const tabs = bugFlowOn ? [...TABS.slice(0, 3), ['bugs', 'Bugs'], ...TABS.slice(3)] : TABS;
+  const tab = tabs.some(([k]) => k === params.get('tab')) ? params.get('tab') : 'summary';
   const team = (spaces || []).find((t) => String(t.id) === String(teamId));
   const { isCompanyAdmin, isOrgAdmin, user } = adminIdentity();
   const canEditTeam = isCompanyAdmin || isOrgAdmin || user.role === 'manager';
@@ -97,7 +129,7 @@ export default function TeamSpace() {
           </div>
         </div>
         <div role="tablist" aria-label="Space views" className="-mb-px flex gap-1 overflow-x-auto">
-          {[...TABS, ...(isCompanyAdmin || isOrgAdmin ? [['sharing', 'Sharing']] : [])].map(([key, label]) => (
+          {[...tabs, ...(isCompanyAdmin || isOrgAdmin ? [['sharing', 'Sharing']] : [])].map(([key, label]) => (
             <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => go(key)}
               className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition ${tab === key ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'}`}>{label}</button>
           ))}
@@ -106,6 +138,7 @@ export default function TeamSpace() {
 
       {tab === 'summary' && <SpaceSummary teamId={team.id} onGo={go} />}
       {workTab && <Suspense fallback={<Loading>Loading tasks…</Loading>}><Dashboard space={{ teamId: team.id, view: tab, createSignal }} /></Suspense>}
+      {tab === 'bugs' && <Suspense fallback={<Loading>Loading bugs…</Loading>}><BugBoard team={team} /></Suspense>}
       {tab === 'calendar' && <SpaceCalendar teamId={team.id} />}
       {tab === 'people' && <People team={team} members={members} meId={user.id} />}
       {tab === 'sharing' && <TeamSharing team={team} allTeams={spaces} canEdit onChanged={() => {}} />}
