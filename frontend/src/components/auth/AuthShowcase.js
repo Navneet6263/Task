@@ -34,7 +34,7 @@ export default function AuthShowcase({ variant = 'workspace' }) {
   const content = CONTENT[variant] || CONTENT.workspace;
   return (
     <aside aria-hidden="true" className="hidden p-3 lg:block lg:sticky lg:top-0 lg:h-[calc(100vh/0.9)]">
-      <div className="relative flex h-full flex-col overflow-hidden rounded-[24px] bg-gradient-to-br from-[#0a3326] via-[#0e5039] to-[#147457] p-10 text-white xl:p-12">
+      <div className="relative flex h-full flex-col overflow-hidden rounded-[24px] bg-gradient-to-br from-[#06213d] via-[#083e57] to-[#0c615e] p-10 text-white xl:p-12">
         <div className="pointer-events-none absolute inset-0 opacity-[0.12]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-16 h-80 w-80 rounded-full bg-teal-200/10 blur-3xl" />

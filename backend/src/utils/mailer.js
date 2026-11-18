@@ -31,6 +31,12 @@ const createTransporter = (type = 'reset') => {
   });
 };
 
+// The GreenTask logo in emails: a hosted PNG on its own white tile, so dark-mode mail apps keep it readable.
+// Mail apps that block images show "GreenTask" instead.
+const appOrigin = () => String(process.env.APP_FRONTEND_URL || 'https://task.greencall.online').replace(/\/+$/, '');
+const brandImg = () => `<img src="${appOrigin()}/brand/greentask-logo-email.png?v=3" alt="GreenTask" width="120" height="62" style="display:inline-block;border:0;height:auto;max-width:120px;vertical-align:middle">`;
+const brandHeader = (align = 'left') => `<p style="margin:0 0 18px;text-align:${align}">${brandImg()}</p>`;
+
 /**
  * Sends a password-reset email with a direct clickable reset link.
  * @param {string} toEmail  - Recipient email
@@ -46,7 +52,7 @@ const sendResetLink = async (toEmail, resetUrl) => {
     html: `
       <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #e2e8f0;border-radius:20px;background:#ffffff;box-shadow:0 10px 30px rgba(0,0,0,0.05)">
         <div style="text-align:center;margin-bottom:24px">
-          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#ffffff;font-size:20px;font-weight:900;line-height:48px;margin:auto">GT</div>
+          ${brandHeader('center')}
           <h2 style="color:#0f172a;margin-top:14px;font-size:22px;font-weight:800">Password Reset Request</h2>
         </div>
         <p style="color:#475569;font-size:14px;line-height:1.6;margin-bottom:12px">
@@ -56,13 +62,13 @@ const sendResetLink = async (toEmail, resetUrl) => {
           Click the button below to set a new password. This link is valid for <strong>15 minutes</strong>.
         </p>
         <div style="margin:28px 0;text-align:center">
-          <a href="${resetUrl}" style="background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:12px;font-weight:bold;font-size:15px;display:inline-block;box-shadow:0 8px 20px rgba(37,99,235,0.3)">
+          <a href="${resetUrl}" style="background:#0c615e;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:12px;font-weight:bold;font-size:15px;display:inline-block;box-shadow:0 8px 20px rgba(12,97,94,0.25)">
             Reset Password
           </a>
         </div>
         <p style="color:#94a3b8;font-size:12px;line-height:1.5;word-break:break-all;margin-top:24px">
           If the button above does not work, copy and paste this link into your web browser:<br/>
-          <a href="${resetUrl}" style="color:#2563eb">${resetUrl}</a>
+          <a href="${resetUrl}" style="color:#0c615e">${resetUrl}</a>
         </p>
         <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"/>
         <p style="color:#94a3b8;font-size:11px;margin:0;text-align:center">
@@ -86,8 +92,9 @@ const sendResetOtp = async (toEmail, otp) => {
     to: toEmail,
     subject: 'Your Password Reset OTP',
     html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2 style="color:#4f46e5">Password Reset Request</h2>
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:auto;padding:28px">
+        ${brandHeader()}
+        <h2 style="color:#0f1f18">Password Reset Request</h2>
         <p>Use the OTP below to reset your password. It expires in <strong>10 minutes</strong>.</p>
         <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1e293b;padding:16px 0">${otp}</div>
         <p style="color:#64748b;font-size:13px">If you did not request this, please ignore this email.</p>
@@ -99,8 +106,8 @@ const sendResetOtp = async (toEmail, otp) => {
 const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const consoleMail = (title, body) => `
   <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #d6dfda;border-radius:16px;background:#ffffff">
-    <p style="margin:0 0 18px;font-size:22px;font-weight:800;letter-spacing:-0.5px;color:#0f1f18">Green<span style="color:#17775a">Task</span>
-      <span style="font-size:11px;font-weight:700;color:#56665e;text-transform:uppercase;letter-spacing:1px;margin-left:6px">Console</span></p>
+    <p style="margin:0 0 18px">${brandImg()}
+      <span style="font-size:11px;font-weight:700;color:#56665e;text-transform:uppercase;letter-spacing:1px;margin-left:10px;vertical-align:middle">Console</span></p>
     <h2 style="margin:0 0 12px;font-size:19px;color:#0f1f18">${title}</h2>
     ${body}
     <hr style="border:none;border-top:1px solid #eaf0ed;margin:24px 0 12px"/>
@@ -144,7 +151,7 @@ const sendEmailCode = async (toEmail, name, code) => {
     to: toEmail,
     subject: `${code} is your GreenTask email code`,
     html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:28px;border:1px solid #eaf0ed;border-radius:14px">
-      <p style="margin:0 0 18px;font-size:16px;font-weight:700;color:#17775a">GreenTask</p>
+      ${brandHeader()}
       <h2 style="margin:0 0 12px;font-size:19px;color:#0f1f18">Hi ${escapeHtml(name || 'there')}, confirm your email</h2>
       <p style="color:#56665e;font-size:14px;line-height:1.6">Enter this code in GreenTask to add this email to your account. It expires in <strong>10 minutes</strong>.</p>
       <p style="font-family:Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#0f1f18;background:#f5f8f6;border-radius:12px;padding:16px;text-align:center;margin:20px 0">${code}</p>

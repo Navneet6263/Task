@@ -10,7 +10,7 @@ const OPTIONS = [
 
 // Miniature of the app in each theme, drawn with that theme's own colours.
 function Preview({ dark }) {
-  const c = dark ? { bg: '#0e1411', panel: '#151d19', line: '#2a3832', ink: '#e2eae6', accent: '#4cbf91' } : { bg: '#f3f6f4', panel: '#ffffff', line: '#d6dfda', ink: '#16201b', accent: '#17775a' };
+  const c = dark ? { bg: '#0b1117', panel: '#111921', line: '#26333f', ink: '#e2e9f0', accent: '#52c4b5' } : { bg: '#f2f6f7', panel: '#ffffff', line: '#d3dee3', ink: '#101e2c', accent: '#0c615e' };
   return (
     <div className="flex h-24 overflow-hidden rounded-md border" style={{ background: c.bg, borderColor: c.line }} aria-hidden="true">
       <div className="w-1/4 border-r p-2" style={{ background: c.panel, borderColor: c.line }}>

@@ -24,7 +24,7 @@ test('one larger logo stays in the full-width header through sidebar collapse an
   try {
     render();
     const brand = container.querySelector('.shell-root > header .shell-header-brand');
-    expect(brand.textContent).toBe('GreenTask');
+    expect(brand.querySelector('img').getAttribute('alt')).toBe('GreenTask'); // the logo is an image now
     expect(container.querySelectorAll('.greentask-brand')).toHaveLength(1);
     expect(container.querySelector('.shell-sidebar .greentask-brand')).toBeNull();
     expect(brand.querySelector('.greentask-brand--compact')).toBeNull();
@@ -34,8 +34,7 @@ test('one larger logo stays in the full-width header through sidebar collapse an
     act(() => container.querySelector('[aria-label="Collapse sidebar"]').click());
     render();
     expect(container.querySelector('.shell-sidebar-collapsed')).not.toBeNull();
-    expect(container.querySelector('header .shell-header-brand').textContent).toBe('GreenTask');
-    expect(container.querySelector('header .shell-header-brand img')).toBeNull();
+    expect(container.querySelector('header .shell-header-brand img').getAttribute('alt')).toBe('GreenTask');
     act(() => container.querySelector('[aria-label="Expand sidebar"]').click());
     render();
     expect(container.querySelector('.shell-sidebar-collapsed')).toBeNull();

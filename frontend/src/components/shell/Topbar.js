@@ -26,7 +26,7 @@ const Topbar = forwardRef(function Topbar({ shell, panel, onPanel, onSearch, onC
       </Button>
       {/* On desktop the brand column is as wide as the sidebar, so its divider continues the sidebar edge. */}
       <div className={`-my-2 flex shrink-0 items-center self-stretch lg:border-r lg:border-line ${sidebarCollapsed ? 'lg:pr-4' : 'lg:w-[224px]'}`}>
-        <div className="shell-header-brand"><BrandLogo /></div>
+        <div className="shell-header-brand pl-1"><BrandLogo /></div>
       </div>
       <div className="flex min-w-0 items-center gap-2.5 pl-1 lg:pl-3">
         <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-md bg-subtle text-muted md:grid"><BuildingIcon /></span>

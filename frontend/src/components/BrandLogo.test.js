@@ -4,21 +4,31 @@ import fs from 'fs';
 import path from 'path';
 import BrandLogo from './BrandLogo';
 
-test('brand is a text-only wordmark in theme colors, with no image', () => {
+test('the logo image has a light and a dark copy, and keeps its subtitle', () => {
   const markup = renderToStaticMarkup(<BrandLogo subtitle="Workspace" compact />);
-  expect(markup).toMatch(/Green<b class="[^"]*text-accent[^"]*">Task<\/b>/);
+  expect(markup).toMatch(/greentask-logo\.png[^>]*class="h-8 w-auto dark:hidden"/);
+  expect(markup).toMatch(/greentask-logo-dark\.png[^>]*class="hidden h-8 w-auto dark:block"/);
   expect(markup).toContain('greentask-brand--compact');
   expect(markup).toContain('Workspace');
-  expect(markup).not.toContain('<img');
+  expect(markup).toContain('alt="GreenTask"');
 });
 
-test('icon-only use keeps an accessible name and dark surfaces get a light wordmark', () => {
+test('icon-only use shows the G mark, and always-dark surfaces get only the dark copy', () => {
   const iconOnly = renderToStaticMarkup(<BrandLogo iconOnly subtitle="Hidden" />);
-  expect(iconOnly).toContain('aria-label="GreenTask"');
+  expect(iconOnly).toContain('alt="GreenTask"');
+  expect(iconOnly).toContain('favicon-48.png');
   expect(iconOnly).not.toContain('Hidden');
   const inverse = renderToStaticMarkup(<BrandLogo inverse />);
   expect(inverse).toContain('greentask-brand--inverse');
-  expect(inverse).toContain('text-white');
+  expect(inverse).toContain('greentask-logo-dark.png');
+  expect(inverse).not.toContain('greentask-logo.png');
+});
+
+test('the logo files exist for light, dark and email', () => {
+  const brand = path.resolve(__dirname, '../../public/brand');
+  ['greentask-logo.png', 'greentask-logo-dark.png', 'greentask-logo-email.png'].forEach((name) => {
+    expect(fs.readFileSync(path.join(brand, name)).subarray(1, 4).toString()).toBe('PNG');
+  });
 });
 
 test('browser and home-screen icons exist at their declared dimensions', () => {
