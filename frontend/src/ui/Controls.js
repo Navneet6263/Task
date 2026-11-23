@@ -1,4 +1,5 @@
 import React from 'react';
+import Button from './Button';
 
 // Underlined tab row. `tabs` is [[key, label, badge?], ...].
 export function Tabs({ tabs, value, onChange, label, aside }) {
@@ -55,4 +56,18 @@ export function Meter({ value, max = 100, tone = 'accent', label }) {
 // Small pill used to mark new menu items or features.
 export function NewTag() {
   return <span className="rounded border border-current px-1 text-[10px] font-bold uppercase tracking-wide text-accent">New</span>;
+}
+
+// Previous / Page x of y / Next under a list. `total` and `size` (rows per page) add "Showing 26–50 of 103".
+export function Pager({ page, pages, onChange, total, size, className = '' }) {
+  if (pages <= 1) return null;
+  const from = (page - 1) * size + 1;
+  return (
+    <div className={`flex flex-wrap items-center justify-end gap-2 text-sm ${className}`}>
+      {total !== undefined && size ? <span className="mr-auto text-xs text-muted">Showing {from}–{Math.min(total, from + size - 1)} of {total}</span> : null}
+      <Button size="sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</Button>
+      <span className="text-muted">Page {page} of {pages}</span>
+      <Button size="sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</Button>
+    </div>
+  );
 }

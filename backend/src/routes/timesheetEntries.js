@@ -307,6 +307,15 @@ router.put('/entries/:id', route(async (req, res) => {
     customJson = Object.keys(merged).length ? JSON.stringify(merged) : null;
   }
   await checkReferences(req, entry, current, layout);
+  // A draft saved without hours gets them here (its Edit window shows the Hours box), so it can be submitted.
+  let addHours = null;
+  if (editMode === 'draft' && entry.hours !== null) {
+    const [[logs]] = await db.execute('SELECT COUNT(*) AS total FROM timesheet_time_logs WHERE entry_id = ? AND org_id = ? AND is_deleted = 0', [current.id, req.orgId]);
+    if (!Number(logs.total)) {
+      addHours = { userId: entry.agent_id || current.agent_id || req.userId, date: entry.date_worked || today, hours: entry.hours };
+      await assertDailyCap(req.orgId, addHours.userId, addHours.date, addHours.hours);
+    }
+  }
   const changed = ENTRY_FIELDS.filter((key) => String(entry[key] ?? '') !== String(current[key] ?? ''));
   const [result] = await db.execute(
     `UPDATE timesheet_entries SET client_id = ?, job_type = ?, work_type = ?, date_worked = ?, agent_id = ?, period_type = ?,
@@ -318,6 +327,12 @@ router.put('/entries/:id', route(async (req, res) => {
   );
   if (!result.affectedRows) throw fail(409, 'Someone else changed this entry. Reload it and try again.');
   await audit(req, current.id, lock.locked ? 'EDIT_LOCKED_AS_ADMIN' : 'EDIT', changed.length ? `Changed: ${changed.join(', ')}` : 'No field changes');
+  if (addHours) {
+    await db.execute(
+      'INSERT INTO timesheet_time_logs (org_id, entry_id, user_id, work_date, hours, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.orgId, current.id, addHours.userId, addHours.date, addHours.hours, 'Added when editing the draft', req.userId]);
+    await audit(req, current.id, 'ADD_TIME', `${addHours.hours}h for user ${addHours.userId} on ${addHours.date}`);
+  }
   res.json({ id: current.id, version: version + 1 });
 }));
 
@@ -331,7 +346,7 @@ router.post('/entries/:id/submit', route(async (req, res) => {
   if (layout) cleanTimesheetCustom(layout, parseCustom(current.custom_fields), 'submit', skipped);
   if (missing.length) throw fail(422, 'Fill all required fields before submitting', Object.fromEntries(missing.map((key) => [key, 'This field is required.'])));
   const [[logs]] = await db.execute('SELECT COUNT(*) AS total FROM timesheet_time_logs WHERE entry_id = ? AND org_id = ? AND is_deleted = 0', [current.id, req.orgId]);
-  if (!Number(logs.total)) throw fail(422, 'Add at least one time log before submitting');
+  if (!Number(logs.total)) throw fail(422, 'Add the hours you worked before submitting. Open Edit and fill Hours worked.', { hours: 'Add the hours you worked.' });
   const today = todayLocal();
   const [result] = await db.execute(
     `UPDATE timesheet_entries SET status = 'SUBMITTED', submitted_on = ?, updated_by = ?, version = version + 1, updated_at = SYSDATETIME()

@@ -364,3 +364,44 @@ test('a sheet upload takes at most 25 rows per call', async (t) => {
   assert.equal((await send('/entries/bulk', 'POST', { rows: Array.from({ length: 26 }, () => validEntry) })).status, 422);
   assert.equal((await send('/entries/bulk', 'POST', { rows: [] })).status, 422);
 });
+
+test('a draft saved without hours gets them from its Edit window, once, and can then be submitted', async (t) => {
+  const draft = { id: 548, org_id: 1, status: 'DRAFT', created_by: 10, agent_id: 10, client_id: 5, job_type: 'Payroll', date_worked: '2026-11-17', version: 6, submitted_on: null, unlocked_until: null };
+  let logCount = 0;
+  const logs = [];
+  mockDb(t, async (sql, params) => {
+    if (sql.startsWith('SELECT') && sql.includes('WHERE e.id = ? AND e.org_id = ?')) return [[draft]];
+    if (sql.startsWith('SELECT lock_days')) return [[]];
+    if (sql.startsWith('SELECT definition, version FROM timesheet_form_layouts')) return [[]];
+    if (sql.startsWith('SELECT id, option_group')) return [optionRows];
+    if (sql.startsWith('SELECT COUNT(*) AS total FROM timesheet_time_logs')) return [[{ total: logCount }]];
+    if (sql.startsWith('SELECT COALESCE(SUM(hours)')) return [[{ total: 0 }]];
+    if (sql.startsWith('UPDATE timesheet_entries SET client_id')) return [{ affectedRows: params.at(-1) === draft.version ? 1 : 0 }];
+    if (sql.startsWith('INSERT INTO timesheet_time_logs')) { logs.push(params); logCount += 1; return [{ insertId: 900 }]; }
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const saved = await send('/entries/548', 'PUT', { client_id: 5, job_type: 'Payroll', date_worked: '2026-11-17', hours: 3, version: 6 });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).version, 7);
+  // The hours go to the draft's owner on the day worked.
+  assert.deepEqual([logs[0][0], logs[0][1], logs[0][2], logs[0][3], logs[0][4]], [1, 548, 10, '2026-11-17', 3]);
+  // A draft that already has time keeps it: hours sent again add nothing.
+  assert.equal((await send('/entries/548', 'PUT', { client_id: 5, job_type: 'Payroll', date_worked: '2026-11-17', hours: 3, version: 6 })).status, 200);
+  assert.equal(logs.length, 1);
+});
+
+test('submitting a draft with no hours says what to do', async (t) => {
+  mockDb(t, async (sql) => {
+    if (sql.startsWith('SELECT') && sql.includes('WHERE e.id = ? AND e.org_id = ?')) return [[{ ...validEntry, id: 560, status: 'DRAFT', created_by: 10, agent_id: 10 }]];
+    if (sql.startsWith('SELECT definition, version FROM timesheet_form_layouts')) return [[]];
+    if (sql.startsWith('SELECT COUNT(*) AS total FROM timesheet_time_logs')) return [[{ total: 0 }]];
+    throw Error(`Unexpected query: ${sql.slice(0, 60)}`);
+  });
+  const send = await client(t);
+  const response = await send('/entries/560/submit', 'POST');
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.match(body.error, /Add the hours you worked/);
+  assert.ok(body.fields.hours);
+});

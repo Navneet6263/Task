@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { timesheet } from '../../../services/api';
 import { notify } from '../../../services/feedback';
-import { Button, ClickRow, EmptyRow, ErrorText, Field, Input, SearchSelect, Segmented, Select, StatTile, Table, TableWrap, Td, Th } from '../../../ui';
+import { Button, ClickRow, EmptyRow, ErrorText, Field, Input, Pager, SearchSelect, Segmented, Select, StatTile, Table, TableWrap, Td, Th } from '../../../ui';
 import { errorOf, fmtDate, fmtHours } from '../format';
 import { defaultScope, PERIODS, periodRange, scopeOptions, teamPeople } from '../team';
 import StatusChip from './StatusChip';
@@ -183,13 +183,7 @@ export default function EntriesTab({ config, refreshKey, onOpen, onEdit, preset 
           </tbody>
         </Table>
       </TableWrap>
-      {result && pages > 1 && (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <Button size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          <span className="text-muted">Page {page} of {pages}</span>
-          <Button size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button>
-        </div>
-      )}
+      {result && <Pager page={page} pages={pages} onChange={setPage} />}
     </div>
   );
 }

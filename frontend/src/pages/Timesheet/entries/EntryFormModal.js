@@ -114,6 +114,8 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   const check = (mode) => {
     const next = {};
     const need = mode === 'draft' ? visible.filter((f) => f.key === 'client_id' && !skipped.has(f.key)) : visible.filter((f) => f.required && !skipped.has(f.key) && (f.key !== 'hours' || !isEdit));
+    // A draft saved without hours cannot be submitted until they are added here.
+    if (mode === 'submit' && needsHours && !(Number(form.hours) > 0)) next.hours = 'Add the hours you worked before submitting.';
     need.forEach((f) => {
       const value = f.kind === 'custom' ? form.custom_fields?.[f.key] : form[f.key];
       if (emptyValue(f, value)) next[f.key] = 'This field is required.';
@@ -125,13 +127,22 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
   };
 
   const isDraft = isEdit && entry.status === 'DRAFT';
+  // Each save raises the entry's version. Keep the latest one, so a second try after a failed submit
+  // does not look like someone else's change.
+  const [version, setVersion] = useState(entry?.version);
+  const [hoursSaved, setHoursSaved] = useState(false);
+  const needsHours = isDraft && !Number(entry.total_hours) && !hoursSaved;
   const save = async (mode) => {
     // A draft being saved again only needs a client, like a new draft.
     if (!check(mode === 'edit-submit' ? 'submit' : isDraft && mode === 'edit' ? 'draft' : mode)) return;
     setSaving(true);
     try {
       if (isEdit) {
-        await timesheet.update(entry.id, { ...form, version: entry.version });
+        // Hours go in only for a draft that has none yet; other entries keep theirs in the time log.
+        const withHours = needsHours && Number(form.hours) > 0;
+        const response = await timesheet.update(entry.id, { ...form, hours: withHours ? form.hours : '', version });
+        if (response?.data?.version) setVersion(response.data.version);
+        if (withHours) setHoursSaved(true);
         // A draft can be finished and submitted in one go.
         if (mode === 'edit-submit') await timesheet.submit(entry.id);
         notify(mode === 'edit-submit' ? 'Saved and submitted.' : 'Changes saved.', 'success');
@@ -192,7 +203,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
       case 'agent_id': return select('agent_id', doneByOptions.map((user) => ({ id: String(user.id), name: user.name })), 'Select', !canPickAgent);
       case 'description': return <Textarea id="ts-description" rows={3} maxLength={2000} value={form.description} onChange={set('description')} />;
       case 'count_number': return <Input id="ts-count_number" type="number" min="0" step="1" value={form.count_number} onChange={set('count_number')} />;
-      case 'hours': return isEdit
+      case 'hours': return isEdit && !needsHours
         ? <p className="text-sm text-muted sm:pt-2">Hours are kept in the time log on the entry, so each person adds their own.</p>
         : <HoursInput id="ts-hours" label="Hours worked" value={form.hours} onChange={(hours) => setForm((prev) => ({ ...prev, hours }))} />;
       default: return field.type === 'dropdown'
@@ -208,6 +219,7 @@ export default function EntryFormModal({ config, entry, initialTask, onClose, on
     if (field.help) return field.help;
     if (field.key === 'task_id' && !task) return 'Pick the task your manager created. Client, agent and description fill in for you.';
     if (field.key === 'agent_firm_id') return 'Pick the agent first to see only its clients.';
+    if (field.key === 'hours' && needsHours) return 'This draft has no hours yet. Add them to submit it.';
     if (field.key === 'hours' && !isEdit) return 'Fill hours, minutes or both: 20 minutes is 0 h 20 min.';
     if (field.key === 'client_id') return form.agent_firm_id ? `Showing ${agentClients.length} client${agentClients.length === 1 ? '' : 's'} of this agent.` : canAddClient ? 'This is your list from Settings → Clients.' : 'Client missing? Ask your manager or admin to add it in Settings → Clients.';
     if (field.key === 'agent_id' && !canPickAgent) return 'Your entries are logged under your own name.';

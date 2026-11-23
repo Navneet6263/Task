@@ -57,3 +57,22 @@ test('with pick-only on, employees search the list and managers can add inline',
   await act(async () => r.render(<ClientPicker id="x" value="" onChange={() => {}} />));
   expect(button('+ Add a new client')).toBeTruthy();
 });
+
+test('the client list shows 25 at a time, and agents have their own tab that opens their clients', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, name: `Client ${String(i + 1).padStart(2, '0')}`, is_active: true, agent_id: i < 3 ? 7 : null,
+    task_count: 0, open_tasks: 0, hours: 0, created_at: '2026-09-01T00:00:00Z' }));
+  h.list = jest.fn(async () => ({ data: { pick_only: false, can_manage: true, clients: many, agents: [{ id: 7, name: 'ABR Tamwil Ltd', is_active: true, client_count: 3 }] } }));
+  await act(async () => r.render(<ClientsSection />));
+  const names = () => [...c.querySelectorAll('tbody .font-semibold')].map((el) => el.textContent);
+  expect(names()).toHaveLength(25);
+  expect(c.textContent).toContain('Showing 1–25 of 30');
+  expect(c.textContent).not.toContain('ABR Tamwil Ltd3 clients');
+  await act(async () => button('Next').click());
+  expect(names()).toEqual(['Client 26', 'Client 27', 'Client 28', 'Client 29', 'Client 30']);
+  expect(c.textContent).toContain('Page 2 of 2');
+  await act(async () => [...c.querySelectorAll('[role="tab"]')].find((t) => t.textContent.startsWith('Agents')).click());
+  expect(c.querySelector('[aria-label="Search clients"]')).toBeNull();
+  await act(async () => button('ABR Tamwil Ltd').click());
+  expect(names()).toEqual(['Client 01', 'Client 02', 'Client 03']);
+  expect(c.textContent).not.toContain('Page 1 of');
+});

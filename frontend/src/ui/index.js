@@ -5,5 +5,5 @@ export { Input, Select, Textarea, Field, FormRow, FieldError, Hint, inputClass }
 export { default as Modal } from './Modal';
 export { TableWrap, Table, Th, Td, ClickRow, EmptyRow } from './Table';
 export { Chip, Banner, Card, CardHeader, StatTile, PageHeader, EmptyState, Loading, ErrorText } from './Display';
-export { Tabs, Switch, NewTag, Segmented, Meter } from './Controls';
+export { Tabs, Switch, NewTag, Segmented, Meter, Pager } from './Controls';
 export { default as SearchSelect, searchOptions } from './SearchSelect';

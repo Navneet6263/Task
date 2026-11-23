@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { clients as clientsApi } from '../../../services/api';
 import { notify } from '../../../services/feedback';
 import { announceClientsChange } from '../../../components/clients/useClients';
-import { Button, Input, Loading, Segmented, Select, StatTile, Textarea } from '../../../ui';
+import { Button, Input, Loading, Pager, Segmented, Select, StatTile, Tabs, Textarea } from '../../../ui';
 import Section from '../Section';
 import ClientRule from './ClientRule';
 import ClientTable from './ClientTable';
@@ -14,9 +14,14 @@ const SORTS = {
   recent: (a, b) => String(b.last_used || '').localeCompare(String(a.last_used || '')),
   hours: (a, b) => b.hours - a.hours,
 };
+// Accountrust has about 500 clients: show them a page at a time.
+const PAGE_SIZE = 25;
 
 // Settings → Clients: add client names once, choose whether task forms may only use this list.
+// Clients and agents sit on their own tabs; clicking an agent opens the Clients tab filtered to it.
 export default function ClientsSection() {
+  const [tab, setTab] = useState('clients');
+  const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [name, setName] = useState('');
   const [bulk, setBulk] = useState(false);
@@ -36,10 +41,17 @@ export default function ClientsSection() {
     return (data?.clients || []).filter((c) => (show === 'all' || (show === 'active' ? c.is_active : !c.is_active)) && (!q || c.name.toLowerCase().includes(q))
       && (!agentFilter || (agentFilter === 'none' ? !c.agent_id : String(c.agent_id) === agentFilter))).sort(SORTS[sort]);
   }, [data, query, show, sort, agentFilter]);
+  // A new search or filter starts again from the first page.
+  useEffect(() => { setPage(1); }, [query, show, sort, agentFilter]);
 
   if (!data) return <Loading>Loading clients…</Loading>;
   const all = data.clients || [];
   const active = all.filter((c) => c.is_active).length;
+  const agents = data.agents || [];
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const current = Math.min(page, pages); // turning clients off can empty the last page
+  const pageRows = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const openAgent = (id) => { setAgentFilter(id); setQuery(''); setTab('clients'); };
 
   const add = async (event) => {
     event.preventDefault();
@@ -89,8 +101,10 @@ export default function ClientsSection() {
   return (
     <Section title="Clients" description="Add your client names once. They appear in the Client field every time someone creates a task.">
       <ClientRule pickOnly={Boolean(data.pick_only)} onChange={setRule} busy={busy === 'rule'} />
-      <AgentsPanel agents={data.agents || []} onChanged={changed} filter={agentFilter} onFilter={setAgentFilter} />
+      <Tabs label="Clients and agents" value={tab} onChange={setTab}
+        tabs={[['clients', 'Clients', <span key="n" className="text-xs text-muted">{all.length}</span>], ['agents', 'Agents', <span key="n" className="text-xs text-muted">{agents.length}</span>]]} />
 
+      {tab === 'agents' ? <AgentsPanel agents={agents} onChanged={changed} filter={agentFilter} onFilter={openAgent} /> : <>
       <form onSubmit={add} className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 sm:p-5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[15px] font-semibold">Add a client</h3>
@@ -101,7 +115,7 @@ export default function ClientsSection() {
             ? <Textarea aria-label="Client names, one per line" rows={4} placeholder={'Riverside Motors\nAcme Pvt Ltd\nNorthwind Traders'} className="flex-1" value={name} onChange={(e) => setName(e.target.value)} />
             : <Input aria-label="Client name" maxLength={255} placeholder="Client name, e.g. Riverside Motors" className="flex-1" value={name} onChange={(e) => setName(e.target.value)} />}
           <Select aria-label="Agent for the new client" className="sm:!w-56" value={newAgent} onChange={(e) => setNewAgent(e.target.value)}>
-            <option value="">No agent</option>{(data.agents || []).filter((a) => a.is_active).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="">No agent</option>{agents.filter((a) => a.is_active).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
           <Button type="submit" variant="primary" className="sm:h-10" disabled={busy === 'add' || !name.trim()}>{busy === 'add' ? 'Adding…' : bulk ? 'Add all' : 'Add client'}</Button>
         </div>
@@ -120,17 +134,19 @@ export default function ClientsSection() {
           <Input aria-label="Search clients" placeholder="Search clients" className="!w-56" value={query} onChange={(e) => setQuery(e.target.value)} />
           <Segmented label="Show" value={show} onChange={setShow} options={[['active', `Active · ${active}`], ['inactive', `Off · ${all.length - active}`], ['all', `All · ${all.length}`]]} className="[&>button]:normal-case" />
           <Select aria-label="Filter by agent" className="!w-auto" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
-            <option value="">All agents</option><option value="none">No agent</option>{(data.agents || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="">All agents</option><option value="none">No agent</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
           <span className="flex-1" />
           <Select aria-label="Sort clients" className="!w-auto" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="name">Name A–Z</option><option value="tasks">Most tasks</option><option value="recent">Recently used</option><option value="hours">Most hours</option>
           </Select>
         </div>
-        <ClientTable rows={rows} busyId={busy} onRename={rename} onToggle={toggle} agents={data.agents || []} onMoveAgent={moveAgent}
+        <ClientTable rows={pageRows} busyId={busy} onRename={rename} onToggle={toggle} agents={agents} onMoveAgent={moveAgent}
           emptyText={all.length ? 'No clients match.' : 'No clients yet. Add your first one above.'} />
-        <p className="text-xs text-muted">Turning a client off hides it from Create task. Tasks that already use it keep the name. Renaming updates those tasks too.</p>
+        <Pager page={current} pages={pages} onChange={setPage} total={rows.length} size={PAGE_SIZE} />
+        <p className="text-xs text-muted">Turning a client off hides it from Create task and the timesheet. Tasks and entries that already use it keep the name. Renaming updates those tasks too.</p>
       </div>
+      </>}
     </Section>
   );
 }
