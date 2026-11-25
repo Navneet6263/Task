@@ -88,7 +88,7 @@ test('the API refuses wrong, revoked, expired, switched-off, foreign-IP and orph
   const send = await serve(t, require('../src/routes/publicApi'));
   const ok = fakeDb(t);
   assert.equal((await send('/me')).status, 401);
-  assert.equal((await send('/me', { headers: auth(`${ok.key.slice(0, -1)}A`) })).body.error.code, 'invalid_key');
+  assert.equal((await send('/me', { headers: auth(`${ok.key.slice(0, -1)}${ok.key.endsWith('A') ? 'B' : 'A'}`) })).body.error.code, 'invalid_key');
   assert.equal((await send('/me', { headers: auth(ok.key) })).status, 200);
 
   const cases = [

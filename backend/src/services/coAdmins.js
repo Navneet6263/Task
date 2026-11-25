@@ -44,7 +44,11 @@ async function stillCoAdmin(userId, companyAdminId) {
   cache.set(key, { ok, at: Date.now() });
   return ok;
 }
-const forget = (userId) => { [...cache.keys()].filter((k) => k.startsWith(`${userId}:`)).forEach((k) => cache.delete(k)); };
+const forget = (userId) => {
+  [...cache.keys()].filter((k) => k.startsWith(`${userId}:`)).forEach((k) => cache.delete(k));
+  // Signed-in sessions cache who is a co-admin too: forget it so the change applies on the next request.
+  require('./sessions').forgetSessions();
+};
 
 async function listCoAdmins(companyAdminId) {
   const [rows] = await db.execute(

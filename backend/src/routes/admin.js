@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../config/database');
 const { authenticate, adminOnly } = require('../middleware/auth');
 const { pickedLeads, applyLeadsForRole, leadsFor } = require('../services/teamLeads');
-const { resetUserPassword } = require('../services/passwordReset');
+const { resetUserPassword, protectedAccount } = require('../services/passwordReset');
 
 const router = express.Router();
 
@@ -114,15 +114,19 @@ router.put('/users/:id/role', async (req, res) => {
     if (!['admin', 'manager', 'person'].includes(role)) return res.status(422).json({ error: 'Role must be admin, manager or person' });
     if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'You cannot change your own role. Ask another admin.' });
     const [[target]] = await db.execute(
-      'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
+      'SELECT id, email, org_id, role FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
     );
     if (!target) return res.status(404).json({ error: 'User not found in your workspace' });
+    // The company owner's login and co-admins are changed by the company admin, not from here.
+    const blocked = role !== target.role && await protectedAccount(target);
+    if (blocked) return res.status(409).json({ error: 'This is a company admin account. Only the company admin can change its role.' });
     // A new manager can be put in charge of teams in the same step.
     const leadIds = await pickedLeads(req.orgId, role, req.body);
 
     await db.execute('UPDATE users SET role = ? WHERE id = ? AND org_id = ?', [role, req.params.id, req.orgId]);
     await applyLeadsForRole(Number(req.params.id), role, leadIds);
+    require('../services/sessions').forgetSessions(); // the new role applies on their next request
     res.json({ message: 'Role updated' });
   } catch (error) {
     res.status(error.status || 400).json({ error: error.message });
@@ -133,15 +137,17 @@ router.delete('/users/:id', async (req, res) => {
   try {
     if (Number(req.params.id) === Number(req.userId)) return res.status(400).json({ error: 'You cannot delete your own account.' });
     const [[target]] = await db.execute(
-      'SELECT id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
+      'SELECT id, email, org_id FROM users WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [req.params.id, req.orgId]
     );
     if (!target) return res.status(404).json({ error: 'User not found in your workspace' });
+    if (await protectedAccount(target)) return res.status(409).json({ error: 'This is a company admin account. The company admin removes it.' });
 
     await db.execute(
       'UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ? AND org_id = ?',
       [req.params.id, req.orgId]
     );
+    require('../services/sessions').forgetSessions(); // signed out everywhere at once
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(400).json({ error: error.message });

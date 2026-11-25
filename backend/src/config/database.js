@@ -25,7 +25,8 @@ const config = {
     idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS || 30000),
   },
   options: {
-    encrypt: parseBool(process.env.DB_ENCRYPT, false),
+    // Encrypted unless DB_ENCRYPT=false is set on purpose: the database is reached over the network.
+    encrypt: parseBool(process.env.DB_ENCRYPT, true),
     trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERT, true),
     enableArithAbort: true,
     useUTC: parseBool(process.env.DB_USE_UTC, false),
@@ -210,13 +211,30 @@ const getPool = async () => {
   return poolPromise;
 };
 
+// The text of recent database errors, so middleware/safeErrors.js can tell them apart from
+// messages written for people and never send them to the browser.
+const recentErrors = new Set();
+const rememberError = (error) => {
+  const message = String(error?.message || '');
+  if (!message) return;
+  if (recentErrors.size >= 300) recentErrors.delete(recentErrors.values().next().value);
+  recentErrors.add(message);
+};
+const isRecentError = (message) => recentErrors.has(String(message || ''));
+
 const run = async (rawQuery, params = []) => {
   const started = process.hrtime.bigint();
-  const pool = await getPool();
+  let pool;
+  let result;
+  try {
+    pool = await getPool();
+  } catch (error) { rememberError(error); throw error; }
   const poolMs = Number(process.hrtime.bigint() - started) / 1e6;
   const request = buildRequest(pool, Array.isArray(params) ? params : []);
   const { query } = normalizeQuery(rawQuery);
-  const result = await request.query(query);
+  try {
+    result = await request.query(query);
+  } catch (error) { rememberError(error); throw error; }
   const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
   if (durationMs >= Number(process.env.SLOW_SQL_MS || 300)) {
     const fingerprint = require('node:crypto').createHash('sha256').update(String(rawQuery)).digest('hex').slice(0, 12);
@@ -229,4 +247,5 @@ module.exports = {
   execute: run,
   query: run,
   sql,
+  isRecentError,
 };

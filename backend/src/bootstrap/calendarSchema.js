@@ -43,6 +43,12 @@ async function ensureCalendarSchema() {
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_calendar_attendees_user' AND object_id = OBJECT_ID('dbo.calendar_event_attendees'))
       CREATE INDEX idx_calendar_attendees_user ON dbo.calendar_event_attendees(user_id, event_id);
   `);
+  // An event or reminder can be about a task ("Related task"); the task window lists them.
+  await db.query(`IF COL_LENGTH('dbo.calendar_events', 'task_id') IS NULL ALTER TABLE dbo.calendar_events ADD task_id INT NULL;`);
+  await db.query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_calendar_events_task' AND object_id = OBJECT_ID('dbo.calendar_events'))
+      CREATE INDEX idx_calendar_events_task ON dbo.calendar_events(task_id, start_at) WHERE is_deleted = 0 AND task_id IS NOT NULL;
+  `);
 }
 
 module.exports = { ensureCalendarSchema };

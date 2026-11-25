@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { notifications, users, timesheet, communications } from '../services/api';
+import { notifications, users, timesheet, communications, accountSessions } from '../services/api';
 import { updatesApi } from './Updates/updatesApi';
 import useWorkspaceSocket from './useWorkspaceSocket';
 import useShellUnread from './useShellUnread';
@@ -114,6 +114,8 @@ export default function useLayout() {
       const { data } = await timesheet.signOutCheck();
       if (data && data.allowed === false) { setSignOutBlock(data); return; }
     } catch { /* not on the timesheet, or no answer: log out */ }
+    // End the sign-in on the server too, so this token is useless even if it was copied.
+    try { await accountSessions.logout(); } catch { /* offline: the browser copy is still removed */ }
     clearAuthentication();
     navigate('/login');
   };

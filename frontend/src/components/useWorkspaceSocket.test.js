@@ -7,8 +7,9 @@ class FakeSocket {
   static OPEN = 1;
   static CLOSED = 3;
   static instances = [];
-  constructor(url) {
+  constructor(url, protocols) {
     this.url = url;
+    this.protocols = protocols;
     this.readyState = FakeSocket.CONNECTING;
     this.close = jest.fn(() => {
       if (this.readyState === FakeSocket.CONNECTING) throw new Error('Handshake aborted');
@@ -54,6 +55,8 @@ test('StrictMode creates only one socket without aborting a handshake', () => {
   advance(0);
   expect(FakeSocket.instances).toHaveLength(1);
   const ws = FakeSocket.instances[0];
+  expect(ws.url).not.toContain('test-token');
+  expect(ws.protocols).toEqual(['greentask', 'test-token']);
   expect(ws.close).not.toHaveBeenCalled();
   act(() => ws.open());
   expect(options.setSocketVersion).toHaveBeenCalledTimes(1);

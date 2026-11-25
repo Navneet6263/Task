@@ -73,7 +73,9 @@ router.get('/', authenticate, async (req, res) => {
       params = [req.userId, req.orgId, limit, offset];
     }
     const [teams] = await db.execute(query, params);
-    res.json(teams);
+    // Join codes let someone sign up into the company, so only managers and admins see them.
+    const seesCodes = ['admin', 'manager', 'company_admin'].includes(req.userRole);
+    res.json(seesCodes ? teams : teams.map(({ team_code, ...team }) => team));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

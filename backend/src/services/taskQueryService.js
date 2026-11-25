@@ -166,6 +166,7 @@ const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
       t.assigned_by, t.team_id, t.start_date, t.assigned_date, t.due_date, t.client_name,
       t.issue_type, t.manager_assigned, t.priority_locked, t.picked_by, t.bug_stage, t.reopen_count, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
       t.blocked_reason, t.review_status, te.name AS team_name,
+      t.returned_by, t.returned_to, t.returned_reason, t.returned_at, u7.name AS returned_by_name,
       u1.name AS assigned_to_name, u2.name AS assigned_by_name, u2.name AS created_by_name,
       u5.name AS delete_requested_by_name, ag.name AS agent_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
@@ -177,6 +178,7 @@ const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
     LEFT JOIN users u1 ON t.assigned_to = u1.id
     LEFT JOIN users u2 ON t.assigned_by = u2.id
     LEFT JOIN users u5 ON t.delete_requested_by = u5.id
+    LEFT JOIN users u7 ON t.returned_by = u7.id
     LEFT JOIN org_agents ag ON ag.id = t.agent_firm_id
     WHERE ${where}
     ORDER BY ${orders[filters.sort]} LIMIT ? OFFSET ?`;
@@ -213,7 +215,7 @@ const getTaskDetail = async (taskId, userId = 0) => {
       u1.name AS assigned_to_name, u1.avatar AS assigned_to_avatar,
       u2.name AS assigned_by_name, u2.name AS created_by_name,
       u3.name AS reported_by_name, u4.name AS picked_by_name, u6.name AS qa_user_name,
-      u5.name AS delete_requested_by_name, ag.name AS agent_name,
+      u5.name AS delete_requested_by_name, ag.name AS agent_name, u7.name AS returned_by_name,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.is_deleted = FALSE) AS total_comments,
       (SELECT COUNT(*) FROM task_comments tc WHERE tc.task_id = t.id AND tc.user_id != ?
         AND tc.is_deleted = FALSE AND tc.id > COALESCE(tr.last_comment_id, 0)) AS unread_comments
@@ -225,6 +227,7 @@ const getTaskDetail = async (taskId, userId = 0) => {
      LEFT JOIN users u4 ON t.picked_by = u4.id
      LEFT JOIN users u5 ON t.delete_requested_by = u5.id
      LEFT JOIN users u6 ON t.qa_user_id = u6.id
+     LEFT JOIN users u7 ON t.returned_by = u7.id
      LEFT JOIN org_agents ag ON ag.id = t.agent_firm_id
      WHERE t.id = ? AND t.is_deleted = FALSE`,
     [userId, userId, normalizedId]

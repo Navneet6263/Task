@@ -131,8 +131,11 @@ async function importEmployees(orgId, actorId, body) {
   for (const row of rows) {
     const match = byCode.get(row.code) || (row.email && byEmail.get(row.email));
     if (match) {
-      // Never change the role of the admin doing the import, so they cannot lock themselves out.
-      const role = actorId && Number(match.id) === Number(actorId) ? match.role : row.role;
+      // Never change the role of the admin doing the import (they cannot lock themselves out), the company
+      // owner's login or a co-admin (a sheet must not take the company away from them).
+      const keepRole = (actorId && Number(match.id) === Number(actorId))
+        || Boolean(await require('./passwordReset').protectedAccount({ ...match, org_id: orgId }));
+      const role = keepRole ? match.role : row.role;
       const wantsEmail = row.email && isPlaceholderEmail(match.email);
       const takeEmail = wantsEmail && await emailFree(row.email);
       if (wantsEmail && !takeEmail) emailSkipped.push({ code: row.code, email: row.email });
@@ -208,12 +211,17 @@ async function importEmployees(orgId, actorId, body) {
 // A new one-time password for someone who lost theirs. They must change it after signing in.
 async function resetEmployeePassword(orgId, userId) {
   const [[user]] = await db.execute(
-    "SELECT id, name, email, login_code FROM users WHERE id = ? AND org_id = ? AND is_deleted = 0 AND role IN ('admin', 'manager', 'person')",
+    "SELECT id, name, email, login_code, org_id FROM users WHERE id = ? AND org_id = ? AND is_deleted = 0 AND role IN ('admin', 'manager', 'person')",
     [userId, orgId]
   );
   if (!user) throw fail(404, 'Employee not found in this organization');
+  // Same rule as the People tab: the company owner's own login and co-admins are never reset by someone else,
+  // or an organization admin could take over the whole company.
+  const blocked = await require('./passwordReset').protectedAccount(user);
+  if (blocked) throw fail(400, blocked);
   const password = temporaryPassword();
   await db.execute('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?', [await bcrypt.hash(password, 10), user.id]);
+  await require('./sessions').revokeUserSessions(user.id, { reason: 'password_reset' });
   return { code: user.login_code || '', name: user.name, email: visibleEmail(user.email), password };
 }
 

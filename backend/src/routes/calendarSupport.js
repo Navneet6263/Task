@@ -24,7 +24,9 @@ function positive(value, label = 'ID') {
 
 const EVENT_COLUMNS = `e.id, e.title, e.description, e.event_type, e.all_day, e.location, e.reminder_minutes,
   CONVERT(VARCHAR(16), e.start_at, 126) AS start_at, CONVERT(VARCHAR(16), e.end_at, 126) AS end_at,
-  e.created_by, u.name AS created_by_name, e.version`;
+  e.created_by, u.name AS created_by_name, e.version, e.task_id,
+  (SELECT tk.title FROM tasks tk WHERE tk.id = e.task_id AND tk.is_deleted = 0) AS task_title,
+  (SELECT tk.status FROM tasks tk WHERE tk.id = e.task_id AND tk.is_deleted = 0) AS task_status`;
 
 const isTrue = (value) => value === true || value === 1;
 const shapeEvent = (row, attendees, userId) => {
@@ -79,7 +81,8 @@ async function validAttendees(orgId, ids, organizerId) {
 async function notifyUsers(userIds, type, message, payload = {}) {
   for (const userId of [...new Set(userIds.map(Number))]) {
     try {
-      await db.execute('INSERT INTO notifications (user_id, type, message) VALUES (?, ?, ?)', [userId, type, message.slice(0, 255)]);
+      // With a related task the notification opens that task; otherwise it opens the calendar.
+      await db.execute('INSERT INTO notifications (user_id, type, message, task_id) VALUES (?, ?, ?, ?)', [userId, type, message.slice(0, 255), payload.task_id || null]);
       ws.sendToUser(userId, type === 'calendar_reminder' ? 'calendar_reminder' : 'calendar_updated', { message: message.slice(0, 255), ...payload });
     } catch (error) { console.error('[calendar] notify failed', error.message); }
   }

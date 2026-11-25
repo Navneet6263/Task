@@ -33,7 +33,7 @@ const createTransporter = (type = 'reset') => {
 
 // The GreenTask logo in emails: a hosted PNG on its own white tile, so dark-mode mail apps keep it readable.
 // Mail apps that block images show "GreenTask" instead.
-const appOrigin = () => String(process.env.APP_FRONTEND_URL || 'https://task.greencall.online').replace(/\/+$/, '');
+const appOrigin = () => String(process.env.APP_FRONTEND_URL || 'https://task.greencall.in').replace(/\/+$/, '');
 const brandImg = () => `<img src="${appOrigin()}/brand/greentask-logo-email.png?v=3" alt="GreenTask" width="120" height="62" style="display:inline-block;border:0;height:auto;max-width:120px;vertical-align:middle">`;
 const brandHeader = (align = 'left') => `<p style="margin:0 0 18px;text-align:${align}">${brandImg()}</p>`;
 

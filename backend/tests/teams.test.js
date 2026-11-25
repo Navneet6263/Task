@@ -116,7 +116,9 @@ test('making someone a manager can put them in charge of teams, but only teams o
   const writes = [];
   let teamsFound = [{ id: 7 }];
   t.mock.method(db, 'execute', async (sql, params) => {
-    if (sql.startsWith('SELECT id FROM users')) return [[{ id: 5 }]];
+    if (sql.startsWith('SELECT id, email, org_id, role FROM users')) return [[{ id: 5, email: 'asha@x.com', org_id: 1, role: 'person' }]];
+    if (sql.includes('JOIN company_admins ca')) return [[{ email: 'owner@x.com' }]];
+    if (sql.startsWith('SELECT id FROM company_co_admins')) return [[]];
     if (sql.startsWith('SELECT id FROM teams WHERE org_id')) return [teamsFound];
     if (sql.startsWith('SELECT u.id, u.role, u.org_id FROM users u')) return [[{ id: 5, role: 'manager', org_id: 1 }]];
     if (sql.startsWith('UPDATE') || sql.startsWith('INSERT')) { writes.push({ sql, params }); return [{ affectedRows: 1 }]; }
@@ -133,4 +135,24 @@ test('making someone a manager can put them in charge of teams, but only teams o
 
   assert.equal((await send('/users/5/role', 'PUT', { role: 'person' })).status, 200);
   assert.ok(writes.some((w) => w.sql.includes('WHERE user_id = ? AND is_reporting_manager = 1')), 'a member leads nothing');
+});
+
+test('organization admins cannot change the role of, or delete, the company owner or a co-admin', async (t) => {
+  const writes = [];
+  let target = { id: 6, email: 'owner@x.com', org_id: 1, role: 'admin' };
+  let coAdmin = false;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT id, email, org_id')) return [[target]];
+    if (sql.includes('JOIN company_admins ca')) return [[{ email: 'owner@x.com' }]];
+    if (sql.startsWith('SELECT id FROM company_co_admins')) return [coAdmin ? [{ id: 1 }] : []];
+    if (sql.startsWith('UPDATE') || sql.startsWith('INSERT') || sql.startsWith('DELETE')) { writes.push(sql); return [{ affectedRows: 1 }]; }
+    return [[]];
+  });
+  const send = await adminClient(t, { id: 10, role: 'admin', org_id: 1 });
+  assert.equal((await send('/users/6/role', 'PUT', { role: 'person' })).status, 409, 'the owner login keeps its role');
+  assert.equal((await send('/users/6', 'DELETE')).status, 409, 'the owner login is not deleted from here');
+  target = { id: 7, email: 'co@x.com', org_id: 1, role: 'admin' }; coAdmin = true;
+  assert.equal((await send('/users/7/role', 'PUT', { role: 'manager' })).status, 409, 'a co-admin keeps their role');
+  assert.equal((await send('/users/7', 'DELETE')).status, 409, 'a co-admin is not deleted from here');
+  assert.equal(writes.length, 0);
 });

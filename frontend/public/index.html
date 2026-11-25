@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Filled by scripts/build.js (npm run build). Scripts only from our own files; see that file. -->
+    <meta http-equiv="Content-Security-Policy" content="%REACT_APP_CSP%" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0c615e" />
     <meta name="description" content="GreenTask - Your team's tasks, progress, and collaboration in one workspace." />
@@ -12,16 +14,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/brand/apple-touch-icon.png?v=logo-3" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json?v=logo-3" />
     <title>GreenTask</title>
-    <script>
-      // Apply the saved theme before first paint (same rules as src/theme/theme.js).
-      (function () {
-        try {
-          var pref = localStorage.getItem('theme_preference');
-          var dark = pref === 'dark' || ((pref !== 'light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
-        } catch (e) {}
-      })();
-    </script>
+    <script src="%PUBLIC_URL%/theme-init.js?v=1"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

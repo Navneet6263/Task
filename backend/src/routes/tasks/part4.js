@@ -29,9 +29,11 @@ router.delete('/:id', authenticate, async (req, res) => {
     if (task.length === 0) return res.status(404).json({ error: 'Task not found', code: 'NOT_FOUND' });
 
     const teamId = task[0].team_id;
+    // Only people who can see the task's team may delete it or ask for it to be deleted.
+    if (!await requireTeamAccess(req, res, teamId)) return;
     
     // If the user requesting deletion is NOT the creator (assigned_by), send a delete request instead
-    if (task[0].assigned_by && task[0].assigned_by !== req.userId) {
+    if (task[0].assigned_by && Number(task[0].assigned_by) !== Number(req.userId)) {
       await db.execute(
         'UPDATE tasks SET delete_requested_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
         [req.userId, req.params.id]
@@ -58,7 +60,8 @@ router.patch('/:id/approve-delete', authenticate, async (req, res) => {
       'SELECT id, team_id, assigned_by FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
     );
     if (task.length === 0) return res.status(404).json({ error: 'Task not found' });
-    if (task[0].assigned_by !== req.userId) return res.status(403).json({ error: 'Only the task creator can approve deletion' });
+    if (!await requireTeamAccess(req, res, task[0].team_id)) return;
+    if (Number(task[0].assigned_by) !== Number(req.userId)) return res.status(403).json({ error: 'Only the task creator can approve deletion' });
 
     const teamId = task[0].team_id;
     await db.execute(
@@ -79,7 +82,8 @@ router.patch('/:id/reject-delete', authenticate, async (req, res) => {
       'SELECT id, team_id, assigned_by FROM tasks WHERE id = ? AND is_deleted = FALSE', [req.params.id]
     );
     if (task.length === 0) return res.status(404).json({ error: 'Task not found' });
-    if (task[0].assigned_by !== req.userId) return res.status(403).json({ error: 'Only the task creator can reject deletion' });
+    if (!await requireTeamAccess(req, res, task[0].team_id)) return;
+    if (Number(task[0].assigned_by) !== Number(req.userId)) return res.status(403).json({ error: 'Only the task creator can reject deletion' });
 
     const teamId = task[0].team_id;
     await db.execute(
@@ -107,7 +111,7 @@ router.delete('/bulk/delete', authenticate, async (req, res) => {
 
     const placeholders = normalizedIds.map(() => '?').join(',');
     const [taskRows] = await db.execute(
-      `SELECT id, team_id FROM tasks WHERE id IN (${placeholders}) AND is_deleted = FALSE`,
+      `SELECT id, team_id, assigned_by FROM tasks WHERE id IN (${placeholders}) AND is_deleted = FALSE`,
       normalizedIds
     );
     if (taskRows.length === 0) return res.status(404).json({ error: 'No valid tasks found' });
@@ -118,17 +122,34 @@ router.delete('/bulk/delete', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Team access denied', code: 'FORBIDDEN' });
     }
 
-    const validIds = taskRows.map((task) => task.id);
-    const ph2 = validIds.map(() => '?').join(',');
-    await db.execute(
-      `UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id IN (${ph2})`,
-      validIds
-    );
+    // Same rule as deleting one task: your own tasks (or ones nobody created) go at once;
+    // someone else's task gets a delete request to its creator instead.
+    const mine = (task) => !task.assigned_by || Number(task.assigned_by) === Number(req.userId);
+    const validIds = taskRows.filter(mine).map((task) => task.id);
+    const requestedIds = taskRows.filter((task) => !mine(task)).map((task) => task.id);
+    if (validIds.length) {
+      await db.execute(
+        `UPDATE tasks SET is_deleted = TRUE, deleted_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id IN (${validIds.map(() => '?').join(',')})`,
+        validIds
+      );
+    }
+    if (requestedIds.length) {
+      await db.execute(
+        `UPDATE tasks SET delete_requested_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${requestedIds.map(() => '?').join(',')})`,
+        [req.userId, ...requestedIds]
+      );
+    }
 
     const teamSet = new Set(taskRows.map((task) => task.team_id).filter(Boolean));
-    teamSet.forEach(teamId => ws.broadcast(teamId, 'task_bulk_deleted', { ids: validIds }));
+    teamSet.forEach((teamId) => {
+      if (validIds.length) ws.broadcast(teamId, 'task_bulk_deleted', { ids: validIds });
+      requestedIds.forEach((id) => ws.broadcast(teamId, 'task_updated', { id }));
+    });
 
-    res.json({ message: `${validIds.length} tasks deleted`, deleted: validIds });
+    const parts = [];
+    if (validIds.length) parts.push(`${validIds.length} ${validIds.length === 1 ? 'task' : 'tasks'} deleted`);
+    if (requestedIds.length) parts.push(`${requestedIds.length} sent to ${requestedIds.length === 1 ? 'its creator' : 'their creators'} for approval`);
+    res.json({ message: `${parts.join('. ')}.`, deleted: validIds, requested: requestedIds });
   } catch (error) {
     res.status(400).json({ error: error.message, code: 'BAD_REQUEST' });
   }

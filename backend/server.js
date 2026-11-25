@@ -6,19 +6,38 @@ const ws = require('./src/websocket');
 const { ensureCollaborationSchema } = require('./src/bootstrap/collaborationSchema');
 const { ensureWorkspaceSchema } = require('./src/bootstrap/workspaceSchema');
 const { errorHandler, notFound } = require('./src/middleware/errorHandler');
-const { authLimiter, apiLimiter, consoleAuthLimiter } = require('./src/middleware/rateLimiter');
+const { loginLimiter, accountLimiter, apiLimiter, consoleAuthLimiter } = require('./src/middleware/rateLimiter');
+const { safeErrors } = require('./src/middleware/safeErrors');
 
 const app = express();
 // Trust Nginx reverse proxy (1 hop). Required for express-rate-limit to work correctly.
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
+app.disable('x-powered-by');
 const server = http.createServer(app);
+
+// Security headers on every API answer. The API serves JSON, images and downloads, never pages,
+// so nothing may frame it or run as a page from it.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
+  next();
+});
+// Database and crash text never reaches the browser (see the file for why).
+app.use(safeErrors);
 
 const normalizeOrigin = (value) => String(value || '').trim().replace(/\/+$/, '');
 
+// Only our own sites may call the API from a browser. Any *.vercel.app used to be allowed, but anyone
+// can publish a site there. Extra sites go in FRONTEND_ORIGINS (comma separated).
 const configuredOrigins = [
-  'http://localhost:3000',
+  'https://task.greencall.in',
   'https://task-qds4.vercel.app',
+  ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
   process.env.FRONTEND_URL,
+  process.env.APP_FRONTEND_URL,
   ...(process.env.FRONTEND_ORIGINS || '')
     .split(',')
     .map((origin) => normalizeOrigin(origin))
@@ -32,14 +51,13 @@ const allowedOrigins = Array.from(new Set(configuredOrigins));
 const isAllowedOrigin = (origin) => {
   const normalizedOrigin = normalizeOrigin(origin);
   if (!normalizedOrigin) return true;
-  if (allowedOrigins.includes(normalizedOrigin)) return true;
-  return /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(normalizedOrigin);
+  return allowedOrigins.includes(normalizedOrigin);
 };
 
 app.use(cors({
   origin: (origin, callback) => {
     if (isAllowedOrigin(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    callback(Object.assign(new Error('Not allowed by CORS'), { status: 403 }));
   },
   credentials: true
 }));
@@ -58,7 +76,8 @@ app.get('/', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' }))
 app.get('/api', (req, res) => res.json({ status: 'ok', service: 'GreenTask API' }));
 
 // Rate limiting
-app.use('/api/auth', authLimiter);
+app.use(['/api/auth/login', '/api/company-auth/login'], loginLimiter);
+app.use(['/api/auth/register', '/api/auth/send-reset-link', '/api/auth/send-reset-otp', '/api/auth/reset-password', '/api/company-auth/register'], accountLimiter);
 app.use(['/api/sa/login', '/api/sa/setup-password'], consoleAuthLimiter);
 app.get('/api/users/avatar/:token', require('./src/services/avatars').serveAvatar);
 app.get('/api/teams/photo/:token', require('./src/services/avatars').serveTeamPhoto);
@@ -67,6 +86,7 @@ app.use('/api', apiLimiter);
 // Routes
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/company-auth', require('./src/routes/companyAuth'));
+app.use('/api/sessions', require('./src/routes/sessions'));
 app.use('/api/sa', require('./src/routes/superAdminAuth').router);
 app.use('/api/teams', require('./src/routes/teams'));
 app.use('/api/task-sheets', require('./src/routes/taskSheets'));

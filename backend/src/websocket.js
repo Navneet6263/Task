@@ -1,8 +1,19 @@
 const WebSocket = require('ws');
-const jwt = require('jsonwebtoken');
 const db = require('./config/database');
-const { isExpiredLegacy } = require('./utils/session');
 const { canAccessTeam } = require('./utils/teamAccess');
+
+// The app sends its sign-in token in the WebSocket sub-protocol header ("greentask, <token>"), not
+// in the URL, so it never lands in Nginx or proxy access logs. The URL form still works for tabs
+// opened before this change.
+const PROTOCOL = 'greentask';
+const RECHECK_MS = 60 * 1000;
+const tokenFrom = (req, url) => {
+  const offered = String(req.headers?.['sec-websocket-protocol'] || '').split(',').map((p) => p.trim()).filter(Boolean);
+  if (offered.includes(PROTOCOL)) return offered.find((p) => p !== PROTOCOL) || '';
+  return url.searchParams.get('token') || '';
+};
+// Same live check as every API request: open session, account still there, role and organizations now.
+const auth = () => require('./middleware/auth');
 
 let wss = null;
 
@@ -61,32 +72,37 @@ const packMessage = (event, data) =>
   JSON.stringify({ event, data, timestamp: new Date().toISOString() });
 
 function init(server) {
-  wss = new WebSocket.Server({ server, maxPayload: 64 * 1024 });
+  wss = new WebSocket.Server({
+    server,
+    maxPayload: 64 * 1024,
+    handleProtocols: (protocols) => (protocols.has(PROTOCOL) ? PROTOCOL : false),
+  });
 
   wss.on('connection', (ws, req) => {
     const url = new URL(req.url, 'http://localhost');
-    const token = url.searchParams.get('token');
+    const token = tokenFrom(req, url);
+    ws.teamIds = new Set();
+    ws.isAlive = true;
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      if (isExpiredLegacy(decoded)) throw new Error('Session expired');
+    // Messages can arrive while the session is being checked: each one waits for the answer.
+    const ready = auth().authorize(token).then((result) => {
+      if (!result.ok) { ws.close(1008, 'Invalid token'); return false; }
+      const { decoded } = result;
+      ws.decoded = decoded;
       ws.userId = decoded.id;
-      ws.userRole = decoded.role;
-      const orgIds = decoded.org_ids || [decoded.org_id];
-      const requestedOrg = Number(url.searchParams.get('orgId'));
-      ws.orgId = orgIds.map(Number).includes(requestedOrg) ? requestedOrg : decoded.org_id;
+      ws.userRole = result.role;
+      ws.orgId = auth().pickOrg(result, Number(url.searchParams.get('orgId')) || null, decoded.org_id ? Number(decoded.org_id) : null);
       ws.companyAdminId = decoded.company_admin_id || null;
       ws.expiresAt = decoded.exp ? decoded.exp * 1000 : 0;
-      ws.teamIds = new Set();
-      ws.isAlive = true;
+      ws.checkedAt = Date.now();
+      if (ws.readyState !== WebSocket.OPEN) return false;
       addUserSocket(ws.userId, ws);
-    } catch (error) {
-      ws.close(1008, 'Invalid token');
-      return;
-    }
+      return true;
+    }).catch(() => { ws.close(1011, 'Try again'); return false; });
 
     ws.on('message', async (message) => {
       try {
+        if (!(await ready)) return;
         if (ws.expiresAt && Date.now() >= ws.expiresAt) return ws.close(1008, 'Token expired');
         const payload = JSON.parse(message);
 
@@ -132,9 +148,19 @@ function init(server) {
 
     ws.on('close', () => {
       Array.from(ws.teamIds).forEach((teamId) => leaveTeamRoom(ws, teamId));
-      removeUserSocket(ws.userId, ws);
+      if (ws.userId) removeUserSocket(ws.userId, ws);
     });
   });
+
+  // A signed-out, removed or demoted account loses its live connection within a minute.
+  const recheck = (ws) => {
+    if (!ws.decoded || Date.now() - (ws.checkedAt || 0) < RECHECK_MS) return;
+    ws.checkedAt = Date.now();
+    require('./services/sessions').check(ws.decoded).then((result) => {
+      if (!result.ok || (ws.orgId && !(result.orgIds || []).includes(Number(ws.orgId)))) { ws.close(1008, 'Session ended'); return; }
+      ws.userRole = result.role;
+    }).catch(() => {});
+  };
 
   const heartbeat = setInterval(() => {
     wss.clients.forEach((ws) => {
@@ -145,6 +171,7 @@ function init(server) {
 
       ws.isAlive = false;
       ws.ping();
+      recheck(ws);
     });
   }, 30000);
   heartbeat.unref();

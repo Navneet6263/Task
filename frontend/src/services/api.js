@@ -41,6 +41,15 @@ export const auth = {
   companyLogin: (data) => api.post('/company-auth/login', data),
 };
 
+// Where this account is signed in (Settings → Password & security), and ending those sign-ins.
+export const accountSessions = {
+  list: () => api.get('/sessions'),
+  revoke: (id) => api.delete(`/sessions/${id}`),
+  revokeOthers: () => api.post('/sessions/others/revoke'),
+  // Short wait: logging out must never hang on a slow network.
+  logout: () => api.post('/sessions/logout', {}, { timeout: 4000 }),
+};
+
 
 export const teams = {
   getAll: async () => {
@@ -168,6 +177,9 @@ export const tasks = {
   update: (id, data) => api.put(`/tasks/${id}`, data),
   togglePriorityLock: (id) => api.patch(`/tasks/${id}/priority-lock`),
   reassign: (id, assign_to) => api.patch(`/tasks/${id}/reassign`, { assign_to }),
+  // The assignee returns a task that is not their work, with a reason.
+  sendBackInfo: (id) => api.get(`/tasks/${id}/send-back`),
+  sendBack: (id, reason, version) => api.post(`/tasks/${id}/send-back`, { reason, version }),
   delete: (id) => api.delete(`/tasks/${id}`),
   approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
   rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),
@@ -350,6 +362,8 @@ export const calendar = {
   update: (id, data) => api.put(`/calendar/events/${id}`, data),
   remove: (id) => api.delete(`/calendar/events/${id}`),
   respond: (id, response) => api.patch(`/calendar/events/${id}/response`, { response }),
+  // Reminders and events about one task (task window → Reminders).
+  taskEvents: (taskId) => api.get(`/calendar/tasks/${taskId}/events`),
 };
 
 // Add-on module; the server refuses every call unless the active organization has it enabled.

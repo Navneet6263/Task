@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { WS_BASE_URL } from '../services/runtimeConfig';
+import { openSocket } from '../services/runtimeConfig';
 import { notify } from '../services/feedback';
 
 export default function useWorkspaceSocket({ wsRef, setSocketVersion, fetchNotifications, token, orgId }) {
@@ -22,8 +22,7 @@ export default function useWorkspaceSocket({ wsRef, setSocketVersion, fetchNotif
     const connect = () => {
       if (stopped || !hasCurrentToken()) return;
       try {
-        const query = new URLSearchParams({ token, orgId: orgId || '' });
-        const ws = new WebSocket(`${WS_BASE_URL}?${query}`);
+        const ws = openSocket(token, orgId);
         socket = ws;
         wsRef.current = ws;
         ws.onopen = () => {

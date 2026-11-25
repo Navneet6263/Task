@@ -17,7 +17,8 @@ const masterLock = { fails: 0, until: 0 };
 const INCORRECT = { error: 'Email or password is incorrect.' };
 const LOCKED = { error: `Too many attempts. Try again in ${LOCK_MINUTES} minutes.` };
 
-const masterPassword = () => process.env.SUPER_ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? null : 'superadmin123');
+// No built-in fallback password: without SUPER_ADMIN_PASSWORD the master login is simply off.
+const masterPassword = () => process.env.SUPER_ADMIN_PASSWORD || null;
 
 async function deliver(account, code) {
   const email = codeRecipient(account);

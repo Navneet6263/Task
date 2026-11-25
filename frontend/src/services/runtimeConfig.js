@@ -15,5 +15,12 @@ export const WS_BASE_URL = `${API_BASE_URL
   .replace(/^https:\/\//i, 'wss://')
   .replace(/\/+$/, '')}/`;
 
+// The sign-in token travels in the WebSocket protocol header, never in the URL: URLs are written to
+// server and proxy logs. The server answers with the "greentask" protocol.
+export const openSocket = (token, orgId) => new WebSocket(
+  `${WS_BASE_URL}?${new URLSearchParams({ orgId: orgId || '' })}`,
+  ['greentask', token],
+);
+
 
 

@@ -174,6 +174,8 @@ router.post('/organizations/:id/email-inbox/test', verifySA, async (req, res) =>
       await testInbox({ host: inbox.host, port: inbox.port, user: inbox.username, pass: inbox.password || open(saved.secret) });
       res.json({ ok: true, message: 'Signed in to the inbox.' });
     } catch (connectError) {
+      // The mail server's own words (host not found, refused, timed out) are what the platform admin needs here.
+      res.locals.showErrorText = true;
       res.status(422).json({ ok: false, error: `Could not sign in: ${String(connectError.message).slice(0, 300)}` });
     }
   } catch (e) { res.status(e.status || 400).json({ error: e.message }); }

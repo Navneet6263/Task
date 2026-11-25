@@ -415,6 +415,7 @@ router.put('/users/:id/role', async (req, res) => {
 
     const leadIds = await pickedLeads(target.org_id, role, req.body);
     await db.execute('UPDATE users SET role = ? WHERE id = ?', [role, targetUserId]);
+    require('../services/sessions').forgetSessions(); // the new role applies on their next request
     await applyLeadsForRole(targetUserId, role, leadIds);
     res.json({ message: 'Role updated' });
   } catch (error) {
@@ -448,6 +449,7 @@ router.delete('/users/:id', async (req, res) => {
       'UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?',
       [targetUserId]
     );
+    require('../services/sessions').forgetSessions(); // signed out everywhere at once
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -305,7 +305,8 @@ const getMessages = async (teamId, thread, before = 0) => {
         ru.name AS reply_user_name
       FROM team_messages m
       JOIN users u ON m.user_id = u.id
-      LEFT JOIN team_messages rm ON m.reply_to = rm.id
+      LEFT JOIN team_messages rm ON m.reply_to = rm.id AND rm.team_id = m.team_id
+        AND (rm.thread_id = m.thread_id OR rm.thread_id IS NULL)
       LEFT JOIN users ru ON rm.user_id = ru.id
       LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
       WHERE m.team_id = ?
@@ -849,7 +850,17 @@ router.post('/:teamId', authenticate, async (req, res) => {
       return res.status(422).json({ error: 'That file is no longer available. Attach it again.' });
     }
 
-    const replyTo = req.body?.reply_to ? Number(req.body.reply_to) : null;
+    // A reply may only quote a message from this same conversation: the quoted text is sent back
+    // with the reply, so an unchecked id would show messages from any team or private chat.
+    let replyTo = null;
+    if (req.body?.reply_to) {
+      replyTo = Number(req.body.reply_to);
+      const [[quoted]] = Number.isSafeInteger(replyTo) && replyTo > 0 ? await db.execute(
+        `SELECT id FROM team_messages WHERE id = ? AND team_id = ?
+           AND (thread_id = ? OR (thread_id IS NULL AND ? = 1))`,
+        [replyTo, teamId, thread.id, thread.is_default ? 1 : 0]) : [[null]];
+      if (!quoted) return res.status(422).json({ error: 'That message is not in this conversation.' });
+    }
     const [result] = await db.execute(
       `INSERT INTO team_messages (team_id, user_id, thread_id, message, reply_to)
        VALUES (?, ?, ?, ?, ?)`,
@@ -886,7 +897,8 @@ router.post('/:teamId', authenticate, async (req, res) => {
           ru.name AS reply_user_name
        FROM team_messages m
        JOIN users u ON m.user_id = u.id
-       LEFT JOIN team_messages rm ON m.reply_to = rm.id
+       LEFT JOIN team_messages rm ON m.reply_to = rm.id AND rm.team_id = m.team_id
+        AND (rm.thread_id = m.thread_id OR rm.thread_id IS NULL)
        LEFT JOIN users ru ON rm.user_id = ru.id
        LEFT JOIN team_discussion_threads t ON t.id = m.thread_id
        WHERE m.id = ?`,

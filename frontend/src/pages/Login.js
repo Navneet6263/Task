@@ -42,7 +42,8 @@ const Login = () => {
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [remember, setRemember] = useState(true);
+  // Off by default: a shared or borrowed computer must not stay signed in for a month.
+  const [remember, setRemember] = useState(false);
   const [adminHint, setAdminHint] = useState(null);
   const [loginWith, setLoginWith] = useState(() => (remembered('login_with') === 'code' ? 'code' : 'email'));
   const [companyCode, setCompanyCode] = useState(() => remembered('login_company_code'));
@@ -104,7 +105,7 @@ const Login = () => {
       : { eyebrow: 'Protected access', title: 'Platform admin sign in', text: 'Sign in with your admin email and password. We then email you a code to confirm it\'s you.' }
     : isLogin
       ? { eyebrow: 'Welcome back', title: 'Sign in to GreenTask', text: 'Employees, managers and company admins all sign in here.' }
-      : { eyebrow: 'Create account', title: 'Join your workspace', text: 'Pick your role, then fill in a few details. It takes a minute.' };
+      : { eyebrow: 'Create account', title: 'Join your workspace', text: 'Use the team code from your manager. Starting a new company? Use Register your company.' };
 
   return (
     <AuthLayout variant={isSystemAdmin ? 'security' : 'workspace'} topAction={<TopLink to="/register-company">Register your company</TopLink>}>
@@ -157,7 +158,7 @@ const Login = () => {
             {isLogin && (
               <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
                 <input type="checkbox" className="h-4 w-4 rounded accent-[rgb(var(--c-accent))]" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                Keep me signed in on this device for 30 days
+                Keep me signed in for 30 days (only on your own device)
               </label>
             )}
             <SubmitButton busy={busy} busyText={isLogin ? 'Signing in…' : 'Creating account…'}>{isLogin ? 'Sign in' : 'Create account'}</SubmitButton>

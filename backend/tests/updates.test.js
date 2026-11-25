@@ -65,8 +65,8 @@ test('publishing validates fields and editing requires an atomic version match',
   const send = await client(t, { id: 10, role: 'admin', org_id: 1 });
   assert.equal((await send('/', 'POST', { ...publication, title: ' '.repeat(3) })).status, 422);
   assert.equal((await send('/7', 'PUT', { ...publication, version: 2 })).status, 409);
-  assert.match(write.sql, /WHERE id = \? AND created_by = \? AND version = \?/);
-  assert.deepEqual(write.params.slice(-3), [7, 10, 2]);
+  assert.match(write.sql, /WHERE id = \? AND created_by = \? AND org_id = \? AND version = \?/);
+  assert.deepEqual(write.params.slice(-4), [7, 10, 1, 2], 'only the author, in their own workspace');
 });
 
 test('private report submission creates only a private task, with validated assignee and update snapshot', async t => {
@@ -156,15 +156,17 @@ test('global guide read markers are persisted per user and release version', asy
   const send = await client(t);
   assert.equal((await send('/7/read', 'POST', { version: 2 })).status, 200);
   assert.match(merge.sql, /WITH \(HOLDLOCK\)/);
-  assert.match(merge.sql, /WHERE id = \? AND version = \?/);
-  assert.deepEqual(merge.params, [10, 2, 7, 2]);
+  assert.match(merge.sql, /WHERE id = \? AND version = \? AND \(w.org_id IS NULL OR w.org_id = \?\)/);
+  assert.deepEqual(merge.params, [10, 2, 7, 2, 1], 'only an update this workspace can see');
 });
 
-test('product feed is global, uses explicit UTC strings, and limits editing to the author', async t => {
+test('the feed shows platform notes and this workspace only, uses explicit UTC strings, and limits editing to the author', async t => {
   let params;
+  let countParams;
   mockDb(t, async (sql, values) => {
+    if (sql.includes('COUNT(*) AS total')) { assert.match(sql, /w.org_id IS NULL OR w.org_id = \?/); countParams = values; }
     if (sql.startsWith('SELECT w.*')) {
-      assert.doesNotMatch(sql, /WHERE w.org_id/); params = values;
+      assert.match(sql, /WHERE \(w.org_id IS NULL OR w.org_id = \?\)/); params = values;
       return [[{ id: 7, created_by: 30, published_utc: '2026-08-26T10:47:07Z', updated_utc: '2026-08-26T10:47:07Z' }]];
     }
     return [[{ total: 1 }]];
@@ -173,7 +175,8 @@ test('product feed is global, uses explicit UTC strings, and limits editing to t
   const data = await (await send('/')).json();
   assert.equal(data.data[0].published_at, '2026-08-26T10:47:07Z');
   assert.equal(data.data[0].can_edit, false);
-  assert.deepEqual(params, [10, 0]);
+  assert.deepEqual(params, [10, 2, 0], 'another workspace never sees these posts');
+  assert.deepEqual(countParams, [2]);
 });
 
 test('release notes cover exactly the last two recorded pushes with valid field sizes', () => {

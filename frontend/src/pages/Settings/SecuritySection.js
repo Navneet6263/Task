@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Card, FieldError, Input, Meter } from '../../ui';
 import Section, { SettingRow } from './Section';
+import SignedInDevices from './SignedInDevices';
 
 // Simple strength hint: length plus character variety. Not a policy, just guidance.
 export function passwordStrength(value) {
@@ -33,13 +34,13 @@ export default function SecuritySection() {
     try {
       await api.put('/users/me/password', { current: form.current, newPass: form.newPass });
       setForm({ current: '', newPass: '', confirm: '' });
-      notify('Password changed.', 'success');
+      notify('Password changed. Your other devices were signed out.', 'success');
     } catch (err) { setError(err.response?.data?.error || 'Could not change the password.'); }
     finally { setSaving(false); }
   };
 
   return (
-    <Section title="Password & security" description="Change your password. Use something long that you do not use on other sites.">
+    <Section title="Password & security" description="Change your password and see where you are signed in. Use a password you do not use on other sites.">
       <Card className="px-4">
         <form onSubmit={submit}>
           <SettingRow label="Current password" help="To confirm it is you.">
@@ -61,6 +62,7 @@ export default function SecuritySection() {
           <div className="flex justify-end py-4"><Button type="submit" variant="primary" disabled={saving}>{saving ? 'Updating…' : 'Update password'}</Button></div>
         </form>
       </Card>
+      <SignedInDevices />
     </Section>
   );
 }

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { taskExtras, tasks } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { useReloadSummaries, useTaskMeta } from './taskExtrasStore';
+import { SendBackModal, canSendBack } from '../tasks/SendBack';
+import useBugTracking from '../bugs/useBugTracking';
 
 const STATUSES = [['TODO', 'To Do'], ['IN_PROGRESS', 'In Progress'], ['PENDING', 'Pending'], ['DONE', 'Done']];
 const me = () => { try { return JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}'); } catch { return {}; } };
@@ -23,6 +25,8 @@ const Item = ({ children, onClick, danger, hint, ...rest }) => (
 export default function TaskMenu({ task, flagged = false, onStatus, onChanged, onOpen, onDelete, align = 'right' }) {
   const [open, setOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [sendingBack, setSendingBack] = useState(false);
+  const bugFlowOn = useBugTracking() === true;
   const root = useRef(null);
   const { keyOf } = useTaskMeta();
   const reload = useReloadSummaries();
@@ -67,6 +71,7 @@ export default function TaskMenu({ task, flagged = false, onStatus, onChanged, o
             </li>
           ))}
           {Number(task.assigned_to) !== Number(user.id) && <Item onClick={assignToMe}>Assign to me</Item>}
+          {canSendBack(task, { bugFlowOn }) && <Item onClick={run(() => setSendingBack(true))}>Send back…</Item>}
           <li role="separator" className="my-1 border-t border-line" />
           <Item onClick={run(() => copy(link, 'Task link copied.'))}>Copy link</Item>
           <Item onClick={run(() => copy(keyOf(task.id), `${keyOf(task.id)} copied.`))} hint={keyOf(task.id)}>Copy key</Item>
@@ -76,6 +81,7 @@ export default function TaskMenu({ task, flagged = false, onStatus, onChanged, o
           {onDelete && <><li role="separator" className="my-1 border-t border-line" /><Item danger onClick={run(onDelete)}>Delete</Item></>}
         </ul>
       )}
+      {sendingBack && <SendBackModal task={task} onClose={() => setSendingBack(false)} onDone={() => { reload?.(); onChanged?.(); }} />}
     </div>
   );
 }

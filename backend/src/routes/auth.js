@@ -6,10 +6,11 @@ const { companyOfCoAdmin } = require('../services/coAdmins');
 const { getAccessibleOrgIds } = require('../utils/orgAccess');
 const { ensureCompanyAdminBootstrap } = require('../utils/companyAdminBootstrap');
 const { ensureUniqueEmployeeId } = require('../utils/employeeId');
-const { sendResetOtp, sendResetLink } = require('../utils/mailer');
+const mailer = require('../utils/mailer');
 const { normalizeCode, accountFlags, syncQuietly } = require('../services/employeeAccounts');
 const { isModuleEnabled } = require('../services/orgModules');
-const { signSession } = require('../utils/session');
+const { issueSession, revokeUserSessions } = require('../services/sessions');
+const guard = require('../services/signInGuard');
 const router = express.Router();
 
 // In-memory OTP & Token stores: { email → { otp/token, expiresAt } }
@@ -17,6 +18,25 @@ const otpStore = new Map();
 const tokenStore = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const LINK_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const OTP_TRIES = 5;
+const MIN_PASSWORD = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Reset links always point at our own site. Never build them from the request (Origin header):
+// anyone could then make us email a real reset link that opens their site.
+const appUrl = () => String(process.env.APP_FRONTEND_URL || process.env.FRONTEND_URL || 'https://task.greencall.in').trim().replace(/\/+$/, '');
+// The same answer whether or not the email has an account, so nobody can test which emails are signed up.
+const RESET_SENT = 'If an account uses this email, we have sent it a reset link. It works for 15 minutes.';
+const OTP_SENT = 'If an account uses this email, we have sent it a code. It works for 10 minutes.';
+const sameCode = (a, b) => {
+  const x = Buffer.from(String(a)); const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
+async function accountExists(email) {
+  const [users] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE LIMIT 1', [email]);
+  const [cas] = await db.execute('SELECT id FROM company_admins WHERE email = ? LIMIT 1', [email]);
+  return users.length > 0 || cas.length > 0;
+}
 
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
@@ -41,52 +61,53 @@ async function findEmployeeAccount(rawCode, rawCompanyCode, password) {
     await bcrypt.compare(password, DUMMY_HASH);
     return { status: 401, error: 'Wrong employee code or password' };
   }
+  // The wrong-password count is per account, so the same code in another company is never locked with it.
+  // A locked account is not even compared, so a right guess during the lock tells nothing.
+  const keyOf = (row) => guard.keyOf('user', row.id);
+  const lockedBefore = rows.filter((row) => guard.lockedFor(keyOf(row)));
+  const open = rows.filter((row) => !lockedBefore.includes(row));
   const matches = [];
-  for (const row of rows) if (await bcrypt.compare(password, row.password)) matches.push(row);
+  for (const row of open) if (await bcrypt.compare(password, row.password)) matches.push(row);
   if (matches.length > 1) return { status: 409, code: 'COMPANY_CODE_REQUIRED', error: 'Add your company code to sign in' };
-  if (!matches.length) return { status: 401, error: 'Wrong employee code or password' };
-  return { user: matches[0] };
+  if (matches.length) { guard.succeeded(keyOf(matches[0])); return { user: matches[0] }; }
+  open.forEach((row) => guard.failed(keyOf(row)));
+  const wait = Math.max(0, ...lockedBefore.map((row) => guard.lockedFor(keyOf(row))));
+  if (wait) return { status: 429, ...guard.lockedMessage(wait, 'Ask your admin for a new one-time password if you forgot it.') };
+  return { status: 401, error: 'Wrong employee code or password' };
 }
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, mobile, employee_id, role, team_code, company_code, company_name } = req.body;
-    // Signing up never makes anyone an admin, and nobody joins an existing company as a manager by themselves.
-    const userRole = role === 'manager' ? 'manager' : 'person';
-    if (userRole === 'manager' && company_code) {
-      return res.status(403).json({ error: 'Managers are added by their company admin. Ask your admin to add you.' });
+    const { name, email, password, mobile, employee_id, role, team_code } = req.body;
+    // Signing up only ever joins a team as an employee. A new company goes through "Register company",
+    // which a platform admin approves; managers and admins are added by their company admin.
+    if (role === 'manager') {
+      return res.status(403).json({ error: 'To start a new company, use Register company. A platform admin approves it. To join as a manager, ask your company admin to add you.' });
     }
+    const userRole = 'person';
     const normalizedEmail = normalizeEmail(email);
+    if (!String(name || '').trim() || String(name).length > 150) return res.status(422).json({ error: 'Enter your name' });
+    if (!EMAIL_RE.test(normalizedEmail) || normalizedEmail.length > 255) return res.status(422).json({ error: 'Enter a valid email address' });
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD) return res.status(422).json({ error: `Use a password of at least ${MIN_PASSWORD} characters` });
+    if (password.length > 128) return res.status(422).json({ error: 'The password is too long' });
+    const [taken] = await db.execute('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (taken.length) return res.status(409).json({ error: 'An account with this email already exists. Sign in, or reset your password.' });
     const hashed = await bcrypt.hash(password, 10);
-    const safeEmployeeId = await ensureUniqueEmployeeId(
-      db,
-      employee_id,
-      userRole === 'manager' ? 'MGR' : 'EMP'
-    );
+    const safeEmployeeId = await ensureUniqueEmployeeId(db, employee_id, 'EMP');
     let resolvedOrgId = null;
+    let joinTeamId = null;
 
     // PERSON: must provide team_code → get org from team
     if (userRole === 'person') {
       if (!team_code) return res.status(400).json({ error: 'Team Code is required for employees' });
-      const [teams] = await db.execute('SELECT id, org_id FROM teams WHERE team_code = ?', [team_code]);
+      const [teams] = await db.execute('SELECT id, org_id FROM teams WHERE team_code = ? AND is_deleted = FALSE', [String(team_code).trim().toUpperCase()]);
       if (teams.length === 0) return res.status(400).json({ error: 'Invalid Team Code' });
       // Companies on employee-code sign-in create every account themselves, so a join code lets no one in.
       if (await isModuleEnabled(teams[0].org_id, 'hrms_login')) {
         return res.status(403).json({ error: 'Your company creates accounts for you. Ask your admin for your sign-in details.' });
       }
       resolvedOrgId = teams[0].org_id;
-    }
-
-    // MANAGER: starts a new company
-    if (userRole === 'manager') {
-      if (!company_name) return res.status(400).json({ error: 'Company Name required' });
-      const slug = company_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
-      const code = 'ORG-' + company_name.substring(0, 4).toUpperCase() + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
-      const [orgResult] = await db.execute(
-        'INSERT INTO organizations (name, slug, company_code) VALUES (?, ?, ?)',
-        [company_name, slug, code]
-      );
-      resolvedOrgId = orgResult.insertId;
+      joinTeamId = teams[0].id;
     }
 
     const [result] = await db.execute(
@@ -97,21 +118,7 @@ router.post('/register', async (req, res) => {
 
     // Person: join team
     if (userRole === 'person') {
-      const [teams] = await db.execute('SELECT id FROM teams WHERE team_code = ?', [team_code]);
-      await db.execute('INSERT IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)', [teams[0].id, userId, 'Member']);
-    }
-
-    // Manager: create their own team
-    if (userRole === 'manager') {
-      const tmCode = 'TM' + Math.random().toString(36).substring(2, 8).toUpperCase();
-      const [teamResult] = await db.execute(
-        'INSERT INTO teams (name, type, team_code, created_by, org_id) VALUES (?, ?, ?, ?, ?)',
-        [`${name}'s Team`, 'General', tmCode, userId, resolvedOrgId]
-      );
-      await db.execute(
-        'INSERT INTO team_members (team_id, user_id, role, is_reporting_manager) VALUES (?, ?, ?, ?)',
-        [teamResult.insertId, userId, 'Reporting Manager', true]
-      );
+      await db.execute('INSERT IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)', [joinTeamId, userId, 'Member']);
     }
 
     // Get org info for response
@@ -122,7 +129,7 @@ router.post('/register', async (req, res) => {
     }
 
     const orgIds = await getAccessibleOrgIds(db, userId, resolvedOrgId);
-    const token = signSession({ id: userId, role: userRole, org_id: resolvedOrgId, org_ids: orgIds });
+    const token = await issueSession(req, { id: userId, role: userRole, org_id: resolvedOrgId, org_ids: orgIds }, false);
     res.json({
       token,
       id: userId,
@@ -135,19 +142,21 @@ router.post('/register', async (req, res) => {
       company_code: orgInfo?.company_code,
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[register]', error.message);
+    res.status(400).json({ error: 'Could not create the account. Check the details and try again.' });
   }
 });
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
     if (req.body.employee_code !== undefined) {
       const found = await findEmployeeAccount(req.body.employee_code, req.body.company_code, password);
       if (!found.user) return res.status(found.status).json({ error: found.error, ...(found.code ? { code: found.code } : {}) });
       const employee = found.user;
       const employeeOrgIds = await getAccessibleOrgIds(db, employee.id, employee.org_id);
-      const employeeToken = signSession({ id: employee.id, role: employee.role, org_id: employee.org_id, org_ids: employeeOrgIds }, req.body.remember);
+      const employeeToken = await issueSession(req, { id: employee.id, role: employee.role, org_id: employee.org_id, org_ids: employeeOrgIds }, req.body.remember);
       syncQuietly(employee.org_id);
       const flags = accountFlags(employee);
       return res.json({
@@ -162,6 +171,10 @@ router.post('/login', async (req, res) => {
       });
     }
     const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || !password) return res.status(422).json({ error: 'Enter your email and password' });
+    const lockKey = guard.keyOf('email', normalizedEmail);
+    const wait = guard.lockedFor(lockKey);
+    if (wait) return res.status(429).json(guard.lockedMessage(wait));
 
     const [companyAdmins] = await db.execute(
       'SELECT * FROM company_admins WHERE email = ? LIMIT 1',
@@ -171,16 +184,13 @@ router.post('/login', async (req, res) => {
 
     const respondAsCompanyAdmin = async (ca) => {
       const bootstrap = await ensureCompanyAdminBootstrap(db, ca.id);
-      const token = signSession(
-        {
-          id: bootstrap.linkedUserId,
-          role: 'company_admin',
-          company_admin_id: ca.id,
-          org_id: bootstrap.primaryOrgId,
-          org_ids: bootstrap.orgIds,
-        },
-        req.body.remember
-      );
+      const token = await issueSession(req, {
+        id: bootstrap.linkedUserId,
+        role: 'company_admin',
+        company_admin_id: ca.id,
+        org_id: bootstrap.primaryOrgId,
+        org_ids: bootstrap.orgIds,
+      }, req.body.remember);
       return res.json({
         token,
         id: bootstrap.linkedUserId,
@@ -207,19 +217,31 @@ router.post('/login', async (req, res) => {
           return res.status(403).json({ error: `Account rejected: ${companyAdmin.rejected_reason || ''}`, code: 'REJECTED' });
         }
         if (companyAdmin.status === 'approved') {
-          return respondAsCompanyAdmin(companyAdmin);
+          guard.succeeded(lockKey);
+          return await respondAsCompanyAdmin(companyAdmin); // await: a failure here must reach the catch below
         }
       }
     }
 
     const [users] = await db.execute('SELECT * FROM users WHERE email = ? AND is_deleted = FALSE', [normalizedEmail]);
-    if (users.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     const user = users[0];
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    // Compared even when no account matches, so a wrong email takes as long as a wrong password.
+    const valid = await bcrypt.compare(password, user?.password || DUMMY_HASH);
+    if (!user || !valid) {
+      guard.failed(lockKey);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    guard.succeeded(lockKey);
 
     if (companyAdmin && companyAdmin.status === 'approved') {
-      return respondAsCompanyAdmin(companyAdmin);
+      // The owner signed in with the password of their linked login, not the company copy (it was changed from
+      // Settings before both copies were kept in step). Make the company copy match, or the bootstrap below
+      // would copy the old password back and the next sign-in would fail.
+      if (user.password !== companyAdmin.password) {
+        await db.execute('UPDATE company_admins SET password = ? WHERE id = ?', [user.password, companyAdmin.id]);
+        companyAdmin.password = user.password;
+      }
+      return await respondAsCompanyAdmin(companyAdmin); // await: a failure here must reach the catch below
     }
 
     // A co-admin signs in with their own account and gets the company admin view of that company.
@@ -228,7 +250,7 @@ router.post('/login', async (req, res) => {
       const [coOrgs] = await db.execute('SELECT id FROM organizations WHERE company_admin_id = ? ORDER BY id ASC', [coCompany.id]);
       const coOrgIds = coOrgs.map((org) => org.id);
       const primary = coOrgIds.includes(user.org_id) ? user.org_id : coOrgIds[0];
-      const coToken = signSession({ id: user.id, role: 'company_admin', company_admin_id: coCompany.id, co_admin: true, org_id: primary, org_ids: coOrgIds }, req.body.remember);
+      const coToken = await issueSession(req, { id: user.id, role: 'company_admin', company_admin_id: coCompany.id, co_admin: true, org_id: primary, org_ids: coOrgIds }, req.body.remember);
       return res.json({
         token: coToken, id: user.id, name: user.name, email: normalizedEmail, role: 'company_admin', co_admin: true,
         org_id: primary, org_ids: coOrgIds,
@@ -238,7 +260,7 @@ router.post('/login', async (req, res) => {
     }
 
     const orgIds = await getAccessibleOrgIds(db, user.id, user.org_id);
-    const token = signSession({ id: user.id, role: user.role, org_id: user.org_id, org_ids: orgIds }, req.body.remember);
+    const token = await issueSession(req, { id: user.id, role: user.role, org_id: user.org_id, org_ids: orgIds }, req.body.remember);
     res.json({
       token,
       id: user.id,
@@ -250,7 +272,8 @@ router.post('/login', async (req, res) => {
       ...accountFlags(user),
     });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[login]', error.message);
+    res.status(500).json({ error: 'Could not sign you in right now. Try again.' });
   }
 });
 
@@ -258,25 +281,17 @@ router.post('/login', async (req, res) => {
 router.post('/send-reset-link', async (req, res) => {
   try {
     const normalizedEmail = normalizeEmail(req.body.email);
-    if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
-
-    // Check if email exists (users or company_admins)
-    const [users] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE LIMIT 1', [normalizedEmail]);
-    const [cas]   = await db.execute('SELECT id FROM company_admins WHERE email = ? LIMIT 1', [normalizedEmail]);
-    if (!users.length && !cas.length) return res.status(404).json({ error: 'No account found for this email' });
-
-    // Generate 64-char crypto token
+    if (!EMAIL_RE.test(normalizedEmail)) return res.status(422).json({ error: 'Enter a valid email address' });
+    res.json({ message: RESET_SENT });
+    // Sent after answering, so a slow mail server does not reveal whether the account exists.
+    if (!(await accountExists(normalizedEmail))) return;
     const token = crypto.randomBytes(32).toString('hex');
     tokenStore.set(token, { email: normalizedEmail, expiresAt: Date.now() + LINK_TTL_MS });
-
-    const frontendOrigin = req.headers.origin || process.env.APP_FRONTEND_URL || 'http://localhost:3000';
-    const resetUrl = `${frontendOrigin}/forgot-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
-
-    await sendResetLink(normalizedEmail, resetUrl);
-    res.json({ message: 'Password reset link sent to your email. Valid for 15 minutes.' });
+    const resetUrl = `${appUrl()}/forgot-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
+    await mailer.sendResetLink(normalizedEmail, resetUrl);
   } catch (error) {
     console.error('[send-reset-link]', error.message);
-    res.status(500).json({ error: 'Failed to send reset link. Check email configuration.' });
+    if (!res.headersSent) res.status(500).json({ error: 'Could not send the reset link. Try again in a minute.' });
   }
 });
 
@@ -284,94 +299,82 @@ router.post('/send-reset-link', async (req, res) => {
 router.post('/send-reset-otp', async (req, res) => {
   try {
     const normalizedEmail = normalizeEmail(req.body.email);
-    if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
-
-    // Check if email exists (users or company_admins)
-    const [users] = await db.execute('SELECT id FROM users WHERE email = ? AND is_deleted = FALSE LIMIT 1', [normalizedEmail]);
-    const [cas]   = await db.execute('SELECT id FROM company_admins WHERE email = ? LIMIT 1', [normalizedEmail]);
-    if (!users.length && !cas.length) return res.status(404).json({ error: 'No account found for this email' });
-
-    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
-    otpStore.set(normalizedEmail, { otp, expiresAt: Date.now() + OTP_TTL_MS });
-
-    await sendResetOtp(normalizedEmail, otp);
-    res.json({ message: 'OTP sent to your email. Valid for 10 minutes.' });
+    if (!EMAIL_RE.test(normalizedEmail)) return res.status(422).json({ error: 'Enter a valid email address' });
+    res.json({ message: OTP_SENT });
+    if (!(await accountExists(normalizedEmail))) return;
+    const otp = String(crypto.randomInt(100000, 1000000));
+    otpStore.set(normalizedEmail, { otp, expiresAt: Date.now() + OTP_TTL_MS, tries: 0 });
+    await mailer.sendResetOtp(normalizedEmail, otp);
   } catch (error) {
     console.error('[send-reset-otp]', error.message);
-    res.status(500).json({ error: 'Failed to send OTP. Check email configuration.' });
+    if (!res.headersSent) res.status(500).json({ error: 'Could not send the code. Try again in a minute.' });
   }
 });
 
 // ── Step 2: Verify Token / OTP + set new password ──
 router.post('/reset-password', async (req, res) => {
   try {
-    const { email, password, token, otp } = req.body;
-    let normalizedEmail = String(email || '').trim().toLowerCase();
-    const nextPassword = String(password || '');
+    const { email, token, otp } = req.body;
+    let normalizedEmail = normalizeEmail(email);
+    const nextPassword = typeof req.body.password === 'string' ? req.body.password : '';
 
-    if (!nextPassword) {
-      return res.status(422).json({ error: 'New password is required' });
+    if (nextPassword.length < MIN_PASSWORD) {
+      return res.status(422).json({ error: `Use a password of at least ${MIN_PASSWORD} characters` });
     }
+    if (nextPassword.length > 128) return res.status(422).json({ error: 'The password is too long' });
 
     // ── Token or OTP Validation ──
     if (token) {
-      const stored = tokenStore.get(String(token).trim());
-      if (!stored) return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
-      if (Date.now() > stored.expiresAt) {
-        tokenStore.delete(String(token).trim());
-        return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+      const key = String(token).trim();
+      const stored = tokenStore.get(key);
+      if (!stored || Date.now() > stored.expiresAt) {
+        tokenStore.delete(key);
+        return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
       }
       normalizedEmail = stored.email;
-      tokenStore.delete(String(token).trim()); // consumed
+      tokenStore.delete(key); // consumed
     } else if (otp) {
       if (!normalizedEmail) return res.status(422).json({ error: 'Email is required' });
       const stored = otpStore.get(normalizedEmail);
-      if (!stored) return res.status(400).json({ error: 'OTP not found. Please request a new one.' });
-      if (Date.now() > stored.expiresAt) {
+      if (!stored || Date.now() > stored.expiresAt) {
         otpStore.delete(normalizedEmail);
-        return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+        return res.status(400).json({ error: 'This code is invalid or has expired. Please request a new one.' });
       }
-      if (stored.otp !== String(otp).trim()) {
-        return res.status(400).json({ error: 'Invalid OTP' });
+      if (!sameCode(stored.otp, String(otp).trim())) {
+        stored.tries += 1;
+        // A few wrong guesses end the code, so it cannot be guessed.
+        if (stored.tries >= OTP_TRIES) {
+          otpStore.delete(normalizedEmail);
+          return res.status(400).json({ error: 'Too many wrong codes. Please request a new one.' });
+        }
+        return res.status(400).json({ error: 'Wrong code. Check the email and try again.' });
       }
       otpStore.delete(normalizedEmail); // consumed
     } else {
       return res.status(422).json({ error: 'Reset link token or OTP is required' });
     }
 
-    if (nextPassword.length < 4) {
-      return res.status(422).json({ error: 'Password must be at least 4 characters' });
-    }
-
     const hashed = await bcrypt.hash(nextPassword, 10);
-    let updated = false;
-
-    const [companyAdmins] = await db.execute(
-      'SELECT id FROM company_admins WHERE email = ?',
-      [normalizedEmail]
-    );
+    const [companyAdmins] = await db.execute('SELECT id FROM company_admins WHERE email = ?', [normalizedEmail]);
     if (companyAdmins.length > 0) {
       await db.execute('UPDATE company_admins SET password = ? WHERE email = ?', [hashed, normalizedEmail]);
       await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE email = ?', [hashed, normalizedEmail]);
-      updated = true;
     } else {
-      const [users] = await db.execute(
-        'SELECT id FROM users WHERE email = ? AND is_deleted = FALSE',
-        [normalizedEmail]
-      );
-      if (users.length > 0) {
-        await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE email = ? AND is_deleted = FALSE', [hashed, normalizedEmail]);
-        updated = true;
-      }
+      await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE email = ? AND is_deleted = FALSE', [hashed, normalizedEmail]);
     }
-
-    if (!updated) return res.status(404).json({ error: 'No account found for this email' });
-    res.json({ message: 'Password updated successfully' });
+    const [accounts] = await db.execute('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (!accounts.length && !companyAdmins.length) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+    // A new password signs this account out everywhere: whoever knew the old one is out too.
+    for (const account of accounts) await revokeUserSessions(account.id, { reason: 'password_reset' });
+    guard.succeeded(guard.keyOf('email', normalizedEmail));
+    res.json({ message: 'Password updated. Sign in with your new password.' });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[reset-password]', error.message);
+    res.status(500).json({ error: 'Could not update the password. Try again.' });
   }
 });
-
 
 
 module.exports = router;

@@ -75,7 +75,13 @@ function validateEvent(body) {
     all_day: body.all_day === true,
     reminder_minutes: null,
     attendee_ids: attendeeIds(body.attendee_ids, errors),
+    task_id: null,
   };
+  if (body.task_id !== undefined && body.task_id !== null && body.task_id !== '') {
+    const taskId = Number(body.task_id);
+    if (Number.isSafeInteger(taskId) && taskId > 0 && taskId <= 2147483647) event.task_id = taskId;
+    else errors.task_id = 'Pick a task from the list.';
+  }
   if (!event.event_type) errors.event_type = 'Pick Event, Meeting or Reminder.';
   if (body.reminder_minutes !== undefined && body.reminder_minutes !== null && body.reminder_minutes !== '') {
     const minutes = Number(body.reminder_minutes);

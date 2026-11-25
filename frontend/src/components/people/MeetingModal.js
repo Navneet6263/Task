@@ -24,7 +24,7 @@ export function endOf(date, time, minutes) {
 }
 
 // "Schedule a meeting with Ashish": saved in the calendar with them invited. They get a notification,
-// and an email invite when the workspace has Communications on.
+// and an email invite (with a file for their own calendar) when they have a real email address.
 export default function MeetingModal({ person, onClose }) {
   const first = String(person.name || '').split(' ')[0] || person.name;
   const slot = nextSlot();

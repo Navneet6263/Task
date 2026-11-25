@@ -47,7 +47,7 @@ const ForgotPassword = () => {
     event.preventDefault();
     setError('');
     if (!password || !confirmPassword) { setError('Please enter both password and confirm password.'); return; }
-    if (password.length < 4) { setError('Password must be at least 4 characters long.'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters long.'); return; }
     if (password !== confirmPassword) { setError('Password and confirm password must match.'); return; }
     try {
       setBusy(true);
@@ -65,7 +65,7 @@ const ForgotPassword = () => {
   if (!token && linkSent) {
     body = (
       <Result icon="mail" title="Check your inbox" action={<SubmitButton type="button" onClick={() => navigate('/login')}>Back to sign in</SubmitButton>}>
-        <p>We sent a reset link to <strong className="text-ink">{email}</strong>. It works for 15 minutes.</p>
+        <p>If an account uses <strong className="text-ink">{email}</strong>, we have sent it a reset link. It works for 15 minutes.</p>
         <p className="mt-3">Didn't get it? Check your spam folder or <TextLink onClick={() => setLinkSent(false)}>try again</TextLink>.</p>
       </Result>
     );

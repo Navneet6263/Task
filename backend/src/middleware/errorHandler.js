@@ -1,12 +1,13 @@
 const errorHandler = (err, req, res, next) => {
   console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
 
-  const status = err.status || 500;
-  const code = err.code || 'INTERNAL_ERROR';
-
+  // Express marks request problems (bad JSON, body too large) with a 4xx status. Anything else is
+  // ours: its text stays in the server log and the browser gets a plain message.
+  const status = err.status || err.statusCode || 500;
+  const clientError = status >= 400 && status < 500;
   res.status(status).json({
-    error: err.message || 'Internal server error',
-    code,
+    error: clientError ? (err.expose === false ? 'The request could not be read.' : err.message) : 'Something went wrong. Please try again.',
+    code: clientError && typeof err.code === 'string' ? err.code : 'INTERNAL_ERROR',
     status
   });
 };

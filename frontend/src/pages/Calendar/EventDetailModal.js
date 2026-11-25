@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { calendar } from '../../services/api';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Modal } from '../../ui';
@@ -60,6 +61,13 @@ export default function EventDetailModal({ item, onClose, onEdit, onChanged }) {
       {event.location && <Row label={event.event_type === 'MEETING' ? 'Join' : 'Where'}>
         {isLink(event.location) ? <a href={event.location} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline">{event.location}</a> : event.location}
       </Row>}
+      {event.task_id && (
+        <Row label="Task">
+          {event.task_title
+            ? <Link to={`/dashboard?task=${event.task_id}`} onClick={onClose} className="font-medium text-accent underline">{event.task_title}</Link>
+            : <span className="text-muted">A task you cannot open</span>}
+        </Row>
+      )}
       <Row label="Organizer">{event.is_organizer ? 'You' : event.created_by_name}</Row>
       {event.attendees.length > 0 && (
         <Row label="Guests">

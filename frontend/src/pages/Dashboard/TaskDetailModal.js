@@ -17,6 +17,8 @@ import useBugTracking from '../../components/bugs/useBugTracking';
 import { announceTaskExtrasChange, useTaskMeta } from '../../components/taskExtras/taskExtrasStore';
 import { FlagIcon, ExpandIcon, ShareIcon } from '../../components/shell/icons';
 import { taskExtras, tasks as tasksApi } from '../../services/api';
+import { SendBackModal, SentBackBanner, canSendBack } from '../../components/tasks/SendBack';
+import TaskReminders from '../../components/tasks/TaskReminders';
 import { rememberTask } from '../../services/recent';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Select, Tabs } from '../../ui';
@@ -48,7 +50,10 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
   const t = editor.draft;
   const type = t.issue_type || 'task';
   const up = editor.update;
-  const dialogRef = useDialog(true, editor.close);
+  // Send back and Set reminder open a window on top: Escape closes that one only, not the task too.
+  const [sendingBack, setSendingBack] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const dialogRef = useDialog(true, () => { if (!sendingBack && !reminderOpen) editor.close(); });
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
   const { keyOf } = useTaskMeta();
@@ -148,6 +153,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
               <InlineDescription value={t.description} disabled={editor.saving} onSave={(value) => commit('description', value)} />
             </section>
 
+            <SentBackBanner task={t} />
+
             {t.delete_requested_by ? (
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm">
                 <span className="flex-1 font-medium text-danger">Delete requested by {t.delete_requested_by_name || 'someone'}.</span>
@@ -212,6 +219,9 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
                 {meInTeam && Number(t.assigned_to) !== Number(user.id) && (
                   <button type="button" onClick={() => commit('assigned_to', user.id)} className="mt-1 text-sm font-semibold text-accent hover:underline">Assign to me</button>
                 )}
+                {canSendBack(t, { bugFlowOn }) && !editor.dirty && (
+                  <button type="button" onClick={() => setSendingBack(true)} className="mt-1 block text-sm font-semibold text-warn hover:underline">Not yours? Send it back</button>
+                )}
               </DetailRow>
               <DetailRow label="Priority">
                 <Select aria-label="Priority" value={t.priority || 'MEDIUM'} disabled={editor.saving} onChange={(e) => commit('priority', e.target.value)}>
@@ -231,6 +241,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
               <DetailRow label="Created"><span className="text-muted">{dateTimeLabel(t.created_at)}</span></DetailRow>
               {t.updated_at && <DetailRow label="Updated"><span className="text-muted">{dateLabel(t.updated_at)}</span></DetailRow>}
             </section>
+
+            <TaskReminders key={`reminders-${t.id}`} task={t} onOpenChange={setReminderOpen} />
 
             <section className="rounded-lg border border-line bg-surface">
               <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)} className="flex w-full items-center justify-between px-4 py-3 text-left">
@@ -265,6 +277,9 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
             </section>
           </aside>
         </div>
+        {sendingBack && (
+          <SendBackModal task={t} onClose={() => setSendingBack(false)} onDone={() => { editor.reload(); onSaved?.(); }} />
+        )}
       </aside>
     </div>
   );

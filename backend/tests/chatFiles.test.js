@@ -108,3 +108,33 @@ test('someone who cannot see a direct chat cannot download its files', async (t)
   const other = await client(t, { id: 12, role: 'admin', org_id: 1 });
   assert.equal((await other('/2/files/31')).status, 404);
 });
+
+test('a reply can only quote a message from the same conversation', async (t) => {
+  const inserts = [];
+  const checked = [];
+  t.mock.method(db, 'execute', async (sql, params) => {
+    const a = access(sql, params); if (a) return a;
+    if (sql.includes('FROM team_discussion_threads t') && sql.includes('WHERE t.id = ?')) {
+      return [[{ id: 5, team_id: 2, title: '', created_by: 10, is_default: 0, thread_type: 'direct', direct_user_one: 10, direct_user_two: 11, created_by_name: 'A' }]];
+    }
+    if (sql.startsWith('SELECT id FROM team_messages WHERE id = ? AND team_id = ?')) {
+      checked.push(params);
+      return [Number(params[0]) === 55 && Number(params[1]) === 2 && Number(params[2]) === 5 ? [{ id: 55 }] : []];
+    }
+    if (sql.trim().startsWith('INSERT INTO team_messages')) { inserts.push(params); return [{ insertId: 901 }]; }
+    if (sql.includes('FROM team_messages m') && sql.includes('WHERE m.id = ?')) {
+      assert.match(sql, /rm\.team_id = m\.team_id/, 'the quoted text is joined only within the same team');
+      return [[{ id: 901, team_id: 2, thread_id: 5, message: 'ok', user_id: 10, user_name: 'Navneet', reply_to: 55 }]];
+    }
+    return [[]];
+  });
+  const send = await client(t);
+  const post = (body) => send('/2', { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+  // Message 77 belongs to another team or a private chat: refused, and nothing is saved.
+  assert.equal((await post({ thread_id: 5, message: 'hi', reply_to: 77 })).status, 422);
+  assert.equal(inserts.length, 0);
+  assert.equal((await post({ thread_id: 5, message: 'hi', reply_to: 55 })).status, 200);
+  assert.equal(inserts[0][4], 55);
+  assert.deepEqual(checked[0], [77, 2, 5, 0]);
+});
+

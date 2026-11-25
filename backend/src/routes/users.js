@@ -6,7 +6,13 @@ const { accountFlags, visibleEmail, isEmail, isPlaceholderEmail } = require('../
 const { sendEmailCode } = require('../utils/mailer');
 const { authenticate } = require('../middleware/auth');
 const { ensureUserOrgAccessTable } = require('../utils/orgAccess');
+const sessions = require('../services/sessions');
 const router = express.Router();
+
+// A new own password (also the company owner's copy); every other device is signed out, this one stays.
+async function saveOwnPassword(req, password) {
+  await sessions.changeOwnPassword(req, await bcrypt.hash(password, 10));
+}
 
 router.get('/search', authenticate, async (req, res) => {
   try {
@@ -93,14 +99,17 @@ router.delete('/me/avatar', authenticate, async (req, res) => {
 
 router.put('/me/password', authenticate, async (req, res) => {
   try {
-    const { current, newPass } = req.body;
-    const [users] = await db.execute('SELECT password FROM users WHERE id = ?', [req.userId]);
-    const valid = await bcrypt.compare(current, users[0].password);
+    const current = typeof req.body.current === 'string' ? req.body.current : '';
+    const newPass = typeof req.body.newPass === 'string' ? req.body.newPass : '';
+    if (newPass.length < 8) return res.status(422).json({ error: 'Use at least 8 characters.' });
+    if (newPass.length > 128) return res.status(422).json({ error: 'The password is too long.' });
+    const [users] = await db.execute('SELECT password FROM users WHERE id = ? AND is_deleted = FALSE', [req.userId]);
+    if (!users.length) return res.status(404).json({ error: 'User not found' });
+    const valid = current && await bcrypt.compare(current, users[0].password);
     if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
-    const hashed = await bcrypt.hash(newPass, 10);
-    await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?', [hashed, req.userId]);
-    res.json({ message: 'Password changed' });
-  } catch (error) { res.status(400).json({ error: error.message }); }
+    await saveOwnPassword(req, newPass);
+    res.json({ message: 'Password changed. Other devices were signed out.' });
+  } catch (error) { console.error('[me/password]', error.message); res.status(500).json({ error: 'Could not change the password. Try again.' }); }
 });
 
 // First sign-in with a password from the admin's sheet: the person must choose their own.
@@ -114,8 +123,9 @@ router.post('/me/first-password', authenticate, async (req, res) => {
     if (!(user.must_change_password === true || user.must_change_password === 1)) {
       return res.status(409).json({ error: 'Your password is already set. Change it from Settings → Password & security.' });
     }
+    if (next.length > 128) return res.status(422).json({ error: 'The password is too long.' });
     if (await bcrypt.compare(next, user.password)) return res.status(422).json({ error: 'Choose a new password, not the one from the sheet.' });
-    await db.execute('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?', [await bcrypt.hash(next, 10), req.userId]);
+    await saveOwnPassword(req, next);
     res.json({ message: 'Password set' });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });

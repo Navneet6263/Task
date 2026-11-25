@@ -1,4 +1,6 @@
 require('dotenv').config();
+// Demo data with known passwords that empties tables first. backend/.env points at production, so it never runs by accident.
+if (process.env.ALLOW_SEED !== 'yes') { console.error('Refusing to seed: this wipes data. Run with ALLOW_SEED=yes against a local database only.'); process.exit(1); }
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
 

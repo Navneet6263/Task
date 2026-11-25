@@ -25,7 +25,9 @@ async function resetUserPassword(user, { password, mustChange = true } = {}) {
   if (typed.length > 128) throw fail(422, 'The password is too long', { password: 'At most 128 characters' });
   const next = typed || strongTemporaryPassword();
   await db.execute('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [await bcrypt.hash(next, 10), mustChange ? 1 : 0, user.id]);
+  // Whoever was signed in with the old password is signed out on every device.
+  await require('./sessions').revokeUserSessions(user.id, { reason: 'password_reset' });
   return { email: user.email, temporary_password: next, must_change_password: Boolean(mustChange) };
 }
 
-module.exports = { resetUserPassword };
+module.exports = { resetUserPassword, protectedAccount };

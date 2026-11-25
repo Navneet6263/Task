@@ -179,9 +179,10 @@ export const useDashboardData = ({ teamId } = {}) => {
   }, [location.search, openTask]);
 
   const handleBulkDelete = useCallback(async (ids) => {
-    await tasks.bulkDelete(ids);
+    const response = await tasks.bulkDelete(ids);
     if (selectedTask && ids.includes(selectedTask.id)) setSelectedTask(null);
     await refreshWorkspace();
+    return response?.data;
   }, [refreshWorkspace, selectedTask]);
 
   const stats = useMemo(() => {

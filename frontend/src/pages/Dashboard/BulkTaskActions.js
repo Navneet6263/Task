@@ -37,7 +37,12 @@ const BulkTaskActions = ({ selectedIds, onDelete, onClear, rows = [], members = 
 
   const removeSelected = async () => {
     setBusy(true);
-    try { await onDelete?.(selectedIds); onClear(); setConfirming(false); }
+    try {
+      const result = await onDelete?.(selectedIds);
+      // Someone else's tasks are not deleted: their creators get a request. Say so.
+      if (result?.message) notify(result.message, result.requested?.length ? 'info' : 'success');
+      onClear(); setConfirming(false);
+    }
     catch (err) { setError(err.response?.data?.error || 'Could not delete selected tasks.'); }
     finally { setBusy(false); }
   };

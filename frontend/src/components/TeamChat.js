@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AttachmentChip } from './chat/ChatAttachment';
 
 import sharedApi, { teams as teamsApi } from '../services/api';
-import { WS_BASE_URL } from '../services/runtimeConfig';
+import { openSocket } from '../services/runtimeConfig';
 import MessageTaskModal from './chat/MessageTaskModal';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
@@ -189,7 +189,7 @@ const TeamChat = ({
     }
 
     try {
-      const ws = new WebSocket(`${WS_BASE_URL}?token=${authToken}&orgId=${localStorage.getItem('active_org_id') || ''}`);
+      const ws = openSocket(authToken, localStorage.getItem('active_org_id'));
       internalWsRef.current = ws;
 
       ws.onopen = () => {

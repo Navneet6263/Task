@@ -79,7 +79,8 @@ test('creating a meeting stores the token org and organizer and notifies each in
   assert.equal(insert[0], 1, 'org from token');
   assert.equal(insert[4], '2026-10-20T15:00:00');
   assert.equal(insert[9], 10, 'organizer from token');
-  assert.deepEqual(insert.slice(10), [20, 21], 'organizer is never added as an attendee');
+  assert.equal(insert[10], null, 'no related task');
+  assert.deepEqual(insert.slice(11), [20, 21], 'organizer is never added as an attendee');
   const notes = calls.filter((call) => call.sql.startsWith('INSERT INTO notifications'));
   assert.deepEqual(notes.map((call) => call.params[0]), [20, 21]);
   assert.equal(notes[0].params[1], 'calendar_invite');
@@ -145,4 +146,72 @@ test('team scope lists tasks from the member teams only, never outside the organ
   assert.match(queries[0].sql, /team_members tm WHERE tm\.team_id = t\.team_id AND tm\.user_id = \?/);
   assert.deepEqual(queries[0].params, [1, '2026-10-01', '2026-11-01', 10]);
   assert.match(queries[1].sql, /t\.assigned_to = \? OR t\.assigned_by = \?/);
+});
+
+test('an event can be about a task the organizer can see; anything else is refused', async (t) => {
+  let insert;
+  let visible = true;
+  mockDb(t, async (sql, params) => {
+    if (sql.includes('FROM tasks t') && sql.includes('t.id IN')) return [visible ? [{ id: 40, title: 'VAT return', status: 'TODO', team_id: 2, org_id: 1 }] : []];
+    if (sql.startsWith('SET XACT_ABORT ON')) { insert = params; return [{ insertId: 9, rows: [{ insertId: 9 }] }]; }
+    return [[]];
+  });
+  const send = await client(t);
+  const reminder = { title: 'Call Acme about VAT', event_type: 'REMINDER', start_at: '2099-10-21T10:00', end_at: '2099-10-21T10:15', reminder_minutes: 0, task_id: 40 };
+  assert.equal((await send('/events', 'POST', reminder)).status, 201);
+  const past = await send('/events', 'POST', { ...reminder, start_at: '2020-01-01T10:00', end_at: '2020-01-01T10:15' });
+  assert.equal(past.status, 422, 'a reminder in the past would never go off');
+  assert.match((await past.json()).error, /not passed yet/);
+  assert.equal(insert[10], 40, 'the related task is saved');
+  visible = false;
+  const hidden = await send('/events', 'POST', { ...reminder, task_id: 41 });
+  assert.equal(hidden.status, 422, 'a task from a team they are not in');
+  assert.equal((await send('/events', 'POST', { ...reminder, task_id: 'abc' })).status, 422);
+});
+
+test('the task window lists that task\'s events this person can see, and only for a task they can see', async (t) => {
+  let visible = true;
+  let listed;
+  mockDb(t, async (sql, params) => {
+    if (sql.includes('FROM tasks t') && sql.includes('t.id IN')) return [visible ? [{ id: 40, title: 'VAT return', status: 'TODO', team_id: 2, org_id: 1 }] : []];
+    if (sql.includes('WHERE e.task_id = ?')) { listed = params; return [[{ ...eventRow, event_type: 'REMINDER', task_id: 40, task_title: 'VAT return' }]]; }
+    return [[]];
+  });
+  const send = await client(t);
+  const list = await (await send('/tasks/40/events')).json();
+  assert.equal(list[0].task_title, 'VAT return');
+  assert.deepEqual(listed, [40, 1, 10, 10], 'organized by me or inviting me');
+  visible = false;
+  assert.equal((await send('/tasks/40/events')).status, 404);
+});
+
+test('a reminder set for its own time says what it is about and opens the task', async (t) => {
+  const calls = mockDb(t, async (sql) => {
+    if (sql.startsWith('UPDATE calendar_events SET reminder_sent_at')) return [{ rows: [{ id: 6, title: 'Call Acme about VAT', created_by: 10, reminder_minutes: 0, all_day: false, event_type: 'REMINDER', task_id: 40, start_at: '2026-10-21T10:00' }] }];
+    if (sql.startsWith('SELECT user_id FROM calendar_event_attendees')) return [[]];
+    return [[]];
+  });
+  await sendDueReminders(new Date(2026, 9, 21, 10, 0));
+  const note = calls.find((call) => call.sql.startsWith('INSERT INTO notifications'));
+  assert.deepEqual(note.params, [10, 'calendar_reminder', 'Reminder: "Call Acme about VAT"', 40]);
+});
+
+test('when it is time, a Reminder is also emailed; a meeting reminder is not (the invite already went to their calendar)', async (t) => {
+  const mails = [];
+  t.mock.method(require('../src/services/inviteMail'), 'emailCalendar', async (...args) => { mails.push(args); return 1; });
+  let due = [];
+  mockDb(t, async (sql) => {
+    if (sql.startsWith('UPDATE calendar_events SET reminder_sent_at')) return [{ rows: due }];
+    if (sql.startsWith('SELECT user_id FROM calendar_event_attendees')) return [[{ user_id: 20 }]];
+    if (sql.startsWith('SELECT title FROM tasks')) return [[{ title: 'VAT return for Acme' }]];
+    return [[]];
+  });
+  due = [{ id: 6, org_id: 1, title: 'Call Acme', created_by: 10, reminder_minutes: 0, all_day: false, event_type: 'REMINDER', task_id: 40, start_at: '2099-10-21T10:00', end_at: '2099-10-21T10:15' }];
+  await sendDueReminders(new Date(2099, 9, 21, 10, 0));
+  assert.equal(mails.length, 1);
+  const [orgId, actor, people, event, options] = mails[0];
+  assert.deepEqual([orgId, actor, people, event.task_title, options.kind], [1, null, [10, 20], 'VAT return for Acme', 'reminder']);
+  due = [{ ...due[0], id: 7, event_type: 'MEETING', reminder_minutes: 15 }];
+  await sendDueReminders(new Date(2099, 9, 21, 9, 45));
+  assert.equal(mails.length, 1, 'no extra email for a meeting');
 });

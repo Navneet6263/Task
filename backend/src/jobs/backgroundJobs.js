@@ -84,6 +84,12 @@ cron.schedule('*/2 * * * *', async () => {
       .catch((error) => console.error('[CRON] developer log cleanup failed:', error.message));
   }, { timezone: 'Asia/Kolkata' });
 
+  // Sign-in records: ended or expired sessions are kept 90 days, then removed.
+  cron.schedule('45 3 * * *', () => {
+    require('../services/sessions').purgeOldSessions()
+      .catch((error) => console.error('[CRON] session cleanup failed:', error.message));
+  }, { timezone: 'Asia/Kolkata' });
+
   // "Show all tasks": keep new people and new teams in step every 10 minutes.
   cron.schedule('*/10 * * * *', () => {
     require('../services/employeeAccounts').syncAllTasksEverywhere()

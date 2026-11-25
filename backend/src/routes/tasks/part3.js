@@ -1,4 +1,5 @@
 const { express, db, authenticate, canAccessTeam, requireTeamAccess, getTaskDetail, listTeamTasks, ws, TASK_STATUSES, TASK_ISSUE_TYPES, normalizeText, normalizeDate, normalizeIssueType, normalizeReferenceImage, normalizeUserId, normalizeTaskPayload, canManageTaskForm, formatTaskFormOptions, ensureDefaultTaskFormOptions, TASK_OPTION_GROUPS, logActivity } = require('./taskSupport');
+const { clearSentBack } = require('../../services/sendBack');
 const router = express.Router();
 const { getOrgLayout, parseCustom } = require('../../services/taskFormStore');
 const { resolveTaskClient, resolveAgent } = require('../../services/orgClients');
@@ -143,6 +144,7 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     if (bugPlan) await db.execute('UPDATE tasks SET bug_stage = ? WHERE id = ?', [bugPlan.stage, req.params.id]);
+    if (Number(nextAssignedTo || 0) !== Number(currentTask.assigned_to || 0)) await clearSentBack(req.params.id);
     const activity = nextStatus === 'DONE' && currentTask.status !== 'DONE' ? 'Task Completed' : 'Task Updated';
     await logActivity(req.userId, currentTask.team_id, req.params.id, activity, nextTitle, JSON.stringify(Object.fromEntries(Object.keys(req.body).filter(key => key !== 'version' && key !== 'reference_image' && String(currentTask[key] ?? '') !== String(req.body[key] ?? '')).map(key => [key, { before: currentTask[key] ?? null, after: req.body[key] }]))), 'User (Local)');
     ws.broadcast(currentTask.team_id, 'task_updated', { id: req.params.id, status: nextStatus, title: nextTitle });
@@ -291,6 +293,7 @@ router.patch('/:id/reassign', authenticate, async (req, res) => {
       'UPDATE tasks SET assigned_to = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [assign_to, req.params.id]
     );
+    await clearSentBack(req.params.id);
 
     const desc = `${fromUser[0].name} reassigned task to ${toUser[0].name}`;
     await logActivity(req.userId, task[0].team_id, req.params.id, 'Task Assigned', task[0].title, desc, 'User (Local)');
