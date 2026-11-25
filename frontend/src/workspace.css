@@ -4,8 +4,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline-offset: 3px;
 }
 button:disabled { cursor: not-allowed; }
-/* Jumps to a place on the page (links, "scroll into view") glide too; turned off below for less motion. */
-html { scroll-behavior: smooth; }
 .task-detail-dialog button { min-height: 32px; }
 @media (max-width: 760px) {
   .task-detail-dialog { display: flex; flex-direction: column; overflow-y: auto; height: 92dvh; }
