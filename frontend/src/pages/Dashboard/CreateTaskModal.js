@@ -88,6 +88,8 @@ const CreateTaskModal = ({
                 <CustomComposer layout={layout} form={taskForm} update={updateTaskFormField} ctx={ctx} errors={errors} />
               </div>
               <div className="mx-auto mt-4 max-w-3xl"><ComposerExtras value={taskForm.extras} onChange={(next) => updateTaskFormField('extras', next)} teamId={selectedTeam?.id} /></div>
+              {/* Designed forms get the picture too (it used to be only on the standard form). */}
+              <div className="mx-auto mt-4 max-w-3xl"><ReferenceSection step={null} taskForm={taskForm} updateTaskFormField={updateTaskFormField} handleReferenceImageChange={handleReferenceImageChange} /></div>
             </div>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[190px_minmax(0,1fr)_285px] lg:overflow-hidden">

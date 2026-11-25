@@ -150,3 +150,15 @@ test('Ctrl+K shows recently opened tasks before anything is typed', async () => 
   expect(document.body.textContent).toContain('Recent');
   expect(options.slice(1, 3)).toEqual(['TestAM-11 · Today', 'ViewAssignItAssetList search boxAM-7 · Today']);
 });
+
+test('Assign to me sits at the top of the task window, and the I key does the same', async () => {
+  h.update = jest.fn(async () => ({ data: { version: 4 } }));
+  h.getDetail = jest.fn(async (id) => ({ data: { ...task, id, assigned_to: 10, version: 4 } }));
+  await act(async () => r.render(<Window />));
+  await flush();
+  const top = document.querySelector('header');
+  expect([...top.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Assign to me')).toBe(true);
+  await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', bubbles: true })); });
+  await flush();
+  expect(h.update).toHaveBeenCalledWith(11, expect.objectContaining({ assigned_to: 10 }));
+});

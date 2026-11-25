@@ -19,6 +19,7 @@ import { FlagIcon, ExpandIcon, ShareIcon } from '../../components/shell/icons';
 import { taskExtras, tasks as tasksApi } from '../../services/api';
 import { SendBackModal, SentBackBanner, canSendBack } from '../../components/tasks/SendBack';
 import TaskReminders from '../../components/tasks/TaskReminders';
+import TaskPicture from '../../components/tasks/TaskPicture';
 import { rememberTask } from '../../services/recent';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Select, Tabs } from '../../ui';
@@ -53,7 +54,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
   // Send back and Set reminder open a window on top: Escape closes that one only, not the task too.
   const [sendingBack, setSendingBack] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
-  const dialogRef = useDialog(true, () => { if (!sendingBack && !reminderOpen) editor.close(); });
+  const [pictureOpen, setPictureOpen] = useState(false);
+  const dialogRef = useDialog(true, () => { if (!sendingBack && !reminderOpen && !pictureOpen) editor.close(); });
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
   const { keyOf } = useTaskMeta();
@@ -75,6 +77,16 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
       if (e.key.toLowerCase() !== 'm' || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
       e.preventDefault(); setActivity('comments');
       setTimeout(() => document.querySelector('[aria-label="New comment"]')?.focus(), 0);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  // "I" takes the task, like Jira's "assign to me" key. The latest state is read through a ref.
+  const takeRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key.toLowerCase() !== 'i' || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+      if (takeRef.current) { e.preventDefault(); takeRef.current(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -101,6 +113,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
     } catch (err) { notify(err.response?.data?.error || 'Could not change the flag.'); }
   };
   const meInTeam = members.some((m) => Number(m.id) === Number(user.id));
+  const canTake = meInTeam && Number(t.assigned_to) !== Number(user.id) && t.status !== 'DONE';
+  takeRef.current = canTake && !editor.saving && !sendingBack && !reminderOpen ? () => commit('assigned_to', user.id) : null;
   const tabs = [['comments', 'Comments', t.total_comments > 0 && <span className="rounded-full bg-subtle px-2 text-[10px] text-muted">{t.total_comments}</span>], ['history', 'History'],
     ...(layout?.settings?.time_tracking ? [['worklog', 'Work log']] : []), ['checklist', 'Checklist & review']];
   const saveState = editor.saving ? 'Saving…' : editor.dirty && !pending.current ? 'Unsaved changes' : editor.message === 'Saved' ? 'Saved' : '';
@@ -122,6 +136,7 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
             {saveState && <span role="status" className={`ml-1 text-xs ${saveState === 'Unsaved changes' ? 'font-medium text-warn' : 'text-muted'}`}>{saveState}</span>}
           </nav>
           <div className="flex items-center gap-1.5">
+            {canTake && <Button size="sm" variant="primary" disabled={editor.saving} title="Assign to me (shortcut: I)" onClick={() => commit('assigned_to', user.id)}>Assign to me</Button>}
             <WatchButton taskId={t.id} />
             <IconButton label="Share: copy the link to this task" onClick={copyLink}><ShareIcon size={15} /></IconButton>
             <MoreMenu items={[
@@ -165,12 +180,7 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
               </div>
             ) : null}
 
-            {t.reference_image && (
-              <figure className="overflow-hidden rounded-md border border-line">
-                <figcaption className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted">Reference image</figcaption>
-                <img src={t.reference_image} alt="Task reference" className="block max-h-[260px] w-full object-contain" />
-              </figure>
-            )}
+            <TaskPicture value={t.reference_image} disabled={editor.saving} onOpenChange={setPictureOpen} onChange={(value) => commit('reference_image', value)} />
 
             <TaskExtrasPanel key={`extras-${task.id}`} task={task} members={members} onOpenTask={openTask} onChanged={onSaved} />
 

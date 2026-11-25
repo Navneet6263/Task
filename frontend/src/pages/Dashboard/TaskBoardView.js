@@ -4,6 +4,7 @@ import { Button, Chip, Select } from '../../ui';
 import { PRIORITY_TONE, STATUS_LABEL } from './tones';
 import TaskBadges from '../../components/taskExtras/TaskBadges';
 import TaskMenu from '../../components/taskExtras/TaskMenu';
+import AssignToMe from '../../components/tasks/AssignToMe';
 import { useTaskSummary } from '../../components/taskExtras/taskExtrasStore';
 
 const STATUS_OPTIONS = ['TODO', 'IN_PROGRESS', 'PENDING', 'DONE'];
@@ -31,7 +32,11 @@ function BoardCard({ task, status, dragging, userId, onOpen, onDragStart, onDrag
         </span>
       </div>
       <h5 className="text-sm font-semibold">{task.title}</h5>
-      <p className="text-xs text-muted">{task.assigned_to_name || 'Unassigned'}</p>
+      {/* Assign to me sits on the card: always on an unassigned task, on hover when someone else has it. */}
+      <div className="flex min-h-[22px] items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-xs text-muted">{task.assigned_to_name || 'Unassigned'}</p>
+        <AssignToMe task={task} onDone={onUpdated} className={task.assigned_to ? 'opacity-0 transition group-hover:opacity-100 focus:opacity-100' : ''} />
+      </div>
       <div className="flex items-center justify-between gap-2">
         <Chip tone={PRIORITY_TONE[task.priority] || 'warn'}>{task.priority || 'MEDIUM'}</Chip>
         <span className="text-[11px] text-muted">{dateLabel(task.due_date)}</span>

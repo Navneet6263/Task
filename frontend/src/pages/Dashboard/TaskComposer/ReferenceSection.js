@@ -1,9 +1,10 @@
 import React from 'react';
 import { Button } from '../../../ui';
 import { ComposerSection } from './fields';
+import { PICTURE_TYPES } from '../../../components/tasks/TaskPicture';
 
-const ReferenceSection = ({ taskForm, updateTaskFormField, handleReferenceImageChange }) => (
-  <ComposerSection step={4} title="Reference & Attachments" hint="Add a screenshot or mockup so the assignee understands quickly.">
+const ReferenceSection = ({ taskForm, updateTaskFormField, handleReferenceImageChange, step = 4 }) => (
+  <ComposerSection step={step} title="Picture" hint="Add a screenshot or mockup so the assignee understands quickly.">
     <label className="group flex cursor-pointer items-center gap-4 rounded-md border border-dashed border-line bg-subtle px-4 py-4 hover:border-accent/60">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-accent">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -12,9 +13,9 @@ const ReferenceSection = ({ taskForm, updateTaskFormField, handleReferenceImageC
       </span>
       <span>
         <span className="block text-sm font-semibold group-hover:text-accent">Upload Image</span>
-        <small className="text-xs text-muted">PNG, JPG or WEBP · Max 450KB</small>
+        <small className="text-xs text-muted">PNG, JPG, WEBP or GIF, up to 450 KB</small>
       </span>
-      <input className="hidden" type="file" accept="image/*" onChange={handleReferenceImageChange} />
+      <input className="hidden" type="file" accept={PICTURE_TYPES.join(',')} aria-label="Upload a picture" onChange={handleReferenceImageChange} />
     </label>
     {taskForm.reference_image && (
       <div className="flex flex-col gap-2 rounded-md border border-line p-3">

@@ -3,6 +3,7 @@ import { localDate } from '../../services/localDate';
 import { taskExtras, tasks } from '../../services/api';
 import { extrasPayload } from '../../components/taskExtras/ComposerExtras';
 import { notify } from '../../services/feedback';
+import { readPicture } from '../../components/tasks/TaskPicture';
 import { readPreference, writePreference } from '../../services/preferences';
 
 const DEFAULT_TASK_FORM_OPTIONS = {
@@ -32,7 +33,6 @@ const DEFAULT_TASK_FORM_OPTIONS = {
   ],
 };
 
-const MAX_REFERENCE_IMAGE_BYTES = 450 * 1024;
 
 const buildInitialTaskForm = () => {
   const today = localDate();
@@ -100,13 +100,8 @@ export const useDashboardLogic = (selectedTeam, members, orgUsers, setOrgUsers, 
   const handleReferenceImageChange = (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { notify('Please select a valid image file'); return; }
-    if (file.size > MAX_REFERENCE_IMAGE_BYTES) { notify('Please upload an image under 450KB'); return; }
-    const reader = new FileReader();
-    reader.onload = () => { updateTaskFormField('reference_image', typeof reader.result === 'string' ? reader.result : ''); };
-    reader.onerror = () => notify('Failed to read the selected image');
-    reader.readAsDataURL(file);
+    // Same rules as the task window's picture (components/tasks/TaskPicture.js).
+    readPicture(file, (dataUrl) => updateTaskFormField('reference_image', dataUrl));
   };
 
   const handleCreateTask = async (event) => {

@@ -173,3 +173,25 @@ test('creating one task still answers as before and notifies the assignee', asyn
   assert.equal(bad.status, 422);
   assert.deepEqual(await bad.json(), { error: 'title and team_id are required', code: 'VALIDATION_ERROR' });
 });
+
+test('a picture added or removed from the task window is saved and noted in the history, without the image itself', async t => {
+  const logs = [];
+  let current = { ...baseTask, reference_image: null };
+  let saved;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.includes('SELECT * FROM tasks')) return [[current]];
+    if (sql.trim().startsWith('UPDATE tasks') && sql.includes('reference_image=?')) { saved = params[12]; return [{ affectedRows: 1 }]; }
+    if (sql.startsWith('INSERT INTO audit_logs')) { logs.push(JSON.parse(params[5])); return [{ affectedRows: 1 }]; }
+    if (sql.trim().startsWith('UPDATE')) return [{ affectedRows: 1 }];
+    return [[{ id: 1 }]];
+  });
+  const picture = 'data:image/png;base64,AAAA';
+  assert.equal((await request(t, require('../src/routes/tasks'), '/8', 'PUT', { reference_image: picture, version: 3 })).status, 200);
+  assert.equal(saved, picture);
+  assert.deepEqual(logs[0], { picture: { before: null, after: 'Picture' } }, 'no image data in the history');
+  current = { ...baseTask, reference_image: picture };
+  assert.equal((await request(t, require('../src/routes/tasks'), '/8', 'PUT', { reference_image: '', version: 3 })).status, 200);
+  assert.equal(saved, null);
+  assert.deepEqual(logs[1], { picture: { before: 'Picture', after: null } });
+  assert.equal((await request(t, require('../src/routes/tasks'), '/8', 'PUT', { reference_image: 'javascript:alert(1)', version: 3 })).status, 400, 'only real pictures');
+});

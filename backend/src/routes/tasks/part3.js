@@ -146,7 +146,12 @@ router.put('/:id', authenticate, async (req, res) => {
     if (bugPlan) await db.execute('UPDATE tasks SET bug_stage = ? WHERE id = ?', [bugPlan.stage, req.params.id]);
     if (Number(nextAssignedTo || 0) !== Number(currentTask.assigned_to || 0)) await clearSentBack(req.params.id);
     const activity = nextStatus === 'DONE' && currentTask.status !== 'DONE' ? 'Task Completed' : 'Task Updated';
-    await logActivity(req.userId, currentTask.team_id, req.params.id, activity, nextTitle, JSON.stringify(Object.fromEntries(Object.keys(req.body).filter(key => key !== 'version' && key !== 'reference_image' && String(currentTask[key] ?? '') !== String(req.body[key] ?? '')).map(key => [key, { before: currentTask[key] ?? null, after: req.body[key] }]))), 'User (Local)');
+    const changes = Object.fromEntries(Object.keys(req.body).filter(key => key !== 'version' && key !== 'reference_image' && String(currentTask[key] ?? '') !== String(req.body[key] ?? '')).map(key => [key, { before: currentTask[key] ?? null, after: req.body[key] }]));
+    // The picture itself is too big for the history: only that it was added, changed or removed.
+    if ((currentTask.reference_image || null) !== (nextReferenceImage || null)) {
+      changes.picture = { before: currentTask.reference_image ? 'Picture' : null, after: nextReferenceImage ? (currentTask.reference_image ? 'New picture' : 'Picture') : null };
+    }
+    await logActivity(req.userId, currentTask.team_id, req.params.id, activity, nextTitle, JSON.stringify(changes), 'User (Local)');
     ws.broadcast(currentTask.team_id, 'task_updated', { id: req.params.id, status: nextStatus, title: nextTitle });
     await notifyTaskFollowers({ ...currentTask, assigned_to: nextAssignedTo }, req.userId, `Task updated: ${nextTitle}`).catch(error => console.error('Task saved; notification delivery failed:', error.message));
     res.json({ message: 'Task updated', version: Number(currentTask.version) + 1 });

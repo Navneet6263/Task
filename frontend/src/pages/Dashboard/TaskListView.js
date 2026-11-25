@@ -78,7 +78,7 @@ const TaskListView = ({ paginated, selectedTask, setSelectedTask, setSheetTab, o
                   <input type="checkbox" className="h-4 w-4 accent-danger" checked={selected.has(task.id)} onChange={() => toggleOne(task.id)} aria-label={`Select ${task.title}`} />
                 </Td>
                 {visible.map((column) => (
-                  <Td key={column.id} align={column.align} className={`align-middle ${column.nowrap ? 'whitespace-nowrap' : ''}`}>{column.cell(task)}</Td>
+                  <Td key={column.id} align={column.align} className={`align-middle ${column.nowrap ? 'whitespace-nowrap' : ''}`}>{column.cell(task, { onUpdated })}</Td>
                 ))}
                 <Td className="align-middle"><TaskRowActions task={task} userId={user.id} {...actions} onUpdated={onUpdated} onOpen={() => open(task)} /></Td>
               </tr>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Chip } from '../../../ui';
 import { PRIORITY_TONE, STATUS_TONE, statusLabel } from '../tones';
 import TaskBadges from '../../../components/taskExtras/TaskBadges';
+import AssignToMe from '../../../components/tasks/AssignToMe';
 
 const ISSUE_TONE = { bug: 'danger', story: 'info', feature: 'ok', enhancement: 'warn' };
 const REVIEW_TONE = { READY: 'info', APPROVED: 'ok', CHANGES_REQUESTED: 'warn' };
@@ -48,10 +49,12 @@ export const COLUMNS = [
   { id: 'type', label: 'Type', nowrap: true, cell: (task) => <Chip tone={ISSUE_TONE[task.issue_type] || 'neutral'}>{(task.issue_type || 'task').toUpperCase()}</Chip> },
   {
     id: 'assignee', label: 'Assignee',
-    cell: (task) => (
+    cell: (task, ctx = {}) => (
       <div className="flex items-center gap-2">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-soft text-[11px] font-bold text-accent">{initials(task.assigned_to_name)}</span>
         <span>{task.assigned_to_name || 'Unassigned'}</span>
+        {/* One click for a task nobody has yet; anyone else's goes through the "…" menu. */}
+        {!task.assigned_to && <span onClick={(e) => e.stopPropagation()} role="presentation"><AssignToMe task={task} onDone={ctx.onUpdated} /></span>}
       </div>
     ),
   },

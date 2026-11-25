@@ -5,7 +5,7 @@ import UserAvatar from '../account/UserAvatar';
 const FIELD = {
   status: 'Status', priority: 'Priority', assigned_to: 'Assignee', due_date: 'Due date', start_date: 'Start date', assigned_date: 'Assigned date',
   title: 'Title', description: 'Description', client_name: 'Client', agent_firm_id: 'Agent', task_type: 'Task type', product: 'Product', category: 'Category',
-  blocked_reason: 'Blocked by', review: 'Review', severity: 'Severity', custom_fields: 'Form answers', sent_back: 'Sent back because',
+  blocked_reason: 'Blocked by', review: 'Review', severity: 'Severity', custom_fields: 'Form answers', sent_back: 'Sent back because', picture: 'Picture',
 };
 const STATUS = { TODO: 'To Do', IN_PROGRESS: 'In Progress', PENDING: 'Pending', DONE: 'Done' };
 const LONG = new Set(['description', 'custom_fields']);

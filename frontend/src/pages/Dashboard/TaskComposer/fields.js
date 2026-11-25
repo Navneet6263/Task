@@ -25,7 +25,7 @@ export function ComposerSection({ step, title, hint, aside, children, className 
     <section className={`flex flex-col gap-4 rounded-lg border border-line bg-surface p-4 sm:p-5 ${className}`}>
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Step {step}</p>
+          {step ? <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Step {step}</p> : null}
           <h4 className="mt-0.5 text-[15px] font-semibold">{title}</h4>
           {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
         </div>
