@@ -16,6 +16,8 @@ import { STATUSES } from './taskMeta';
 import { exportMyTasks } from './exportMyTasks';
 import SheetsModal from './sheets/SheetsModal';
 import { TaskExtrasProvider } from '../../components/taskExtras/taskExtrasStore';
+import { openInOtherWorkspace } from '../../services/workspaceSwitch';
+import { HandedOverSection } from '../../components/tasks/HandOver';
 
 const PAGE_SIZE = { agenda: 100, board: 100, list: 25 };
 
@@ -70,7 +72,7 @@ export default function MyTasks() {
   };
   const open = async (task) => {
     try { const response = await tasks.getDetail(task.id); setSelectedTask(response.data); setSheetTab('details'); }
-    catch (err) { notify(err.response?.data?.error || 'Could not open task.'); }
+    catch (err) { if (!openInOtherWorkspace(err, task.id)) notify(err.response?.data?.error || 'Could not open task.'); }
   };
   const handleStatusChange = (task, next) => act(() => tasks.update(task.id, { status: next, version: task.version }), next === 'DONE' ? 'Task completed.' : null);
   const handleDrop = (id, next) => { const task = result.data.find((item) => String(item.id) === String(id)); if (task && task.status !== next) handleStatusChange(task, next); };
@@ -108,6 +110,8 @@ export default function MyTasks() {
         </section>
       ) : <>
       <MyStats summary={result.summary} status={status} focus={focus} onPick={(pick) => { setStatus(pick.status); setFocus(pick.focus); }} />
+      {/* Tasks you handed over to another team: where they are now and their status (read-only). */}
+      <HandedOverSection />
       <MyTasksToolbar view={view} setView={setView} status={status} setStatus={setStatus} focus={focus} setFocus={setFocus}
         priorities={priorities} setPriorities={setPriorities} search={search} setSearch={setSearch} sort={sort} setSort={chooseSort} />
       <div className="flex items-center justify-between text-xs text-muted">

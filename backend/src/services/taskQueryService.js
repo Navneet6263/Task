@@ -88,8 +88,11 @@ const buildWhere = (teamId, filters, userId, orgId) => {
   const params = [];
   if (teamId) { clauses.push('t.team_id = ?'); params.push(Number(teamId)); }
   else {
-    clauses.push('t.assigned_to = ?', 't.org_id = ?', 'EXISTS (SELECT 1 FROM team_members tm JOIN teams te ON te.id = tm.team_id WHERE tm.team_id = t.team_id AND tm.user_id = ? AND te.is_deleted = FALSE)');
-    params.push(Number(userId), orgId || 0, Number(userId));
+    // My Tasks: one workspace, or every workspace this person works in (orgId given as a list).
+    const orgList = (Array.isArray(orgId) ? orgId : [orgId]).map(Number).filter((id) => id > 0);
+    const orgs = orgList.length ? orgList : [0];
+    clauses.push('t.assigned_to = ?', `t.org_id IN (${orgs.map(() => '?').join(',')})`, 'EXISTS (SELECT 1 FROM team_members tm JOIN teams te ON te.id = tm.team_id WHERE tm.team_id = t.team_id AND tm.user_id = ? AND te.is_deleted = FALSE)');
+    params.push(Number(userId), ...orgs, Number(userId));
   }
   addInFilter(clauses, params, 't.status', filters.statuses);
   addInFilter(clauses, params, 't.priority', filters.priorities);
@@ -165,7 +168,7 @@ const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
   const taskSql = `SELECT t.id, t.title, LEFT(t.description, 220) AS description, t.priority, t.status, t.assigned_to,
       t.assigned_by, t.team_id, t.start_date, t.assigned_date, t.due_date, t.client_name,
       t.issue_type, t.manager_assigned, t.priority_locked, t.picked_by, t.bug_stage, t.reopen_count, t.delete_requested_by, t.snoozed_until, t.created_at, t.version,
-      t.blocked_reason, t.review_status, te.name AS team_name,
+      t.blocked_reason, t.review_status, te.name AS team_name, t.org_id, og.name AS workspace_name,
       t.returned_by, t.returned_to, t.returned_reason, t.returned_at, u7.name AS returned_by_name,
       u1.name AS assigned_to_name, u2.name AS assigned_by_name, u2.name AS created_by_name,
       u5.name AS delete_requested_by_name, ag.name AS agent_name,
@@ -174,6 +177,7 @@ const listTeamTasks = async (teamId, rawQuery, userId, orgId) => {
         AND tc.is_deleted = FALSE AND tc.id > COALESCE(tr.last_comment_id, 0)) AS unread_comments
     FROM tasks t
     LEFT JOIN teams te ON te.id = t.team_id
+    LEFT JOIN organizations og ON og.id = t.org_id
     LEFT JOIN task_reads tr ON tr.task_id = t.id AND tr.user_id = ?
     LEFT JOIN users u1 ON t.assigned_to = u1.id
     LEFT JOIN users u2 ON t.assigned_by = u2.id

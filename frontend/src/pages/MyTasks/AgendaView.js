@@ -3,6 +3,7 @@ import { Chip } from '../../ui';
 import TaskActions from './TaskActions';
 import TaskBadges from '../../components/taskExtras/TaskBadges';
 import { BUCKETS, DUE_TEXT, PRIORITY_TONE, bucketOf, dueInfo } from './taskMeta';
+import { teamLabel } from '../../services/workspaceSwitch';
 
 // Tasks grouped by when they are due; the circle completes a task in one click.
 export default function AgendaView({ tasks, onOpen, handleStatusChange, handlePriorityLock, openReassign }) {
@@ -34,7 +35,7 @@ export default function AgendaView({ tasks, onOpen, handleStatusChange, handlePr
                       <span className={`block truncate text-sm font-semibold ${done ? 'text-muted line-through' : ''}`}>{task.title}</span>
                       <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <TaskBadges task={task} max={2} />
-                        <span>{task.team_name}</span>
+                        <span>{teamLabel(task)}</span>
                         <span className={DUE_TEXT[due.tone]}>{due.text}</span>
                         {task.status === 'IN_PROGRESS' && <span className="text-info">In progress</span>}
                         {task.status === 'PENDING' && <span className="text-warn">Pending</span>}

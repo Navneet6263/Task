@@ -15,21 +15,25 @@ const canAccessTeam = async (req, teamId) => {
     return Boolean(team);
   }
 
+  // An admin reaches every team of the workspace picked at the top.
   if (req.userRole === 'admin') {
     const [[team]] = await db.execute(
       'SELECT id FROM teams WHERE id = ? AND org_id = ? AND is_deleted = FALSE',
       [normalizedTeamId, req.orgId]
     );
-    return Boolean(team);
+    if (team) return true;
   }
 
+  // Anyone reaches the teams they are a member of, in any workspace they work in (their own or one they
+  // were given access to), so My Tasks works without switching workspace.
+  const orgIds = [...new Set([...(req.orgIds || []), req.orgId].map(Number).filter((id) => id > 0))];
   const [[membership]] = await db.execute(
     `SELECT tm.id
      FROM team_members tm
      JOIN teams t ON t.id = tm.team_id
      WHERE tm.team_id = ? AND tm.user_id = ? AND t.is_deleted = FALSE
-       AND (? IS NULL OR t.org_id = ?)`,
-    [normalizedTeamId, req.userId, req.orgId, req.orgId]
+       AND ${orgIds.length ? `t.org_id IN (${orgIds.map(() => '?').join(',')})` : '1 = 1'}`,
+    [normalizedTeamId, req.userId, ...orgIds]
   );
   return Boolean(membership);
 };

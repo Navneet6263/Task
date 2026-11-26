@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 router.use(require('./tasks/timeLogs').router);
 router.use(require('./tasks/sendBack'));
+router.use(require('./tasks/handover'));
 router.use(require('./tasks/part1'));
 router.use(require('./tasks/part2'));
 router.use(require('./tasks/part3'));

@@ -46,7 +46,7 @@ async function resolvePerson(orgId, value) {
   const [column, param] = ref.id ? ['u.id', Number(ref.id)] : ref.email ? ['u.email', String(ref.email).trim().toLowerCase()]
     : ref.employee_code ? ['u.login_code', String(ref.employee_code).trim().toUpperCase()] : [null, null];
   if (!column) throw fail(422, 'invalid_assignee', 'Give the assignee as { "email" }, { "employee_code" } or { "id" }');
-  const [[person]] = await db.execute(`SELECT u.id FROM users u WHERE ${column} = ? AND u.org_id = ? AND u.is_deleted = FALSE`, [param, orgId]);
+  const [[person]] = await db.execute(`SELECT u.id FROM users u WHERE ${column} = ? AND (u.org_id = ? OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = ?)) AND u.is_deleted = FALSE`, [param, orgId, orgId]);
   if (!person) throw fail(422, 'unknown_assignee', 'No one with that email, employee code or id in this company');
   return person.id;
 }

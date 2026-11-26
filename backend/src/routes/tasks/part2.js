@@ -99,9 +99,9 @@ async function createTask(req, body, { quiet = false } = {}) {
         `SELECT tm.id
          FROM team_members tm
          JOIN users u ON u.id = tm.user_id
-         WHERE tm.team_id = ? AND tm.user_id = ? AND u.org_id = ? AND u.is_deleted = FALSE
+         WHERE tm.team_id = ? AND tm.user_id = ? AND (u.org_id = ? OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = ?)) AND u.is_deleted = FALSE
          LIMIT 1`,
-        [team_id, assignedTo, resolvedOrgId]
+        [team_id, assignedTo, resolvedOrgId, resolvedOrgId]
       );
       if (assigneeMembership.length === 0) {
         throw refuse(403, { error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });

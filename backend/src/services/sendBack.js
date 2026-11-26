@@ -25,8 +25,16 @@ const cleanReason = (value) => {
   return reason;
 };
 
-// Who gets the task back: the person who assigned it, else the team leader. Never the sender themselves.
-async function returnTarget(task, senderId) {
+// Who gets the task back: after a hand over, the leader who received it (or, for that leader, the team it came
+// from); otherwise the person who assigned it, else the team leader. Never the sender themselves.
+async function returnTarget(task, senderId, step = null) {
+  if (step) {
+    // Handed over into this team: back to whoever leads it now (or the leader it was handed to).
+    const lead = await require('./handover').leaderOf(task.team_id, senderId);
+    if (lead) return lead;
+    const [[first]] = await db.execute('SELECT id, name FROM users WHERE id = ? AND is_deleted = FALSE', [step.to_user_id]);
+    if (first && Number(first.id) !== Number(senderId)) return first;
+  }
   if (task.assigned_by && Number(task.assigned_by) !== Number(senderId)) {
     const [[assigner]] = await db.execute('SELECT id, name FROM users WHERE id = ? AND is_deleted = FALSE', [task.assigned_by]);
     if (assigner) return assigner;
@@ -43,7 +51,14 @@ async function sendBackInfo(req, taskId) {
   const task = await loadTask(req, taskId);
   const why = whyNot(task, req.userId);
   if (why) return { allowed: false, reason: why };
-  const target = await returnTarget(task, req.userId);
+  const handover = require('./handover');
+  const step = await handover.activeHandover(task);
+  if (step && await handover.isReceiver(req.userId, task, step)) {
+    const target = await handover.acrossTarget(step);
+    if (!target) return { allowed: false, reason: `${step.from_team_name} has nobody to take it back (no leader). Ask your admin where it should go.` };
+    return { allowed: true, to: target, team: { id: step.from_team_id, name: step.from_team_name } };
+  }
+  const target = await returnTarget(task, req.userId, step);
   return target ? { allowed: true, to: { id: target.id, name: target.name } } : { allowed: false, reason: 'Nobody to send it back to: it has no assigner and the team has no leader.' };
 }
 
@@ -51,7 +66,8 @@ async function loadTask(req, taskId) {
   const id = Number(taskId);
   if (!Number.isInteger(id) || id < 1) throw fail(404, 'Task not found');
   const [[task]] = await db.execute(
-    'SELECT id, title, team_id, org_id, status, issue_type, assigned_to, assigned_by, version FROM tasks WHERE id = ? AND is_deleted = FALSE', [id]);
+    `SELECT t.id, t.title, t.team_id, t.org_id, t.status, t.issue_type, t.assigned_to, t.assigned_by, t.version, te.name AS team_name
+     FROM tasks t LEFT JOIN teams te ON te.id = t.team_id WHERE t.id = ? AND t.is_deleted = FALSE`, [id]);
   if (!task || !await canAccessTeam(req, task.team_id)) throw fail(404, 'Task not found');
   return task;
 }
@@ -71,11 +87,18 @@ async function sendBack(req, taskId, body = {}) {
   if (task.issue_type === 'bug' && await require('./bugFlow').isOn(task.org_id)) {
     throw fail(409, 'Bugs go back with "Give back" in the bug bar at the top of the bug.');
   }
-  const target = await returnTarget(task, req.userId);
-  if (!target) throw fail(409, 'Nobody to send it back to: it has no assigner and the team has no leader. Ask your manager.');
   if (body.version !== undefined && Number(body.version) !== Number(task.version)) {
     throw fail(409, 'Someone changed this task just now. Reload it and try again.');
   }
+  // Handed over from another team, and I am the leader who received it: one step back, to that team.
+  const handover = require('./handover');
+  const step = await handover.activeHandover(task);
+  if (step && await handover.isReceiver(req.userId, task, step)) {
+    const back = await handover.sendBackAcross(req, task, step, reason);
+    return { to: back.to, team: back.team, version: Number(task.version) + 1 };
+  }
+  const target = await returnTarget(task, req.userId, step);
+  if (!target) throw fail(409, 'Nobody to send it back to: it has no assigner and the team has no leader. Ask your manager.');
 
   // Only while it is still assigned to this person, so two clicks or a parallel reassign cannot both win.
   const [result] = await db.execute(

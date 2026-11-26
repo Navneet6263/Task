@@ -21,6 +21,9 @@ const ensureUserOrgAccessTable = async (db) => {
       CREATE INDEX idx_user_org_access_org ON user_org_access(org_id);
     END
   `);
+  // 1 = given automatically when the person was added to a team there; taken away again when they leave its last team.
+  await db.execute(`IF COL_LENGTH('dbo.user_org_access', 'via_team') IS NULL
+    ALTER TABLE dbo.user_org_access ADD via_team BIT NOT NULL CONSTRAINT DF_user_org_access_via_team DEFAULT 0`);
 
   orgAccessTableReady = true;
 };

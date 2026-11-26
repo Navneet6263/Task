@@ -3,6 +3,7 @@ import { AttachmentChip } from './chat/ChatAttachment';
 
 import sharedApi, { teams as teamsApi } from '../services/api';
 import { openSocket } from '../services/runtimeConfig';
+import { setChatPresence } from '../services/chatPresence';
 import MessageTaskModal from './chat/MessageTaskModal';
 import './TeamChat.css';
 /* eslint-disable react-hooks/exhaustive-deps */
@@ -755,6 +756,7 @@ const TeamChat = ({
   useEffect(() => { joinRooms(); }, [teams, effectiveSocketVersion]);
   useEffect(() => {
     activeTeamRef.current = activeTeam?.id || null;
+    setChatPresence({ teamId: activeTeam?.id || null });
     if (activeTeam) {
       fetchTeamMembers(activeTeam.id);
       fetchThreads(activeTeam.id);
@@ -764,7 +766,7 @@ const TeamChat = ({
   }, [activeTeam]);
   useEffect(() => { activeThreadRef.current = activeThread?.id || null; if (activeTeam && activeThread) fetchMessages(activeTeam.id, activeThread.id); }, [activeTeam?.id, activeThread?.id]);
   useEffect(() => { liveSessionRef.current = liveSession; }, [liveSession]);
-  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { openRef.current = open; setChatPresence({ open }); return () => setChatPresence({ open: false }); }, [open]);
   useEffect(() => { teamsRef.current = teams; }, [teams]);
   useEffect(() => { notificationPermissionRef.current = notificationPermission; }, [notificationPermission]);
   useEffect(() => { teamLiveMapRef.current = teamLiveMap; }, [teamLiveMap]);

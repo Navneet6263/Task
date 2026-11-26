@@ -20,8 +20,11 @@ test('task export refuses teams outside the organization before querying tasks',
   t.mock.method(db, 'execute', async (sql, params) => { calls.push({ sql, params }); return [[]]; });
   const send = await client(t);
   assert.equal((await send('/report/7/tasks')).status, 403);
-  assert.equal(calls.length, 1);
+  // The workspace's teams first, then whether the admin is a member of that team elsewhere; no task query.
+  assert.equal(calls.length, 2);
   assert.deepEqual(calls[0].params, [7, 1]);
+  assert.match(calls[1].sql, /FROM team_members tm/);
+  assert.deepEqual(calls[1].params, [7, 10, 1]);
 });
 
 test('task export applies filters to the team and caps the rows', async (t) => {

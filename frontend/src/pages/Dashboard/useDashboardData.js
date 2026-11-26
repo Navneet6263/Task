@@ -3,6 +3,7 @@ import { tasks, teams } from '../../services/api';
 import { filterTasksLocally, paginateTasks, summarizeTasks } from './taskDataUtils';
 import { readPreference, writePreference } from '../../services/preferences';
 import { useLocation } from 'react-router-dom';
+import { openInOtherWorkspace } from '../../services/workspaceSwitch';
 
 const EMPTY_SUMMARY = {
   total: 0, done: 0, in_progress: 0, pending: 0, todo: 0,
@@ -169,7 +170,8 @@ export const useDashboardData = ({ teamId } = {}) => {
       const response = await tasks.getDetail(task.id);
       setSelectedTask(response.data);
     } catch (error) {
-      setLoadError(error.response?.data?.error || 'Unable to open task.');
+      // A task of another of your workspaces (from a notification or a link): switch there and open it.
+      if (!openInOtherWorkspace(error, task.id)) setLoadError(error.response?.data?.error || 'Unable to open task.');
     }
   }, []);
 

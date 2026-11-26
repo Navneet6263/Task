@@ -180,6 +180,10 @@ export const tasks = {
   // The assignee returns a task that is not their work, with a reason.
   sendBackInfo: (id) => api.get(`/tasks/${id}/send-back`),
   sendBack: (id, reason, version) => api.post(`/tasks/${id}/send-back`, { reason, version }),
+  // Hand a task over to another team of the company, and follow what you handed over.
+  handoverOptions: (id) => api.get(`/tasks/${id}/handover`),
+  handOver: (id, teamId, note, version) => api.post(`/tasks/${id}/handover`, { team_id: teamId, note, version }),
+  handedOver: () => api.get('/tasks/handed-over'),
   delete: (id) => api.delete(`/tasks/${id}`),
   approveDelete: (id) => api.patch(`/tasks/${id}/approve-delete`),
   rejectDelete: (id) => api.patch(`/tasks/${id}/reject-delete`),

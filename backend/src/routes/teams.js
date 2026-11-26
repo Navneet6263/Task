@@ -9,6 +9,7 @@ const { canAccessTeam } = require('../utils/teamAccess');
 const { syncQuietly } = require('../services/employeeAccounts');
 const { setTeamLeader } = require('../services/teamLeads');
 const { syncTeamShares, sharesOfTeam, sharesOfOrgs, sameOrgTeams, addShare, removeShare } = require('../services/teamSharing');
+const { teamCandidates, personForTeam, releaseTeamAccess } = require('../services/companyPeople');
 
 const isAdmin = (req) => ['admin', 'company_admin'].includes(req.userRole);
 // Organizations the caller runs: all of a company admin's, or the current one for an admin.
@@ -43,20 +44,21 @@ router.get('/', authenticate, async (req, res) => {
     let query, params;
 
     if (req.userRole === 'company_admin') {
-      // Company admin sees all teams across their organizations
+      // The company admin sees the teams of the workspace picked at the top, like an admin does
+      // (it used to list every workspace's teams whichever was picked).
       const [orgRows] = await db.execute(
         'SELECT id FROM organizations WHERE company_admin_id = ?',
         [req.companyAdminId]
       );
-      const orgIds = orgRows.map((org) => org.id);
-      if (!orgIds || orgIds.length === 0) return res.json([]);
-      const placeholders = orgIds.map(() => '?').join(',');
+      const orgIds = orgRows.map((org) => Number(org.id));
+      const picked = orgIds.includes(Number(req.orgId)) ? Number(req.orgId) : orgIds[0];
+      if (!picked) return res.json([]);
       query = `SELECT t.*, u.name as creator_name,
         (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
        FROM teams t LEFT JOIN users u ON t.created_by = u.id
-       WHERE t.is_deleted = FALSE AND t.org_id IN (${placeholders})
+       WHERE t.is_deleted = FALSE AND t.org_id = ?
        ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?`;
-      params = [...orgIds, limit, offset];
+      params = [picked, limit, offset];
     } else if (req.userRole === 'admin') {
       query = `SELECT t.*, u.name as creator_name,
         (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
@@ -172,19 +174,17 @@ router.post('/:teamId/members', authenticate, async (req, res) => {
     const allowed = await canAccessTeam(req, req.params.teamId);
     if (!allowed) return res.status(403).json({ error: 'Team access denied' });
 
-    // Add by picked person (user_id) or by email; either way the person must be in the team's organization.
+    // Add by picked person (user_id) or by email: anyone from a workspace of the same company. Someone from
+    // another workspace gets access to this one (services/companyPeople.js).
     const { email, role, user_id: userId } = req.body;
     const teamRole = teamRoleText(role);
     if (teamRole === null) return res.status(422).json({ error: 'Team role must be 60 characters or fewer' });
-    const byId = userId !== undefined && userId !== null && userId !== '';
-    const [users] = await db.execute(
-      `SELECT u.id
-       FROM users u
-       JOIN teams t ON t.id = ?
-       WHERE ${byId ? 'u.id = ?' : 'u.email = ?'} AND u.org_id = t.org_id AND u.is_deleted = FALSE`,
-      [req.params.teamId, byId ? Number(userId) : normalizeEmail(email)]
-    );
-    if (users.length === 0) return res.status(404).json({ error: 'No one with that email works in this workspace' });
+    const [[teamRow]] = await db.execute('SELECT id, org_id FROM teams WHERE id = ? AND is_deleted = FALSE', [req.params.teamId]);
+    if (!teamRow) return res.status(404).json({ error: 'Team not found' });
+    let personId;
+    try { personId = await personForTeam(req, teamRow, { userId, email: normalizeEmail(email) }); }
+    catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
+    const users = [{ id: personId }];
     // Already in the team only through "show all tasks": make the membership permanent instead.
     const [kept] = await db.execute(
       'UPDATE team_members SET auto_added = 0, shared_from_team_id = NULL, role = ? WHERE team_id = ? AND user_id = ? AND auto_added = 1',
@@ -216,6 +216,8 @@ router.delete('/:teamId/members/:userId', authenticate, async (req, res) => {
 
     await db.execute('DELETE FROM team_members WHERE team_id = ? AND user_id = ?', [req.params.teamId, req.params.userId]);
     const [[team]] = await db.execute('SELECT org_id FROM teams WHERE id = ?', [req.params.teamId]);
+    // Someone brought in from another workspace loses it again with their last team there.
+    if (team?.org_id) await releaseTeamAccess(Number(req.params.userId), team.org_id);
     await quietShares(team?.org_id);
     res.json({ message: 'Member removed' });
   } catch (error) {
@@ -254,21 +256,12 @@ router.delete('/:teamId/photo', authenticate, async (req, res) => {
   } catch (error) { res.status(400).json({ error: 'Could not remove the photo' }); }
 });
 
-// People in the team's organization who are not in the team yet, for the "add member" search.
+// People of the team's company who are not in the team yet, for the "Add people" search.
 router.get('/:teamId/candidates', authenticate, async (req, res) => {
   try {
     if (!await requireTeamManager(req, res)) return;
-    const q = String(req.query.q || '').trim().slice(0, 80);
-    const [rows] = await db.execute(
-      `SELECT TOP 20 u.id, u.name, u.email, u.role FROM users u
-       JOIN teams t ON t.id = ?
-       WHERE u.org_id = t.org_id AND u.is_deleted = FALSE
-         AND NOT EXISTS (SELECT 1 FROM team_members tm WHERE tm.team_id = t.id AND tm.user_id = u.id)
-         AND (? = '' OR u.name LIKE ? OR u.email LIKE ?)
-       ORDER BY u.name ASC`,
-      [Number(req.params.teamId), q, `%${q}%`, `%${q}%`]
-    );
-    res.json(rows);
+    // Everyone from the company's workspaces who is not in the team yet; this workspace first.
+    res.json(await teamCandidates(Number(req.params.teamId), req.query.q));
   } catch (error) { res.status(500).json({ error: 'Could not search people' }); }
 });
 

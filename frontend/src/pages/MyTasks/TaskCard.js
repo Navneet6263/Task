@@ -3,6 +3,7 @@ import { Chip, Select } from '../../ui';
 import TaskActions from './TaskActions';
 import TaskBadges from '../../components/taskExtras/TaskBadges';
 import { DUE_TEXT, PRIORITY_TONE, STATUSES, dueInfo } from './taskMeta';
+import { teamLabel } from '../../services/workspaceSwitch';
 
 // Board card: drag to another column to change status.
 const TaskCard = ({ task, handleStatusChange, handlePriorityLock, openReassign, onCardClick }) => {
@@ -14,7 +15,7 @@ const TaskCard = ({ task, handleStatusChange, handlePriorityLock, openReassign, 
       onClick={() => onCardClick(task)} onKeyDown={(event) => { if (event.key === 'Enter') onCardClick(task); }}
       className="group relative flex cursor-grab flex-col gap-2 rounded-lg border border-line bg-surface p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-muted hover:shadow-md active:cursor-grabbing">
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted">{task.team_name}</span>
+        <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-muted">{teamLabel(task)}</span>
         <Chip tone={PRIORITY_TONE[task.priority] || 'warn'}>{task.priority}</Chip>
       </div>
       <h4 className="text-sm font-semibold leading-snug">{task.title}</h4>

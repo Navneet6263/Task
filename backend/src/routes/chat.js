@@ -831,6 +831,29 @@ router.get('/:teamId', authenticate, async (req, res) => {
   }
 });
 
+// "Rahul in Sales: …" for every member except the sender; direct chats reach only the other person.
+async function notifyTeamChat(ws, teamId, thread, message, senderId) {
+  const direct = normalizeThreadType(thread.thread_type) === 'direct';
+  const [[team]] = await db.execute('SELECT t.name, t.org_id, o.name AS workspace FROM teams t LEFT JOIN organizations o ON o.id = t.org_id WHERE t.id = ?', [teamId]);
+  const recipients = direct
+    ? [thread.direct_user_one, thread.direct_user_two].map(Number)
+    // Real members only (not everyone "show all tasks" or team sharing added), who still work in that workspace.
+    : (await db.execute(
+      `SELECT DISTINCT tm.user_id FROM team_members tm
+       JOIN users u ON u.id = tm.user_id AND u.is_deleted = 0
+       JOIN teams t ON t.id = tm.team_id
+       WHERE tm.team_id = ? AND ISNULL(tm.auto_added, 0) = 0
+         AND (u.org_id = t.org_id OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = t.org_id))`,
+      [teamId]))[0].map((r) => Number(r.user_id));
+  const text = String(message.message || '').replace(/\s+/g, ' ').trim();
+  const notice = {
+    team_id: Number(teamId), thread_id: Number(message.thread_id) || null, message_id: message.id, direct,
+    team_name: team?.name || '', workspace: team?.workspace || '', org_id: Number(team?.org_id) || null, from: message.user_name || 'Someone',
+    preview: text ? text.slice(0, 120) : (message.attachment ? 'Sent a file' : ''),
+  };
+  [...new Set(recipients)].filter((id) => id && id !== Number(senderId)).forEach((id) => ws.sendToUser(id, 'chat_notify', notice));
+}
+
 router.post('/:teamId', authenticate, async (req, res) => {
   try {
     const teamId = Number(req.params.teamId);
@@ -914,6 +937,9 @@ router.post('/:teamId', authenticate, async (req, res) => {
     } else if (ws) {
       ws.broadcast(teamId, 'new_message', payload);
     }
+    // Everyone in the team hears about it, wherever they are in the app (the room above only reaches people who
+    // have this team's chat open in the current workspace). The app shows a short notice; it never stores it.
+    if (ws) notifyTeamChat(ws, teamId, thread, payload, req.userId).catch((error) => console.error('[chat] notify failed', error.message));
 
     res.json(payload);
   } catch (error) {

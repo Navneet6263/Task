@@ -195,3 +195,60 @@ test('a picture added or removed from the task window is saved and noted in the 
   assert.deepEqual(logs[1], { picture: { before: 'Picture', after: null } });
   assert.equal((await request(t, require('../src/routes/tasks'), '/8', 'PUT', { reference_image: 'javascript:alert(1)', version: 3 })).status, 400, 'only real pictures');
 });
+
+test('a task can be assigned to a team member who comes from another workspace of the company', async t => {
+  let check;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.includes('SELECT * FROM tasks')) return [[baseTask]];
+    if (sql.includes('SELECT tm.id') && sql.includes('JOIN users u ON u.id = tm.user_id')) { check = { sql, params }; return [[{ id: 1 }]]; }
+    if (sql.trim().startsWith('UPDATE')) return [{ affectedRows: 1 }];
+    return [[{ id: 1 }]];
+  });
+  const response = await request(t, require('../src/routes/tasks'), '/8', 'PUT', { assigned_to: 55, version: 3 });
+  assert.equal(response.status, 200);
+  assert.match(check.sql, /user_org_access/, 'access to this workspace counts, not only the home workspace');
+  assert.deepEqual(check.params, [2, 55, 1, 1]);
+});
+
+test('My Tasks lists the tasks of every workspace the person works in, with the workspace name', async t => {
+  let query;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.includes('FROM tasks t') && sql.includes('OFFSET')) { query = { sql, params }; }
+    return [[]];
+  });
+  process.env.JWT_SECRET = 'workspace-test-only-secret';
+  const app = express(); app.use(express.json()); app.use(require('../src/routes/tasks'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const token = jwt.sign({ id: 10, role: 'person', org_id: 4, org_ids: [4, 9] }, process.env.JWT_SECRET);
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/my`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(response.status, 200);
+  assert.match(query.sql, /t\.org_id IN \(\?,\?\)/);
+  assert.match(query.sql, /og\.name AS workspace_name/);
+  assert.deepEqual(query.params.slice(2, 6), [10, 4, 9, 10], 'assigned to me, in workspaces 4 and 9, and in that team');
+});
+
+test('opening a task of another of your workspaces tells the app to switch there; strangers still get access denied', async t => {
+  let member = true;
+  t.mock.method(db, 'execute', async (sql, params) => {
+    if (sql.includes('SELECT t.*')) return [[{ ...baseTask, org_id: 9, team_id: 5 }]];
+    // Like the database: a membership counts only when the team's workspace (9) is one of the person's.
+    if (sql.includes('FROM team_members tm')) return [member && params.slice(2).map(Number).includes(9) ? [{ id: 1 }] : []];
+    if (sql.startsWith('SELECT name FROM organizations')) return [[{ name: 'Vision India' }]];
+    return [[]];
+  });
+  process.env.JWT_SECRET = 'workspace-test-only-secret';
+  const app = express(); app.use(express.json()); app.use(require('../src/routes/tasks'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const call = (claims) => fetch(`http://127.0.0.1:${server.address().port}/detail/8`, { headers: { authorization: `Bearer ${jwt.sign(claims, process.env.JWT_SECRET)}` } });
+  const switching = await call({ id: 10, role: 'person', org_id: 4, org_ids: [4, 9] });
+  assert.equal(switching.status, 409);
+  assert.deepEqual(await switching.json(), { error: 'This task is in Vision India.', code: 'OTHER_WORKSPACE', org_id: 9, org_name: 'Vision India' });
+  member = false;
+  assert.equal((await call({ id: 10, role: 'person', org_id: 4, org_ids: [4, 9] })).status, 403, 'not in that team');
+  member = true;
+  assert.equal((await call({ id: 11, role: 'person', org_id: 4 })).status, 403, 'no access to Vision India at all');
+});

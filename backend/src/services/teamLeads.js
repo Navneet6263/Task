@@ -29,9 +29,12 @@ async function teamsInOrg(orgId, teamIds) {
 // Make someone the one leader of a team: they join it if they are not in it, the old leader
 // becomes a member, and a member is raised to manager so they can run the team.
 async function setTeamLeader(teamId, userId) {
+  // Someone from another workspace of the company who has access to this one can lead a team here too;
+  // the manager limit counted is the team's workspace.
   const [[person]] = await db.execute(
-    `SELECT u.id, u.role, u.org_id FROM users u JOIN teams t ON t.id = ? AND t.org_id = u.org_id AND t.is_deleted = FALSE
-     WHERE u.id = ? AND u.is_deleted = FALSE`,
+    `SELECT u.id, u.role, t.org_id FROM users u JOIN teams t ON t.id = ? AND t.is_deleted = FALSE
+     WHERE u.id = ? AND u.is_deleted = FALSE
+       AND (u.org_id = t.org_id OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = t.org_id))`,
     [teamId, userId]
   );
   if (!person) throw fail(404, 'This person is not in the team\'s organization');

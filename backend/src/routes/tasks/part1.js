@@ -196,6 +196,14 @@ router.get('/detail/:taskId', authenticate, async (req, res) => {
   try {
     const task = await getTaskDetail(req.params.taskId, req.userId);
     if (!task) return res.status(404).json({ error: 'Task not found', code: 'NOT_FOUND' });
+    // A task of another workspace this person also works in opens there: the app switches and opens it,
+    // so the form, people and settings of that workspace are the ones shown.
+    const orgId = Number(task.org_id);
+    if (orgId && orgId !== Number(req.orgId) && (req.orgIds || []).map(Number).includes(orgId)
+      && await canAccessTeam({ userId: req.userId, userRole: req.userRole, companyAdminId: req.companyAdminId, orgId, orgIds: req.orgIds }, task.team_id)) {
+      const [[org]] = await db.execute('SELECT name FROM organizations WHERE id = ?', [orgId]);
+      return res.status(409).json({ error: `This task is in ${org?.name || 'another workspace'}.`, code: 'OTHER_WORKSPACE', org_id: orgId, org_name: org?.name || null });
+    }
     if (!await requireTeamAccess(req, res, task.team_id)) return;
     res.json(task);
   } catch (error) {
@@ -206,7 +214,8 @@ router.get('/detail/:taskId', authenticate, async (req, res) => {
 // Personal list uses the same bounded, filtered query and accurate summary as the dashboard.
 router.get('/my', authenticate, async (req, res) => {
   try {
-    res.json(await listTeamTasks(null, req.query, req.userId, req.orgId));
+    // Every workspace this person works in, so nobody has to switch to see their own work.
+    res.json(await listTeamTasks(null, req.query, req.userId, req.orgIds && req.orgIds.length ? req.orgIds : req.orgId));
   } catch (error) { res.status(error.status || 400).json({ error: error.message }); }
 });
 

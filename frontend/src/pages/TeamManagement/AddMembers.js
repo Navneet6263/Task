@@ -29,7 +29,10 @@ export default function AddMembers({ team, onAdded }) {
     setBusyId(person.id);
     try {
       await teams.addMember(team.id, { user_id: person.id, role });
-      notify(`${person.name} added to ${team.name}.`, 'success');
+      // Someone from another workspace of the company now also has this workspace in their switcher.
+      notify(person.other_workspace && !person.in_workspace
+        ? `${person.name} added to ${team.name}. They can now open this workspace from the switcher at the top.`
+        : `${person.name} added to ${team.name}.`, 'success');
       setReload((v) => v + 1);
       onAdded();
     } catch (err) { notify(errorOf(err, 'Could not add this person.')); }
@@ -38,7 +41,7 @@ export default function AddMembers({ team, onAdded }) {
 
   return (
     <Card>
-      <CardHeader title="Add people" aside="From your workspace" />
+      <CardHeader title="Add people" aside="From your company's workspaces" />
       <div className="flex flex-col gap-3 p-3">
         <div className="flex flex-wrap gap-2">
           <Input aria-label="Search people" placeholder="Search by name or email" className="min-w-[160px] flex-1" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -48,11 +51,16 @@ export default function AddMembers({ team, onAdded }) {
         </div>
         <ul className="flex max-h-72 flex-col gap-1 overflow-y-auto">
           {loading && !people.length && <li role="status" className="px-2 py-4 text-sm text-muted">Searching…</li>}
-          {!loading && !people.length && <li className="px-2 py-4 text-center text-sm text-muted">{query ? 'No one matches. They may already be in the team, or not have an account yet.' : 'Everyone in your workspace is already in this team.'}</li>}
+          {!loading && !people.length && <li className="px-2 py-4 text-center text-sm text-muted">{query ? 'No one matches. They may already be in the team, or not have an account yet.' : 'Everyone in your company is already in this team.'}</li>}
           {people.map((person) => (
             <li key={person.id} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-subtle">
               <Avatar name={person.name} id={person.id} size="h-8 w-8 text-[11px]" />
-              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{person.name}</span><span className="block truncate text-xs text-muted">{person.email}</span></span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5"><span className="truncate text-sm font-medium">{person.name}</span>
+                  {person.other_workspace && person.workspace && <span className="shrink-0 rounded bg-info-soft px-1.5 py-px text-[10px] font-semibold text-info">{person.workspace}</span>}
+                </span>
+                <span className="block truncate text-xs text-muted">{person.email}</span>
+              </span>
               <Button size="sm" disabled={busyId === person.id} onClick={() => add(person)}>{busyId === person.id ? 'Adding…' : '+ Add'}</Button>
             </li>
           ))}

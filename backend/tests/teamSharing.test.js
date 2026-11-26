@@ -63,7 +63,7 @@ test('an admin can create a team with its leader and members; people from elsewh
   t.mock.method(db, 'execute', async (sql, params) => {
     if (sql.startsWith('SELECT id FROM users WHERE org_id')) return [found];
     if (sql.startsWith('INSERT INTO teams')) { inserts.push({ sql, params }); return [{ insertId: 50 }]; }
-    if (sql.startsWith('SELECT u.id, u.role, u.org_id FROM users u')) return [[{ id: 3, role: 'manager', org_id: 1 }]];
+    if (sql.startsWith('SELECT u.id, u.role, t.org_id FROM users u')) return [[{ id: 3, role: 'manager', org_id: 1 }]];
     if (sql.startsWith('INSERT') || sql.startsWith('UPDATE')) { inserts.push({ sql, params }); return [{ affectedRows: sql.includes('is_reporting_manager = 1') ? 1 : 0 }]; }
     return [[]];
   });

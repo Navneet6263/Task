@@ -55,6 +55,7 @@ const ensureWorkspaceSchema = async () => {
   await require('./bugFlowSchema').ensureBugFlowSchema();
   await require('../services/sessions').ensureSessionSchema();
   await require('../services/sendBack').ensureSendBackSchema();
+  await require('../services/handover').ensureHandoverSchema();
 };
 
 module.exports = { ensureWorkspaceSchema };

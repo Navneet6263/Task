@@ -95,9 +95,9 @@ router.put('/:id', authenticate, async (req, res) => {
         `SELECT tm.id
          FROM team_members tm
          JOIN users u ON u.id = tm.user_id
-         WHERE tm.team_id = ? AND tm.user_id = ? AND u.org_id = ? AND u.is_deleted = FALSE
+         WHERE tm.team_id = ? AND tm.user_id = ? AND (u.org_id = ? OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = ?)) AND u.is_deleted = FALSE
          LIMIT 1`,
-        [currentTask.team_id, nextAssignedTo, currentTask.org_id]
+        [currentTask.team_id, nextAssignedTo, currentTask.org_id, currentTask.org_id]
       );
       if (assigneeMembership.length === 0) {
         return res.status(403).json({ error: 'Assignee must belong to the same team and organization', code: 'FORBIDDEN' });
@@ -204,8 +204,8 @@ router.post('/manager-assign', authenticate, async (req, res) => {
       `SELECT u.id, u.name
        FROM users u
        JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = ?
-       WHERE u.id = ? AND u.org_id = ? AND u.is_deleted = FALSE`,
-      [taskTeamId, assignedTo, team.org_id]
+       WHERE u.id = ? AND (u.org_id = ? OR EXISTS (SELECT 1 FROM user_org_access oa WHERE oa.user_id = u.id AND oa.org_id = ?)) AND u.is_deleted = FALSE`,
+      [taskTeamId, assignedTo, team.org_id, team.org_id]
     );
     if (target.length === 0) return res.status(403).json({ error: 'Target user must be part of the same team' });
 

@@ -3,6 +3,7 @@ import { Chip, EmptyRow, Select, Table, TableWrap, Td, Th } from '../../ui';
 import TaskActions from './TaskActions';
 import TaskBadges from '../../components/taskExtras/TaskBadges';
 import { DUE_TEXT, PRIORITY_TONE, STATUSES, dueInfo } from './taskMeta';
+import { teamLabel } from '../../services/workspaceSwitch';
 
 export default function ListView({ tasks, onOpen, handleStatusChange, handlePriorityLock, openReassign }) {
   return (
@@ -22,7 +23,7 @@ export default function ListView({ tasks, onOpen, handleStatusChange, handlePrio
                     {task.unread_comments > 0 && <span className="rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">{task.unread_comments}</span>}
                   </span>
                 </Td>
-                <Td className="whitespace-nowrap align-middle text-muted">{task.team_name}</Td>
+                <Td className="whitespace-nowrap align-middle text-muted">{teamLabel(task)}</Td>
                 <Td className="align-middle"><Chip tone={PRIORITY_TONE[task.priority] || 'warn'}>{task.priority}</Chip></Td>
                 <Td className="align-middle" onClick={(event) => event.stopPropagation()}>
                   <Select aria-label={`Status of ${task.title}`} className="!w-auto min-w-[124px] py-1 text-xs" value={task.status} onChange={(event) => handleStatusChange(task, event.target.value)}>

@@ -25,7 +25,7 @@ function fakeDb(t, { task = {}, inTeam = true, leader = { id: 7, name: 'Meera' }
   const calls = [];
   t.mock.method(db, 'execute', async (sql, params) => {
     calls.push({ sql, params });
-    if (sql.startsWith('SELECT id, title, team_id, org_id, status')) return [[{ id: 40, title: 'VAT return for Acme', team_id: 2, org_id: 8, status: 'IN_PROGRESS', issue_type: 'task', assigned_to: 5, assigned_by: 9, version: 3, ...task }]];
+    if (sql.includes('FROM tasks t LEFT JOIN teams te ON te.id = t.team_id WHERE t.id = ?')) return [[{ id: 40, title: 'VAT return for Acme', team_id: 2, org_id: 8, status: 'IN_PROGRESS', issue_type: 'task', assigned_to: 5, assigned_by: 9, version: 3, team_name: 'Accounts', ...task }]];
     if (sql.includes('FROM team_members tm') && sql.includes('tm.user_id = ?')) return [inTeam ? [{ id: 1 }] : []];
     if (sql.startsWith('SELECT id, name FROM users WHERE id = ?')) return [Number(params[0]) === 9 ? [{ id: 9, name: 'Ravi' }] : []];
     if (sql.includes('tm.is_reporting_manager = 1')) return [leader ? [leader] : []];

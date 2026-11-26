@@ -20,6 +20,7 @@ import { taskExtras, tasks as tasksApi } from '../../services/api';
 import { SendBackModal, SentBackBanner, canSendBack } from '../../components/tasks/SendBack';
 import TaskReminders from '../../components/tasks/TaskReminders';
 import TaskPicture from '../../components/tasks/TaskPicture';
+import { HandOverModal, canHandOver } from '../../components/tasks/HandOver';
 import { rememberTask } from '../../services/recent';
 import { notify } from '../../services/feedback';
 import { Button, Chip, Select, Tabs } from '../../ui';
@@ -55,7 +56,8 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
   const [sendingBack, setSendingBack] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [pictureOpen, setPictureOpen] = useState(false);
-  const dialogRef = useDialog(true, () => { if (!sendingBack && !reminderOpen && !pictureOpen) editor.close(); });
+  const [handingOver, setHandingOver] = useState(false);
+  const dialogRef = useDialog(true, () => { if (!sendingBack && !reminderOpen && !pictureOpen && !handingOver) editor.close(); });
   const user = JSON.parse(localStorage.getItem('user') || localStorage.getItem('company_user') || '{}');
   const isCreator = t.assigned_by === user.id;
   const { keyOf } = useTaskMeta();
@@ -232,6 +234,9 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
                 {canSendBack(t, { bugFlowOn }) && !editor.dirty && (
                   <button type="button" onClick={() => setSendingBack(true)} className="mt-1 block text-sm font-semibold text-warn hover:underline">Not yours? Send it back</button>
                 )}
+                {canHandOver(t, members) && !(bugFlowOn && type === 'bug') && !editor.dirty && (
+                  <button type="button" onClick={() => setHandingOver(true)} className="mt-1 block text-sm font-semibold text-info hover:underline">Hand over to another team</button>
+                )}
               </DetailRow>
               <DetailRow label="Priority">
                 <Select aria-label="Priority" value={t.priority || 'MEDIUM'} disabled={editor.saving} onChange={(e) => commit('priority', e.target.value)}>
@@ -287,6 +292,10 @@ const TaskDetailModal = ({ selectedTask: task, sheetTab, setSheetTab, setSelecte
             </section>
           </aside>
         </div>
+        {handingOver && (
+          <HandOverModal task={t} onClose={() => setHandingOver(false)}
+            onDone={() => { onSaved?.(); setSelectedTask(null); }} />
+        )}
         {sendingBack && (
           <SendBackModal task={t} onClose={() => setSendingBack(false)} onDone={() => { editor.reload(); onSaved?.(); }} />
         )}
